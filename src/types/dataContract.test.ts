@@ -89,24 +89,32 @@ describe("Data Contract & Comprehensive Fixtures", () => {
   });
 });
 
-import { normalizeMoneyInput } from "../utils/money";
+import { normalizeMoneyInput, parseVietnameseMoneyInput } from "../utils/money";
 import { formatDetailReason } from "../components/ResultTable";
-import type { MatchGroup } from "./dataContract";
+import type { MatchGroup, IntakeAnalysisResult } from "./dataContract";
 
 describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
-  it("normalizes Vietnamese money input formats exactly without float loss", () => {
-    expect(normalizeMoneyInput("0")).toBe("0");
-    expect(normalizeMoneyInput("500")).toBe("500");
+  it("parses and normalizes Vietnamese money input formats exactly without float loss", () => {
+    expect(parseVietnameseMoneyInput("0")).toEqual({ success: true, value: "0" });
+    expect(parseVietnameseMoneyInput("500")).toEqual({ success: true, value: "500" });
+    expect(parseVietnameseMoneyInput("10.000")).toEqual({ success: true, value: "10000" });
+    expect(parseVietnameseMoneyInput("1.000.000")).toEqual({ success: true, value: "1000000" });
+    expect(parseVietnameseMoneyInput("10.000,50")).toEqual({ success: true, value: "10000.50" });
+    expect(parseVietnameseMoneyInput("10.000,5000")).toEqual({ success: true, value: "10000.5000" });
+
+    // normalizeMoneyInput helper works on valid inputs
     expect(normalizeMoneyInput("10.000")).toBe("10000");
     expect(normalizeMoneyInput("1.000.000")).toBe("1000000");
     expect(normalizeMoneyInput("10.000,50")).toBe("10000.50");
-    expect(normalizeMoneyInput("10.000,5000")).toBe("10000.5000");
 
-    // Invalid & negative inputs rejected safely
-    expect(normalizeMoneyInput("-500")).toBe("0");
-    expect(normalizeMoneyInput("1..000")).toBe("0");
-    expect(normalizeMoneyInput("10,2,3")).toBe("0");
-    expect(normalizeMoneyInput("abc")).toBe("0");
+    // Invalid & negative inputs rejected with clear error (NOT converted to 0)
+    expect(parseVietnameseMoneyInput("-500").success).toBe(false);
+    expect(parseVietnameseMoneyInput("1..000").success).toBe(false);
+    expect(parseVietnameseMoneyInput("10,2,3").success).toBe(false);
+    expect(parseVietnameseMoneyInput("abc").success).toBe(false);
+    expect(() => normalizeMoneyInput("-500")).toThrow();
+    expect(() => normalizeMoneyInput("1..000")).toThrow();
+    expect(() => normalizeMoneyInput("abc")).toThrow();
   });
 
   it("renders detail explanation for Case 1: Revenue MATCHED, VAT & 131 NOT_CHECKED", () => {

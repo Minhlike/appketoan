@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
-use crate::models::{CanonicalRecord, DataSourceKind, ReconciliationSession};
+use crate::models::{CanonicalRecord, DataSourceKind, ReconciliationSession, SourceRole};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -28,7 +28,8 @@ pub enum DatasetRelation {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IntakeSourceAnalysis {
     pub source_id: String,
     pub source_name: String,
@@ -41,7 +42,8 @@ pub struct IntakeSourceAnalysis {
     pub diagnostic_message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IntakeAnalysisResult {
     pub total_physical_sources: usize,
     pub unique_datasets_count: usize,
@@ -322,6 +324,73 @@ pub fn filter_reconciliation_session_and_records(
     filtered_session
         .data_sources
         .retain(|ds| eligible_source_ids.contains(&ds.id));
+
+    // Build remap lookup: duplicate_id -> original_source_id
+    let mut remap_map: HashMap<String, String> = HashMap::new();
+    for a in &analysis.source_analyses {
+        match &a.relation {
+            DatasetRelation::ExactDuplicate {
+                original_source_id, ..
+            } => {
+                remap_map.insert(a.source_id.clone(), original_source_id.clone());
+            }
+            DatasetRelation::ContentDuplicate {
+                original_source_id, ..
+            } => {
+                remap_map.insert(a.source_id.clone(), original_source_id.clone());
+            }
+            _ => {}
+        }
+    }
+
+    // Helper to resolve canonical id through chain of duplicates
+    let resolve_id = |id: &str| -> String {
+        let mut target = id.to_string();
+        while let Some(mapped) = remap_map.get(&target) {
+            target = mapped.clone();
+        }
+        target
+    };
+
+    // 1. Remap primary_source_id
+    if let Some(ref pri_id) = filtered_session.primary_source_id {
+        let canonical_pri = resolve_id(pri_id);
+        if eligible_source_ids.contains(&canonical_pri) {
+            filtered_session.primary_source_id = Some(canonical_pri);
+        } else if let Some(first_primary) = filtered_session
+            .data_sources
+            .iter()
+            .find(|s| s.role == SourceRole::Primary || s.kind == DataSourceKind::EInvoice)
+        {
+            filtered_session.primary_source_id = Some(first_primary.id.clone());
+        }
+    }
+
+    // 2. Remap required_source_ids
+    if let Some(ref req_ids) = filtered_session.required_source_ids {
+        let mut remapped_req: Vec<String> = Vec::new();
+        for id in req_ids {
+            let canonical_id = resolve_id(id);
+            if eligible_source_ids.contains(&canonical_id) && !remapped_req.contains(&canonical_id)
+            {
+                remapped_req.push(canonical_id);
+            }
+        }
+        filtered_session.required_source_ids = Some(remapped_req);
+    }
+
+    // 3. Remap optional_source_ids
+    if let Some(ref opt_ids) = filtered_session.optional_source_ids {
+        let mut remapped_opt: Vec<String> = Vec::new();
+        for id in opt_ids {
+            let canonical_id = resolve_id(id);
+            if eligible_source_ids.contains(&canonical_id) && !remapped_opt.contains(&canonical_id)
+            {
+                remapped_opt.push(canonical_id);
+            }
+        }
+        filtered_session.optional_source_ids = Some(remapped_opt);
+    }
 
     let mut filtered_records_map = HashMap::new();
     for (src_id, recs) in source_records_map {

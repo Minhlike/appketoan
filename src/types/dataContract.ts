@@ -256,12 +256,44 @@ export interface ReconciliationProfile {
   rules: MatchingRule[];
 }
 
+export type DatasetRelation =
+  | "UNIQUE"
+  | { EXACT_DUPLICATE: { originalSourceId: string; rawSha256: string } }
+  | { CONTENT_DUPLICATE: { originalSourceId: string; contentFingerprint: string } }
+  | { SUBSET_DUPLICATE: { supersetSourceId: string; recordCount: number; totalInSuperset: number } }
+  | { PARTIAL_OVERLAP: { overlappingSourceId: string; overlapCount: number; overlapRatio: string } };
+
+export interface IntakeSourceAnalysis {
+  sourceId: string;
+  sourceName: string;
+  filePath: string;
+  rawSha256?: string;
+  canonicalContentFingerprint: string;
+  totalRecords: number;
+  relation: DatasetRelation;
+  isEligibleForReconciliation: boolean;
+  diagnosticMessage: string;
+}
+
+export interface IntakeAnalysisResult {
+  totalPhysicalSources: number;
+  uniqueDatasetsCount: number;
+  exactDuplicatesCount: number;
+  contentDuplicatesCount: number;
+  subsetDuplicatesCount: number;
+  partialOverlapsCount: number;
+  logicalSourcesCount: number;
+  sourceAnalyses: IntakeSourceAnalysis[];
+  requiresUserConfirmation: boolean;
+}
+
 export interface ReconciliationResult {
   sessionId: string;
   executedAt: string;
   profileId: string;
   summary: ReconciliationSummary;
   groups: MatchGroup[];
+  intakeAnalysis?: IntakeAnalysisResult;
 }
 
 export interface ExportSummary {

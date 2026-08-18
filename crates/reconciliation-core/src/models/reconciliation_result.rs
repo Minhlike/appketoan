@@ -165,6 +165,8 @@ pub struct ReconciliationResult {
     pub profile_id: String,
     pub summary: ReconciliationSummary,
     pub groups: Vec<MatchGroup>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intake_analysis: Option<crate::intake::IntakeAnalysisResult>,
 }
 
 #[cfg(test)]
@@ -238,6 +240,7 @@ mod tests {
                     amount_variance: dec!(50000),
                 },
             ],
+            intake_analysis: None,
         };
 
         let json = serde_json::to_string(&result).expect("Serialization failed");

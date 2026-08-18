@@ -1288,7 +1288,7 @@ pub fn execute_reconciliation(
         let mut group_breakdowns = HashMap::new();
 
         let is_insufficient_evidence = primary.doc_no.is_none() && primary.partner_tax_id.is_none();
-        let status = if is_insufficient_evidence {
+        let mut status = if is_insufficient_evidence {
             MatchStatus::NeedsReview
         } else {
             MatchStatus::UnmatchedMissingInTarget
@@ -1304,7 +1304,7 @@ pub fn execute_reconciliation(
             )
         };
 
-        let group_disc = FieldDiscrepancy {
+        let mut group_disc = FieldDiscrepancy {
             field_name: "docNo".to_string(),
             source_value: primary
                 .doc_no
@@ -1328,8 +1328,30 @@ pub fn execute_reconciliation(
             };
 
             let semantic = rule.semantic;
-            let pri_comp =
-                extract_rule_amount(primary, &rule.primary_field).unwrap_or(primary_display_amount);
+            let pri_comp = match extract_rule_amount(primary, &rule.primary_field) {
+                Ok(amt) => amt,
+                Err(e) => {
+                    status = MatchStatus::NeedsReview;
+                    let msg = match e {
+                        RuleFieldError::MissingFieldValue(f) => format!(
+                            "Nguồn chính thiếu giá trị trường '{}' được định nghĩa trong quy tắc '{}'",
+                            f, rule.name
+                        ),
+                        RuleFieldError::UnknownField(f) => format!(
+                            "Quy tắc '{}' chứa trường '{}' không được hỗ trợ",
+                            rule.name, f
+                        ),
+                    };
+                    group_disc = FieldDiscrepancy {
+                        field_name: rule.primary_field.clone(),
+                        source_value: None,
+                        target_value: None,
+                        amount_diff: None,
+                        message: msg,
+                    };
+                    Decimal::ZERO
+                }
+            };
 
             match semantic {
                 ComparisonSemantic::Revenue => grp_revenue_var += pri_comp,
@@ -1418,14 +1440,62 @@ pub fn execute_reconciliation(
                 .or(sec.voucher_no.as_deref())
                 .unwrap_or("N/A");
 
-            let sec_comp_amount = if let Some(rule) = sec_rule {
-                extract_rule_amount(sec, &rule.secondary_field).unwrap_or(sec.total_amount)
-            } else {
-                sec.credit_amount
-                    .or(sec.debit_amount)
-                    .or(sec.pretax_amount)
-                    .unwrap_or(sec.total_amount)
+            let mut sec_status = MatchStatus::UnmatchedMissingInSource;
+            let mut sec_discrepancies = Vec::new();
+
+            let sec_comp_amount = match sec_rule {
+                Some(rule) => match extract_rule_amount(sec, &rule.secondary_field) {
+                    Ok(amt) => amt,
+                    Err(e) => {
+                        sec_status = MatchStatus::NeedsReview;
+                        let msg = match e {
+                            RuleFieldError::MissingFieldValue(f) => format!(
+                                "Bản ghi phụ thiếu giá trị trường '{}' theo quy tắc '{}'",
+                                f, rule.name
+                            ),
+                            RuleFieldError::UnknownField(f) => format!(
+                                "Quy tắc '{}' chứa trường phụ '{}' không được hỗ trợ",
+                                rule.name, f
+                            ),
+                        };
+                        sec_discrepancies.push(FieldDiscrepancy {
+                            field_name: rule.secondary_field.clone(),
+                            source_value: None,
+                            target_value: None,
+                            amount_diff: None,
+                            message: msg,
+                        });
+                        Decimal::ZERO
+                    }
+                },
+                None => {
+                    sec_status = MatchStatus::NeedsReview;
+                    sec_discrepancies.push(FieldDiscrepancy {
+                        field_name: "rule".to_string(),
+                        source_value: None,
+                        target_value: None,
+                        amount_diff: None,
+                        message: format!(
+                            "Không tìm thấy quy tắc đối chiếu cho nguồn phụ '{}' (UNSUPPORTED_RECONCILIATION_RULE)",
+                            sec_idx.source_name
+                        ),
+                    });
+                    Decimal::ZERO
+                }
             };
+
+            sec_discrepancies.push(FieldDiscrepancy {
+                field_name: "docNo".to_string(),
+                source_value: None,
+                target_value: Some(doc_display.to_string()),
+                amount_diff: Some(sec_comp_amount),
+                message: format!(
+                    "Chứng từ #{} ({}) đ tồn tại trong {} nhưng không có trong nguồn chính",
+                    doc_display,
+                    format_vnd(sec_comp_amount),
+                    sec_idx.source_name
+                ),
+            });
 
             let mut sec_rev_var = Decimal::ZERO;
             let mut sec_vat_var = Decimal::ZERO;
@@ -1443,7 +1513,7 @@ pub fn execute_reconciliation(
 
             groups.push(MatchGroup {
                 id: format!("grp_missing_source_{}", sec.id),
-                status: MatchStatus::UnmatchedMissingInSource,
+                status: sec_status,
                 doc_no: sec.doc_no.clone().or_else(|| sec.voucher_no.clone()),
                 series: sec.series.clone(),
                 date: sec.date.clone(),
@@ -1451,18 +1521,7 @@ pub fn execute_reconciliation(
                 primary_source_record_ids: vec![],
                 target_source_record_ids: vec![sec.id.clone()],
                 source_breakdowns: HashMap::new(),
-                discrepancies: vec![FieldDiscrepancy {
-                    field_name: "docNo".to_string(),
-                    source_value: None,
-                    target_value: Some(doc_display.to_string()),
-                    amount_diff: Some(sec_comp_amount),
-                    message: format!(
-                        "Chứng từ #{} ({}) đ tồn tại trong {} nhưng không có trong nguồn chính",
-                        doc_display,
-                        format_vnd(sec_comp_amount),
-                        sec_idx.source_name
-                    ),
-                }],
+                discrepancies: sec_discrepancies,
                 semantic_comparisons: vec![],
                 revenue_variance: sec_rev_var,
                 vat_variance: sec_vat_var,
@@ -1573,5 +1632,6 @@ pub fn execute_reconciliation(
             net_financial_variance: net_variance,
         },
         groups,
+        intake_analysis: None,
     })
 }

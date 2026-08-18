@@ -379,6 +379,7 @@ describe("IPC Contract & Decimal Safety Tests", () => {
         __dirname,
         "../../crates/reconciliation-core/fixtures/artifacts/ts_generated_session.json"
       ),
+      path.resolve(__dirname, "../../audit/generated-ts-ipc.json"),
       path.resolve(__dirname, "../../audit-runtime/generated-ts-ipc.json"),
       path.resolve(__dirname, "../../.audit-runtime/generated-ts-ipc.json"),
     ];

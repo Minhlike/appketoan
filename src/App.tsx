@@ -516,6 +516,38 @@ export function App() {
         {/* Results Area */}
         {result && (
           <>
+            {result.intakeAnalysis &&
+              result.intakeAnalysis.totalPhysicalSources >
+                result.intakeAnalysis.uniqueDatasetsCount && (
+                <div
+                  className="alert-banner alert-warning intake-summary-banner"
+                  role="alert"
+                  style={{
+                    marginBottom: "1.5rem",
+                    backgroundColor: "#fffbeb",
+                    border: "1px solid #fef3c7",
+                    borderRadius: "8px",
+                    padding: "1rem",
+                    color: "#92400e",
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: "1rem" }}>
+                      🛡️ Phân tích tệp nguồn ({result.intakeAnalysis.totalPhysicalSources} tệp vật lý → {result.intakeAnalysis.uniqueDatasetsCount} tập dữ liệu logic):
+                    </strong>
+                    <div style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
+                      {result.intakeAnalysis.sourceAnalyses
+                        .filter((a) => !a.isEligibleForReconciliation)
+                        .map((a) => (
+                          <div key={a.sourceId} style={{ marginTop: "0.25rem" }}>
+                            • <strong>{a.sourceName}</strong>: {a.diagnosticMessage}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
             <DashboardKPIs
               summary={result.summary}
               activeFilter={statusFilter}

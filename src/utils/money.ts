@@ -114,57 +114,83 @@ export function isZeroMoney(val: string | number | undefined | null): boolean {
   return /^0*$/.test(clean);
 }
 
+export type MoneyParseResult =
+  | { success: true; value: MoneyValue }
+  | { success: false; error: string };
+
 /**
- * Normalizes user input for monetary settings/tolerance without floating-point conversion
- * Supports Vietnamese conventions: "." as thousand separator, "," as decimal separator
- * Example: "0" -> "0", "500" -> "500", "10.000" -> "10000", "1.000.000" -> "1000000", "10.000,50" -> "10000.50"
- * Rejects negative numbers and invalid formatting
+ * Parses user input for monetary settings/tolerance without floating-point conversion.
+ * Supports Vietnamese conventions: "." as thousand separator, "," as decimal separator.
+ * Example:
+ * - "0" -> "0"
+ * - "500" -> "500"
+ * - "10.000" -> "10000"
+ * - "1.000.000" -> "1000000"
+ * - "10.000,50" -> "10000.50"
+ * - "10.000,5000" -> "10000.5000"
+ * Rejects negative numbers and invalid formatting with clear errors.
  */
-export function normalizeMoneyInput(val: string): MoneyValue {
-  if (!val) return "0";
-  const trimmed = val.trim().replace(/[₫đĐ\s\u00a0VNDvndVNĐ]/g, "");
-  if (trimmed === "" || trimmed === "0") return "0";
+export function parseVietnameseMoneyInput(val: string | number | undefined | null): MoneyParseResult {
+  if (val === undefined || val === null) {
+    return { success: false, error: "Giá trị không được để trống" };
+  }
+  const trimmed = String(val).trim().replace(/[₫đĐ\s\u00a0VNDvndVNĐ]/g, "");
+  if (trimmed === "") {
+    return { success: false, error: "Giá trị tiền không được để trống" };
+  }
 
   // Reject negative numbers for tolerance
   if (trimmed.startsWith("-")) {
-    return "0";
+    return { success: false, error: "Dung sai tiền tệ không được là số âm" };
   }
 
   // Check invalid characters
   if (!/^[0-9.,]+$/.test(trimmed)) {
-    return "0";
+    return { success: false, error: "Chuỗi chứa ký tự không hợp lệ" };
   }
 
   // Check multiple consecutive dots/commas
   if (/\.{2,}|,{2,}/.test(trimmed)) {
-    return "0";
+    return { success: false, error: "Định dạng dấu phân cách không hợp lệ (liên tiếp nhau)" };
   }
 
   // Check multiple commas
   const commaCount = (trimmed.match(/,/g) || []).length;
   if (commaCount > 1) {
-    return "0";
+    return { success: false, error: "Chỉ được chứa tối đa một dấu phẩy phân cách thập phân" };
   }
 
   // If there is a comma, it separates integer and fraction
   if (commaCount === 1) {
     const [intPart, fracPart] = trimmed.split(",");
     const rawInt = intPart.replace(/\./g, "").replace(/^0+/, "") || "0";
-    if (!/^[0-9]+$/.test(rawInt) || (fracPart && !/^[0-9]+$/.test(fracPart))) {
-      return "0";
+    if (!/^[0-9]+$/.test(rawInt) || (fracPart !== undefined && fracPart !== "" && !/^[0-9]+$/.test(fracPart))) {
+      return { success: false, error: "Phần nguyên hoặc phần thập phân chứa ký tự không hợp lệ" };
     }
     const cleanFrac = fracPart ? fracPart.slice(0, 4) : "";
-    return cleanFrac === "" || /^0+$/.test(cleanFrac)
+    const res = cleanFrac === "" || /^0+$/.test(cleanFrac)
       ? rawInt
       : `${rawInt}.${cleanFrac}`;
+    return { success: true, value: res };
   }
 
   // No comma: dots are thousand separators
   const rawDigits = trimmed.replace(/\./g, "");
   if (!/^[0-9]+$/.test(rawDigits)) {
-    return "0";
+    return { success: false, error: "Định dạng số không hợp lệ" };
   }
   const withoutLeadingZeros = rawDigits.replace(/^0+/, "");
-  return withoutLeadingZeros === "" ? "0" : withoutLeadingZeros;
+  return { success: true, value: withoutLeadingZeros === "" ? "0" : withoutLeadingZeros };
+}
+
+/**
+ * Normalizes user input or throws error on invalid input.
+ */
+export function normalizeMoneyInput(val: string | number): MoneyValue {
+  const result = parseVietnameseMoneyInput(val);
+  if (!result.success) {
+    throw new Error(`INVALID_MONEY_INPUT: ${result.error} ('${val}')`);
+  }
+  return result.value;
 }
 
