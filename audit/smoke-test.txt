@@ -1,0 +1,20 @@
+﻿================================================================================
+SMOKE TEST EXECUTION RESULTS - V5
+Date: 2026-08-19 02:02:53
+================================================================================
+
+1. Real 2-File Workbook Verification:
+   - Invoice file: D:\appketoan\T7.2026 Thuáº¿.xlsx (46 valid invoices, Pretax: 7,328,121,057 VND)
+   - TK511 file:   D:\appketoan\T7.2026.xlsx (45 valid TK511 entries, Credit: 7,223,121,057 VND)
+   - Exact matches: 45
+   - Missing in TK511: 1 (Invoice #233, Date: 2026-07-06, Pretax: 105,000,000 VND)
+   - Revenue variance: 105,000,000 VND
+   - Status: PASS
+
+2. Multi-Source Synthetic 3-Source & 4-Source Verification:
+   - Dynamic Comparison Rules: PASS
+   - Required / Optional source validation: PASS
+   - Same Doc No Different Series collision prevention: PASS
+   - Deterministic Canonical Ordering: PASS
+   - Fail-Closed Header Detection: PASS
+   - IPC Contract Typecheck: PASS

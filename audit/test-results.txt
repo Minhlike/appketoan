@@ -1,6 +1,6 @@
 ﻿================================================================================
-AUDIT TEST SUITE EXECUTION RESULTS - FIX V4 MULTI-SOURCE CORRECTNESS
-Date: 2026-08-19 01:23:30
+AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V5 RELIABLE MULTI-SOURCE BUILD
+Date: 2026-08-19 02:02:51
 ================================================================================
 
 --- 1. RUST CORE RECONCILIATION TEST SUITE (cargo test --workspace) ---
@@ -12,21 +12,22 @@ At D:\appketoan\scripts\prepare_audit_and_zip.ps1:36 char:20
     + FullyQualifiedErrorId : NativeCommandError
  
    Compiling tauri-app v0.1.0 (D:\appketoan\src-tauri)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.43s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.78s
      Running unittests src\lib.rs (target\debug\deps\reconciliation_core-6d212257172c4466.exe)
 
-running 9 tests
-test models::canonical_record::tests::test_doc_no_normalization ... ok
+running 10 tests
 test models::canonical_record::tests::test_tax_id_normalization ... ok
+test normalizer::row_normalizer::tests::test_parse_excel_dates ... ok
+test models::canonical_record::tests::test_doc_no_normalization ... ok
+test normalizer::row_normalizer::tests::test_parse_amount_variations ... ok
+test normalizer::row_normalizer::tests::test_company_names_never_filtered_as_subtotal ... ok
+test models::reconciliation_rule::tests::test_comparison_rule_serialization ... ok
 test models::data_source::tests::test_data_source_serialization ... ok
 test models::reconciliation_rule::tests::test_matching_rule_serialization ... ok
-test normalizer::row_normalizer::tests::test_company_names_never_filtered_as_subtotal ... ok
-test normalizer::row_normalizer::tests::test_parse_excel_dates ... ok
 test models::reconciliation_result::tests::test_reconciliation_result_summary ... ok
-test normalizer::row_normalizer::tests::test_parse_amount_variations ... ok
 test reader::header_detector::tests::test_einvoice_named_doanh_thu_correctly_classified_as_einvoice ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests\end_to_end_reconciliation_test.rs 
 (target\debug\deps\end_to_end_reconciliation_test-60c7919e7b145045.exe)
@@ -46,62 +47,25 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests\performance_benchmark_test.rs (target\debug\deps\performance_benchmark_test-6e0fabe23a33f2e3.exe)
 
 running 1 test
-[PERF BENCHMARK] Count:   1000 pairs | Time: 17.74ms  | Exact Matches: 1000
-[PERF BENCHMARK] Count:  10000 pairs | Time: 157.55ms | Exact Matches: 10000
-[PERF BENCHMARK] Count:  50000 pairs | Time: 865.54ms | Exact Matches: 50000
-[PERF BENCHMARK] Count: 100000 pairs | Time: 1.69s    | Exact Matches: 100000
-test test_performance_scaling_1k_to_100k ... ok
+[PERF BENCHMARK] Count:   1000 pairs | Time: 21.03ms  | Exact Matches: 1000
+[PERF BENCHMARK] Count:  10000 pairs | Time: 211.70ms | Exact Matches: 10000
+[PERF BENCHMARK] Count:  50000 pairs | Time: 1.22s    | Exact Matches: 50000
+[PERF BENCHMARK] Count: 100000 pairs | Time: 4.99s    | Exact Matches: 100000
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.46s
+thread 'test_performance_scaling_1k_to_100k' (20080) panicked at 
+crates\reconciliation-core\tests\performance_benchmark_test.rs:110:13:
+100k matching exceeded 4.0s threshold: 4.990134s
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test test_performance_scaling_1k_to_100k ... FAILED
 
-     Running tests\reconciliation_correctness_regression_test.rs 
-(target\debug\deps\reconciliation_correctness_regression_test-2fb9c02d044b8190.exe)
+failures:
 
-running 17 tests
-test test_04_scenario_produces_actual_roles_and_rules ... ok
-test test_01_required_source_missing_before_run ... ok
-test test_06_unsafe_aggregate_ambiguity_no_arbitrary_guess ... ok
-test test_09_semantic_detail_model ... ok
-test test_03_optional_source_absent ... ok
-test test_07_fallback_no_doc_multi_source ... ok
-test test_05_same_doc_no_different_series_collision_prevention ... ok
-test test_08_revenue_pos_vat_neg_still_overall_mismatch_no_cancelling ... ok
-test test_12_typescript_decimal_contract ... ok
-test test_02_required_source_uploaded_but_record_missing ... ok
-test test_11_decimal_rust_serialization ... ok
-test test_17_multi_source_golden_case_positive_and_negative ... ok
-test test_15_sheet_switch_reclassification ... ok
-test test_13_einvoice_sheet_named_doanh_thu_thang_7 ... ok
-test test_14_unknown_source_classification ... ok
-test test_10_semantic_excel_export ... ok
-test test_16_real_2_file_baseline_46_45_missing_233 ... ok
+failures:
+    test_performance_scaling_1k_to_100k
 
-test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.76s
 
-     Running unittests src\lib.rs (target\debug\deps\tauri_app_lib-31a85b1b44a4d0ed.exe)
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-     Running unittests src\main.rs (target\debug\deps\tauri_app-da059fa6d6a24ce3.exe)
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-   Doc-tests reconciliation_core
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-   Doc-tests tauri_app_lib
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
+error: test failed, to rerun pass `-p reconciliation-core --test performance_benchmark_test`
 
 
 --- 2. FRONTEND TEST SUITE (npm test / vitest) ---
@@ -114,13 +78,13 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
  [32mΓ£ô[39m src/types/ipcContract.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
  [32mΓ£ô[39m src/types/dataContract.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 4[2mms[22m[39m
- [32mΓ£ô[39m src/App.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 1167[2mms[22m[39m
-     [33m[2mΓ£ô[22m[39m executes reconciliation on demo datasets and renders Dashboard KPIs & Result Table [33m 520[2mms[22m[39m
-     [33m[2mΓ£ô[22m[39m opens Detail Inspector modal when clicking 'Xem' on a row [33m 496[2mms[22m[39m
+ [32mΓ£ô[39m src/App.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 1211[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m executes reconciliation on demo datasets and renders Dashboard KPIs & Result Table [33m 523[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m opens Detail Inspector modal when clicking 'Xem' on a row [33m 489[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
 [2m      Tests [22m [1m[32m11 passed[39m[22m[90m (11)[39m
-[2m   Start at [22m 01:23:28
-[2m   Duration [22m 2.24s[2m (transform 248ms, setup 0ms, import 417ms, tests 1.17s, environment 2.00s)[22m
+[2m   Start at [22m 02:02:49
+[2m   Duration [22m 2.42s[2m (transform 248ms, setup 0ms, import 431ms, tests 1.22s, environment 2.33s)[22m
 
 
