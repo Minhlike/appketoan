@@ -46,16 +46,21 @@ Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== GIT DIFF
 # 4. audit/test-results.txt
 Write-Host "-> Running tests and generating audit/test-results.txt"
 Set-Location $repoRoot
-$cargoTestOutput = & cargo test --workspace -- --nocapture 2>&1 | Out-String
+# Temporarily allow stderr mixing without triggering Stop
+$cargoTestOutput = $null
+$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+try { $cargoTestOutput = (& cargo test --workspace 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "cargo test failed!"
+    Write-Error "cargo test failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 
 Set-Location $repoRoot
-$npmTestOutput = & npm test 2>&1 | Out-String
+$npmTestOutput = $null
+$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+try { $npmTestOutput = (& npm test 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "npm test failed!"
+    Write-Error "npm test failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 
@@ -76,9 +81,11 @@ Set-Content -Path (Join-Path $auditDir "test-results.txt") -Value $testResults -
 # 5. audit/build-results.txt
 Write-Host "-> Running build check and generating audit/build-results.txt"
 Set-Location $repoRoot
-$npmBuildOutput = & npm run build 2>&1 | Out-String
+$npmBuildOutput = $null
+$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+try { $npmBuildOutput = (& npm run build 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "npm run build failed!"
+    Write-Error "npm run build failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 
