@@ -609,6 +609,20 @@ body {
   color: var(--color-warning);
 }
 
+.var-not-checked {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-muted, #888);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.not-checked-badge {
+  opacity: 0.65;
+  border: 1px dashed currentColor;
+}
+
 .kpis-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

@@ -22,6 +22,9 @@ pub enum MatchStatus {
         alias = "INSUFFICIENT_EVIDENCE"
     )]
     NeedsReview,
+    /// Semantic was NOT evaluated because the source was absent from this session.
+    /// Never means "matched". Must be shown as "CHƯA ĐỐI CHIẾU" in UI.
+    NotChecked,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

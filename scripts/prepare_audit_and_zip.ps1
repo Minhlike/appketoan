@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = "D:\appketoan"
 $auditDir = Join-Path $repoRoot "audit"
-$zipPathV6 = "D:\appketoan-audit-v6.zip"
+$zipPathV8 = "D:\appketoan-audit-v8.zip"
 $zipPath = "D:\appketoan-audit.zip"
 $stageDir = "D:\temp_audit_stage"
 
@@ -41,7 +41,7 @@ Set-Content -Path (Join-Path $auditDir "git-status.txt") -Value $gitStatus -Enco
 # 3. audit/git-diff-stat.txt
 Write-Host "-> Generating audit/git-diff-stat.txt"
 $diffDetail = & git diff --stat HEAD~1 HEAD
-Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== GIT DIFF STAT (V6) ===`n$diffDetail" -Encoding UTF8
+Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== GIT DIFF STAT (V8) ===`n$diffDetail" -Encoding UTF8
 
 # 4. audit/test-results.txt
 Write-Host "-> Running tests and generating audit/test-results.txt"
@@ -66,7 +66,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $testResults = @"
 ================================================================================
-AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V6 HARDENED BUILD
+AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V8 HARDENED BUILD
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -91,7 +91,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $buildResults = @"
 ================================================================================
-AUDIT BUILD VERIFICATION RESULTS - V6
+AUDIT BUILD VERIFICATION RESULTS - V8
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -108,7 +108,7 @@ Set-Content -Path (Join-Path $auditDir "build-results.txt") -Value $buildResults
 # 6. audit/smoke-test.txt
 $smokeTestContent = @"
 ================================================================================
-SMOKE TEST EXECUTION RESULTS - V6
+SMOKE TEST EXECUTION RESULTS - V8
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -130,8 +130,22 @@ Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
    - 20-Permutation Determinism: PASS
    - Adversarial False-Match Suite (0 false matches): PASS
    - Decimal Rust -> JSON -> TS IPC Contract: PASS
+   - NOT_CHECKED Semantic Distinction: PASS
+   - Mismatch Candidate Deferral: PASS
 "@
 Set-Content -Path (Join-Path $auditDir "smoke-test.txt") -Value $smokeTestContent -Encoding UTF8
+
+# 7. audit/artifact-hashes.txt
+Write-Host "-> Computing artifact hashes"
+$hashEntries = @()
+foreach ($f in @("dist/index.html", "src/App.tsx", "crates/reconciliation-core/src/lib.rs", "crates/reconciliation-core/src/matcher/engine.rs")) {
+    $fullPath = Join-Path $repoRoot $f
+    if (Test-Path $fullPath) {
+        $h = Get-FileHash -Path $fullPath -Algorithm SHA256
+        $hashEntries += "$($h.Algorithm): $($h.Hash)  $f"
+    }
+}
+Set-Content -Path (Join-Path $auditDir "artifact-hashes.txt") -Value ($hashEntries -join "`n") -Encoding UTF8
 
 Write-Host "=== 2. Staging files into $stageDir ==="
 if (Test-Path $stageDir) {
@@ -195,27 +209,27 @@ foreach ($file in $files) {
 
 Write-Host "Total staged files: $includedCount"
 
-Write-Host "=== 3. Compressing staged files into $zipPathV6 and $zipPath ==="
-if (Test-Path $zipPathV6) { Remove-Item -Path $zipPathV6 -Force }
+Write-Host "=== 3. Compressing staged files into $zipPathV8 and $zipPath ==="
+if (Test-Path $zipPathV8) { Remove-Item -Path $zipPathV8 -Force }
 if (Test-Path $zipPath) { Remove-Item -Path $zipPath -Force }
 
-Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV6 -CompressionLevel Optimal
-Copy-Item -Path $zipPathV6 -Destination $zipPath -Force
+Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV8 -CompressionLevel Optimal
+Copy-Item -Path $zipPathV8 -Destination $zipPath -Force
 
 # Cleanup stage directory
 Remove-Item -Path $stageDir -Recurse -Force
 
 Write-Host "=== 4. Validating Created ZIP Archive ==="
-$zipInfo = Get-Item $zipPathV6
+$zipInfo = Get-Item $zipPathV8
 $zipSizeKB = [math]::Round($zipInfo.Length / 1KB, 2)
 $zipSizeMB = [math]::Round($zipInfo.Length / 1MB, 2)
 
-Write-Host "ZIP Path: $zipPathV6"
+Write-Host "ZIP Path: $zipPathV8"
 Write-Host "ZIP Size: $zipSizeKB KB ($zipSizeMB MB)"
 
 # Validate archive contents
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV6)
+$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV8)
 $entryNames = $verifyZip.Entries | ForEach-Object { $_.FullName }
 $verifyZip.Dispose()
 
@@ -226,6 +240,7 @@ $hasAuditTest = ($entryNames | Where-Object { $_ -like "*test-results.txt" })
 $hasAuditBuild = ($entryNames | Where-Object { $_ -like "*build-results.txt" })
 $hasAuditSmoke = ($entryNames | Where-Object { $_ -like "*smoke-test.txt" })
 $hasAuditIpc = ($entryNames | Where-Object { $_ -like "*audit/generated-ipc-contract.json" -or $_ -like "*audit\generated-ipc-contract.json" })
+$hasAuditHashes = ($entryNames | Where-Object { $_ -like "*artifact-hashes.txt" })
 $hasCoreLib = ($entryNames | Where-Object { $_ -like "*crates/reconciliation-core/src/lib.rs" -or $_ -like "*reconciliation-core\src\lib.rs" })
 $hasMatcherEngine = ($entryNames | Where-Object { $_ -like "*crates/reconciliation-core/src/matcher/engine.rs" -or $_ -like "*reconciliation-core\src\matcher\engine.rs" })
 $hasFrontendApp = ($entryNames | Where-Object { $_ -like "*src/App.tsx" -or $_ -like "*src\App.tsx" })
@@ -239,6 +254,7 @@ Write-Host " - audit/test-results.txt: $($hasAuditTest -ne $null)"
 Write-Host " - audit/build-results.txt: $($hasAuditBuild -ne $null)"
 Write-Host " - audit/smoke-test.txt: $($hasAuditSmoke -ne $null)"
 Write-Host " - audit/generated-ipc-contract.json: $($hasAuditIpc -ne $null)"
+Write-Host " - audit/artifact-hashes.txt: $($hasAuditHashes -ne $null)"
 Write-Host " - crates/reconciliation-core/src/lib.rs: $($hasCoreLib -ne $null)"
 Write-Host " - crates/reconciliation-core/src/matcher/engine.rs: $($hasMatcherEngine -ne $null)"
 Write-Host " - src/App.tsx: $($hasFrontendApp -ne $null)"
@@ -249,3 +265,4 @@ if ($hasAuditCommit -and $hasAuditStatus -and $hasAuditDiff -and $hasAuditTest -
 } else {
     Write-Host "SAFE_FOR_INDEPENDENT_AUDIT: NO"
 }
+

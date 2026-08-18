@@ -1,2 +1,2 @@
-﻿=== GIT DIFF STAT (V5) ===
- audit/build-results.txt | 21 +++++------  audit/commit.txt        |  4 +--  audit/git-diff-stat.txt |  4 +--  audit/git-status.txt    | 33 -----------------  audit/smoke-test.txt    | 20 +++++++++++  audit/test-results.txt  | 94 +++++++++++++++----------------------------------  6 files changed, 61 insertions(+), 115 deletions(-)
+﻿=== GIT DIFF STAT (V6) ===
+ scripts/prepare_audit_and_zip.ps1 | 19 +++++++++++++------  tsconfig.json                     |  1 +  2 files changed, 14 insertions(+), 6 deletions(-)

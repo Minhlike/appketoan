@@ -1,17 +1,20 @@
 import React from "react";
-import type { ReconciliationSummary } from "../types/dataContract";
+import type { ComparisonSemantic, ReconciliationSummary } from "../types/dataContract";
 import { formatVND, isZeroMoney } from "../utils/money";
 
 interface DashboardKPIsProps {
   summary: ReconciliationSummary;
   activeFilter: string;
   onSelectFilter: (status: string) => void;
+  /** Semantics that were actually checked in this reconciliation session */
+  activeSemantics?: ComparisonSemantic[];
 }
 
 export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
   summary,
   activeFilter,
   onSelectFilter,
+  activeSemantics,
 }) => {
   const kpis = [
     {
@@ -90,10 +93,24 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
       : []),
   ];
 
-  const hasSemanticBreakdowns =
-    (summary.revenueVariance !== undefined && !isZeroMoney(summary.revenueVariance)) ||
-    (summary.vatVariance !== undefined && !isZeroMoney(summary.vatVariance)) ||
-    (summary.receivableVariance !== undefined && !isZeroMoney(summary.receivableVariance));
+  // Determine which semantics were actually checked in this session
+  const revenueChecked = !activeSemantics || activeSemantics.includes("REVENUE");
+  const vatChecked = !activeSemantics || activeSemantics.includes("VAT");
+  const receivableChecked = !activeSemantics || activeSemantics.includes("RECEIVABLE");
+
+  // Show revenue variance badge ONLY if revenue was actually checked
+  const showRevenueVariance =
+    revenueChecked && summary.revenueVariance !== undefined;
+  // Show VAT variance badge ONLY if VAT was actually checked
+  const showVatVariance = vatChecked && summary.vatVariance !== undefined;
+  // Show receivable variance badge ONLY if receivable was actually checked
+  const showReceivableVariance =
+    receivableChecked && summary.receivableVariance !== undefined;
+
+  const hasAnyVariance =
+    (showRevenueVariance && !isZeroMoney(summary.revenueVariance!)) ||
+    (showVatVariance && !isZeroMoney(summary.vatVariance!)) ||
+    (showReceivableVariance && !isZeroMoney(summary.receivableVariance!));
 
   const isNetZero = isZeroMoney(summary.netFinancialVariance);
 
@@ -102,46 +119,61 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
       <div className="section-title-row">
         <h2 className="section-title">Kết quả đối chiếu tổng quan</h2>
         <div className="variance-badges-container" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          {summary.revenueVariance !== undefined && (
+
+          {showRevenueVariance ? (
             <div className="net-variance-badge" title="Chênh lệch Doanh thu (Pretax ↔ TK 511)">
               <span className="var-label">Lệch Doanh thu:</span>
               <span
                 className={`var-value ${
-                  isZeroMoney(summary.revenueVariance) ? "var-zero" : "var-pos"
+                  isZeroMoney(summary.revenueVariance!) ? "var-zero" : "var-pos"
                 }`}
               >
-                {formatVND(summary.revenueVariance)}
+                {formatVND(summary.revenueVariance!)}
               </span>
+            </div>
+          ) : !revenueChecked ? null : null}
+
+          {vatChecked ? (
+            showVatVariance ? (
+              <div className="net-variance-badge" title="Chênh lệch Thuế GTGT (VAT ↔ TK 3331)">
+                <span className="var-label">Lệch Thuế GTGT:</span>
+                <span
+                  className={`var-value ${
+                    isZeroMoney(summary.vatVariance!) ? "var-zero" : "var-pos"
+                  }`}
+                >
+                  {formatVND(summary.vatVariance!)}
+                </span>
+              </div>
+            ) : null
+          ) : (
+            <div className="net-variance-badge not-checked-badge" title="Thuế GTGT chưa được đối chiếu trong phiên này">
+              <span className="var-label">Thuế GTGT:</span>
+              <span className="var-not-checked">CHƯA ĐỐI CHIẾU</span>
             </div>
           )}
 
-          {summary.vatVariance !== undefined && (
-            <div className="net-variance-badge" title="Chênh lệch Thuế GTGT (VAT ↔ TK 3331)">
-              <span className="var-label">Lệch Thuế GTGT:</span>
-              <span
-                className={`var-value ${
-                  isZeroMoney(summary.vatVariance) ? "var-zero" : "var-pos"
-                }`}
-              >
-                {formatVND(summary.vatVariance)}
-              </span>
+          {receivableChecked ? (
+            showReceivableVariance ? (
+              <div className="net-variance-badge" title="Chênh lệch Công nợ (Total ↔ TK 131)">
+                <span className="var-label">Lệch Công nợ:</span>
+                <span
+                  className={`var-value ${
+                    isZeroMoney(summary.receivableVariance!) ? "var-zero" : "var-pos"
+                  }`}
+                >
+                  {formatVND(summary.receivableVariance!)}
+                </span>
+              </div>
+            ) : null
+          ) : (
+            <div className="net-variance-badge not-checked-badge" title="Công nợ phải thu chưa được đối chiếu trong phiên này">
+              <span className="var-label">Công nợ:</span>
+              <span className="var-not-checked">CHƯA ĐỐI CHIẾU</span>
             </div>
           )}
 
-          {summary.receivableVariance !== undefined && (
-            <div className="net-variance-badge" title="Chênh lệch Công nợ (Total ↔ TK 131)">
-              <span className="var-label">Lệch Công nợ:</span>
-              <span
-                className={`var-value ${
-                  isZeroMoney(summary.receivableVariance) ? "var-zero" : "var-pos"
-                }`}
-              >
-                {formatVND(summary.receivableVariance)}
-              </span>
-            </div>
-          )}
-
-          {!hasSemanticBreakdowns && (
+          {!hasAnyVariance && (
             <div className="net-variance-badge">
               <span className="var-label">Chênh lệch tài chính:</span>
               <span

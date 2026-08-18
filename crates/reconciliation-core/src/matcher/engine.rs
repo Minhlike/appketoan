@@ -633,7 +633,7 @@ pub fn execute_reconciliation(
 
             if available.len() == 1 {
                 let target = *available[0];
-                consumed_secondary_ids.insert(target.id.clone());
+                // NOTE: Do NOT consume yet — determine sec_status first.
 
                 let (pri_comp, tgt_comp, _, _, _, _) = resolve_pair_comparison_amounts(
                     primary,
@@ -718,7 +718,6 @@ pub fn execute_reconciliation(
                 let chosen_indices = &matching_subsets[0];
                 if chosen_indices.len() == 1 {
                     let target = *available[chosen_indices[0]];
-                    consumed_secondary_ids.insert(target.id.clone());
 
                     let (pri_comp, tgt_comp, _, _, _, _) = resolve_pair_comparison_amounts(
                         primary,
@@ -815,9 +814,6 @@ pub fn execute_reconciliation(
                         .iter()
                         .map(|&i| available[i].id.clone())
                         .collect();
-                    for tid in &target_ids {
-                        consumed_secondary_ids.insert(tid.clone());
-                    }
                     group_target_ids.extend(target_ids.clone());
 
                     has_aggregate = true;
@@ -1008,6 +1004,13 @@ pub fn execute_reconciliation(
         } else {
             MatchStatus::MismatchMetadata
         };
+
+        // INVARIANT: Finalized match group consumes candidates unless it is AMBIGUOUS
+        if overall_status != MatchStatus::AmbiguousMatch {
+            for tid in &group_target_ids {
+                consumed_secondary_ids.insert(tid.clone());
+            }
+        }
 
         let amount_variance = if secondary_indexes.len() == 1 {
             primary_display_amount - total_target_amount
@@ -1497,6 +1500,9 @@ pub fn execute_reconciliation(
             MatchStatus::DuplicateSuspect => duplicate_count += g.primary_source_record_ids.len(),
             MatchStatus::AmbiguousMatch => ambiguous_count += 1,
             MatchStatus::NeedsReview => needs_review_count += 1,
+            // NotChecked only appears on SemanticFieldComparison.status, not at group level.
+            // If it somehow reaches here, treat as needs_review.
+            MatchStatus::NotChecked => needs_review_count += 1,
         }
 
         sum_revenue_var += g.revenue_variance;

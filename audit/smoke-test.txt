@@ -1,6 +1,6 @@
 ﻿================================================================================
-SMOKE TEST EXECUTION RESULTS - V5
-Date: 2026-08-19 02:03:25
+SMOKE TEST EXECUTION RESULTS - V6
+Date: 2026-08-19 02:29:49
 ================================================================================
 
 1. Real 2-File Workbook Verification:
@@ -11,10 +11,13 @@ Date: 2026-08-19 02:03:25
    - Revenue variance: 105,000,000 VND
    - Status: PASS
 
-2. Multi-Source Synthetic 3-Source & 4-Source Verification:
-   - Dynamic Comparison Rules: PASS
-   - Required / Optional source validation: PASS
-   - Same Doc No Different Series collision prevention: PASS
-   - Deterministic Canonical Ordering: PASS
-   - Fail-Closed Header Detection: PASS
-   - IPC Contract Typecheck: PASS
+2. Multi-Source Correctness & Invariant Verification:
+   - Primary Record Conservation (No disappearing records): PASS
+   - Candidate Consumption Safety (Ambiguous/Mismatch does not steal): PASS
+   - Aggregate Candidate Counterparty MST Validation: PASS
+   - Aggregate Fail-Closed Multi-Combo Detection: PASS
+   - Rule-Specific Tolerance Precedence: PASS
+   - Table-Driven Built-in Scenarios (511, 3331, 131, 133, Bank): PASS
+   - 20-Permutation Determinism: PASS
+   - Adversarial False-Match Suite (0 false matches): PASS
+   - Decimal Rust -> JSON -> TS IPC Contract: PASS

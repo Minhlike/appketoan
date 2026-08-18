@@ -2,6 +2,7 @@ import { useState } from "react";
 import "./App.css";
 
 import type {
+  ComparisonSemantic,
   DataSource,
   DataSourceKind,
   SourceRole,
@@ -348,7 +349,7 @@ export function App() {
           secondarySourceKind: secKind,
           secondaryField: r.secondaryField,
           isRequired: true,
-          toleranceVnd: r.toleranceVnd !== undefined ? r.toleranceVnd : toleranceVnd,
+          toleranceVnd: String(r.toleranceVnd !== undefined ? r.toleranceVnd : toleranceVnd),
           dateToleranceDays: r.dateToleranceDays !== undefined ? r.dateToleranceDays : dateToleranceDays,
         };
       });
@@ -362,7 +363,7 @@ export function App() {
         optionalSourceIds: optionalSourceIds.length > 0 ? optionalSourceIds : undefined,
         dataSources: sources.map((s) => s.source),
         comparisonRules,
-        matchingToleranceVnd: toleranceVnd,
+        matchingToleranceVnd: String(toleranceVnd),
         dateToleranceDays: dateToleranceDays,
         enableAggregateMatch: enableAggregate,
       };
@@ -518,6 +519,7 @@ export function App() {
               summary={result.summary}
               activeFilter={statusFilter}
               onSelectFilter={(st) => setStatusFilter(st)}
+              activeSemantics={selectedScenario.rules.map((r) => r.semantic as ComparisonSemantic)}
             />
 
             <ResultTable

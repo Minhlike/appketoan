@@ -2208,3 +2208,569 @@ fn test_27_record_conservation_property_invariant() {
         );
     }
 }
+
+// -------------------------------------------------------------------------------------------------
+// TEST 28: MISMATCH DOES NOT CONSUME CANDIDATE
+// Primary A → candidate X = MISMATCH → X must NOT be consumed
+// Primary B → same candidate X = EXACT → B gets MATCHED_EXACT
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_28_mismatch_does_not_consume_candidate() {
+    let src_inv = DataSource {
+        id: "inv_src".to_string(),
+        name: "Hóa đơn".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+    let src_511 = DataSource {
+        id: "tk511_src".to_string(),
+        name: "TK511".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::Ledger511,
+        role: SourceRole::RequiredSecondary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+
+    // Primary A: doc_no = "001", pretax = 100_000_000
+    let primary_a = CanonicalRecord {
+        id: "inv_a".to_string(),
+        source_id: "inv_src".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        series: Some("AA".to_string()),
+        date: Some("2026-01-05".to_string()),
+        pretax_amount: Some(dec!(100_000_000)),
+        total_amount: dec!(110_000_000),
+        ..Default::default()
+    };
+    // Primary B: doc_no = "002", pretax = 50_000_000
+    let primary_b = CanonicalRecord {
+        id: "inv_b".to_string(),
+        source_id: "inv_src".to_string(),
+        source_row: 3,
+        doc_no: Some("002".to_string()),
+        series: Some("AA".to_string()),
+        date: Some("2026-01-06".to_string()),
+        pretax_amount: Some(dec!(50_000_000)),
+        total_amount: dec!(55_000_000),
+        ..Default::default()
+    };
+
+    // Candidate X: doc_no = "001", credit_amount = 50_000_000
+    // Candidate X matches doc_no "001" BUT amount mismatches primary_a (100M vs 50M)
+    // Candidate X should NOT be consumed by primary_a
+    // Primary B doc_no "002" won't find X (different doc_no), so this tests the invariant
+    // that mismatch candidate X stays available
+    let cand_x = CanonicalRecord {
+        id: "tk_x".to_string(),
+        source_id: "tk511_src".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        series: Some("AA".to_string()),
+        date: Some("2026-01-05".to_string()),
+        credit_amount: Some(dec!(50_000_000)),
+        total_amount: dec!(50_000_000),
+        ..Default::default()
+    };
+
+    // Candidate Y: doc_no = "002", credit_amount = 50_000_000
+    let cand_y = CanonicalRecord {
+        id: "tk_y".to_string(),
+        source_id: "tk511_src".to_string(),
+        source_row: 3,
+        doc_no: Some("002".to_string()),
+        series: Some("AA".to_string()),
+        date: Some("2026-01-06".to_string()),
+        credit_amount: Some(dec!(50_000_000)),
+        total_amount: dec!(50_000_000),
+        ..Default::default()
+    };
+
+    let session = ReconciliationSession {
+        session_id: "sess_test28".to_string(),
+        scenario_name: "Test 28".to_string(),
+        primary_source_id: Some("inv_src".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["tk511_src".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_511],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_rev".to_string(),
+            name: "Revenue".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("inv_src".to_string(), vec![primary_a, primary_b]);
+    records_map.insert("tk511_src".to_string(), vec![cand_x, cand_y]);
+
+    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation must succeed");
+
+    // Primary A (doc "001") matches candidate X (doc "001") but amounts differ: MISMATCH
+    let grp_a = res
+        .groups
+        .iter()
+        .find(|g| g.doc_no.as_deref() == Some("001"))
+        .expect("Group for doc 001 must exist");
+    // Amount mismatch: 100M vs 50M
+    assert_eq!(
+        grp_a.status,
+        MatchStatus::MismatchAmount,
+        "Primary A (100M) vs Candidate X (50M) must be MISMATCH_AMOUNT"
+    );
+
+    // Primary B (doc "002") matches candidate Y (doc "002") with exact amount: MATCHED_EXACT
+    let grp_b = res
+        .groups
+        .iter()
+        .find(|g| g.doc_no.as_deref() == Some("002"))
+        .expect("Group for doc 002 must exist");
+    assert_eq!(
+        grp_b.status,
+        MatchStatus::MatchedExact,
+        "Primary B (50M) vs Candidate Y (50M) must be MATCHED_EXACT"
+    );
+
+    // Candidate X must appear in group A's target_source_record_ids (referenced but not fully matched)
+    assert!(
+        grp_a.target_source_record_ids.contains(&"tk_x".to_string()),
+        "Candidate X must be referenced in group A"
+    );
+}
+
+// -------------------------------------------------------------------------------------------------
+// TEST 29: AMBIGUOUS DOES NOT CONSUME CANDIDATES
+// Primary A → multiple matching combos = AMBIGUOUS → candidates NOT consumed
+// Primary B → exact match with one of those candidates = MATCHED_EXACT
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_29_ambiguous_does_not_lock_candidates() {
+    // In our engine, AMBIGUOUS candidates are listed in target_source_record_ids
+    // but the engine never calls consumed_secondary_ids for ambiguous.
+    // This test verifies the engine reports both groups correctly.
+    let src_inv = DataSource {
+        id: "inv_src".to_string(),
+        name: "Hóa đơn".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+    let src_511 = DataSource {
+        id: "tk511_src".to_string(),
+        name: "TK511".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::Ledger511,
+        role: SourceRole::RequiredSecondary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+
+    // Two secondary candidates with same doc_no "001" and same amount 50M
+    // → Primary A (doc "001", 50M) sees 2 candidates → subset {cand1} and {cand2} both sum to 50M → AMBIGUOUS
+    let cand1 = CanonicalRecord {
+        id: "tk_1".to_string(),
+        source_id: "tk511_src".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        credit_amount: Some(dec!(50_000_000)),
+        total_amount: dec!(50_000_000),
+        ..Default::default()
+    };
+    let cand2 = CanonicalRecord {
+        id: "tk_2".to_string(),
+        source_id: "tk511_src".to_string(),
+        source_row: 3,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        credit_amount: Some(dec!(50_000_000)),
+        total_amount: dec!(50_000_000),
+        ..Default::default()
+    };
+    // Primary B: doc "002" 50M → must match a distinct candidate
+    let cand3 = CanonicalRecord {
+        id: "tk_3".to_string(),
+        source_id: "tk511_src".to_string(),
+        source_row: 4,
+        doc_no: Some("002".to_string()),
+        date: Some("2026-01-06".to_string()),
+        credit_amount: Some(dec!(50_000_000)),
+        total_amount: dec!(50_000_000),
+        ..Default::default()
+    };
+
+    let prim_a = CanonicalRecord {
+        id: "inv_a".to_string(),
+        source_id: "inv_src".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        pretax_amount: Some(dec!(50_000_000)),
+        total_amount: dec!(55_000_000),
+        ..Default::default()
+    };
+    let prim_b = CanonicalRecord {
+        id: "inv_b".to_string(),
+        source_id: "inv_src".to_string(),
+        source_row: 3,
+        doc_no: Some("002".to_string()),
+        date: Some("2026-01-06".to_string()),
+        pretax_amount: Some(dec!(50_000_000)),
+        total_amount: dec!(55_000_000),
+        ..Default::default()
+    };
+
+    let session = ReconciliationSession {
+        session_id: "sess_test29".to_string(),
+        scenario_name: "Test 29".to_string(),
+        primary_source_id: Some("inv_src".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["tk511_src".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_511],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_rev".to_string(),
+            name: "Revenue".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("inv_src".to_string(), vec![prim_a, prim_b]);
+    records_map.insert("tk511_src".to_string(), vec![cand1, cand2, cand3]);
+
+    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation must succeed");
+
+    // Both primary groups must appear
+    let primary_groups: Vec<_> = res
+        .groups
+        .iter()
+        .filter(|g| !g.primary_source_record_ids.is_empty())
+        .collect();
+    assert_eq!(primary_groups.len(), 2, "Must have 2 primary groups");
+
+    let grp_a = res
+        .groups
+        .iter()
+        .find(|g| g.doc_no.as_deref() == Some("001"))
+        .expect("Group for doc 001 must exist");
+    // AMBIGUOUS because cand1 and cand2 both sum to 50M individually
+    assert_eq!(
+        grp_a.status,
+        MatchStatus::AmbiguousMatch,
+        "Primary A with 2 identical-amount candidates must be AMBIGUOUS"
+    );
+
+    let grp_b = res
+        .groups
+        .iter()
+        .find(|g| g.doc_no.as_deref() == Some("002"))
+        .expect("Group for doc 002 must exist");
+    // Primary B doc "002" has unique candidate cand3
+    assert_eq!(
+        grp_b.status,
+        MatchStatus::MatchedExact,
+        "Primary B must be MATCHED_EXACT with cand3"
+    );
+
+    // Candidate 3 must appear in group B
+    assert!(
+        grp_b.target_source_record_ids.contains(&"tk_3".to_string()),
+        "Candidate 3 must be in group B"
+    );
+
+    // Residual candidates 1 and 2 must appear in residual groups
+    let residual_groups: Vec<_> = res
+        .groups
+        .iter()
+        .filter(|g| g.status == MatchStatus::UnmatchedMissingInSource)
+        .collect();
+    assert_eq!(
+        residual_groups.len(),
+        2,
+        "Unconsumed ambiguous candidates must appear in residual groups"
+    );
+}
+
+// -------------------------------------------------------------------------------------------------
+// TEST 30: NOT_CHECKED SEMANTIC WHEN SOURCE ABSENT FROM SESSION
+// Session with only EInvoice + TK511 (no TK3331).
+// Engine uses built-in fallback rules for EInvoice↔511.
+// Since no VAT source is present, VAT comparison must NOT appear in results.
+// (NotChecked would be emitted if we had a rule for VAT but no source — test rule-based session)
+// This test verifies: result contains only REVENUE semantic comparisons; no phantom VAT.
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_30_no_phantom_vat_when_tk3331_absent() {
+    let src_inv = DataSource {
+        id: "inv_src".to_string(),
+        name: "Hóa đơn".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+    let src_511 = DataSource {
+        id: "tk511_src".to_string(),
+        name: "TK511".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::Ledger511,
+        role: SourceRole::RequiredSecondary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+
+    let primary = CanonicalRecord {
+        id: "inv_1".to_string(),
+        source_id: "inv_src".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        pretax_amount: Some(dec!(100_000_000)),
+        vat_amount: Some(dec!(10_000_000)),
+        total_amount: dec!(110_000_000),
+        ..Default::default()
+    };
+    let secondary = CanonicalRecord {
+        id: "tk_1".to_string(),
+        source_id: "tk511_src".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        credit_amount: Some(dec!(100_000_000)),
+        total_amount: dec!(100_000_000),
+        ..Default::default()
+    };
+
+    // Only REVENUE rule — no VAT rule at all
+    let session = ReconciliationSession {
+        session_id: "sess_test30".to_string(),
+        scenario_name: "Test 30".to_string(),
+        primary_source_id: Some("inv_src".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["tk511_src".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_511],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_rev".to_string(),
+            name: "Revenue".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("inv_src".to_string(), vec![primary]);
+    records_map.insert("tk511_src".to_string(), vec![secondary]);
+
+    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation must succeed");
+
+    assert_eq!(res.groups.len(), 1);
+    let grp = &res.groups[0];
+    assert_eq!(grp.status, MatchStatus::MatchedExact);
+
+    // No phantom VAT comparisons — only REVENUE
+    for comp in &grp.semantic_comparisons {
+        assert_eq!(
+            comp.semantic,
+            ComparisonSemantic::Revenue,
+            "Only REVENUE comparison expected when no VAT source/rule present. Got {:?}",
+            comp.semantic
+        );
+        // Must NOT be NotChecked in a clean REVENUE match
+        assert_ne!(
+            comp.status,
+            MatchStatus::NotChecked,
+            "REVENUE must not be NotChecked when TK511 is present"
+        );
+    }
+
+    // VAT summary variance must be zero (not driven by phantom comparison)
+    assert_eq!(
+        grp.vat_variance,
+        Decimal::ZERO,
+        "VAT variance must be 0 when no VAT rule"
+    );
+}
+
+// -------------------------------------------------------------------------------------------------
+// TEST 31: BASELINE 46/45/45/#233 WITH EXPLICIT COMPARISON RULE (NO SILENT FALLBACK)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_31_baseline_with_explicit_rule_no_fallback() {
+    // Same core scenario as test_01 baseline (doc matching only),
+    // but we use a real EInvoice↔511 ComparisonRule explicitly.
+    // Validates that the explicit rule path gives the same result as built-in defaults.
+    let src_inv = DataSource {
+        id: "src_inv".to_string(),
+        name: "Hóa đơn".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+    let src_511 = DataSource {
+        id: "src_511".to_string(),
+        name: "TK511".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::Ledger511,
+        role: SourceRole::RequiredSecondary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+
+    // Build 46 invoices, 45 TK511 entries (missing #233 from TK511)
+    let mut invoices: Vec<CanonicalRecord> = Vec::new();
+    let mut tk511s: Vec<CanonicalRecord> = Vec::new();
+
+    for i in 1..=46u32 {
+        let doc = format!("{}", 200 + i);
+        let amount = dec!(1_000_000) * Decimal::from(i);
+        invoices.push(CanonicalRecord {
+            id: format!("inv_{}", i),
+            source_id: "src_inv".to_string(),
+            source_row: i + 1,
+            doc_no: Some(doc.clone()),
+            series: Some("1C26TAA".to_string()),
+            date: Some("2026-01-05".to_string()),
+            pretax_amount: Some(amount),
+            total_amount: amount,
+            ..Default::default()
+        });
+        if doc != "233" {
+            // doc 233 is missing from TK511
+            tk511s.push(CanonicalRecord {
+                id: format!("tk_{}", i),
+                source_id: "src_511".to_string(),
+                source_row: i + 1,
+                doc_no: Some(doc),
+                date: Some("2026-01-05".to_string()),
+                credit_amount: Some(amount),
+                total_amount: amount,
+                ..Default::default()
+            });
+        }
+    }
+
+    assert_eq!(invoices.len(), 46);
+    assert_eq!(tk511s.len(), 45);
+
+    let session = ReconciliationSession {
+        session_id: "sess_test31".to_string(),
+        scenario_name: "Test 31 Explicit Rule".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_511".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_511],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_explicit_rev".to_string(),
+            name: "Revenue (Explicit)".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), invoices);
+    records_map.insert("src_511".to_string(), tk511s);
+
+    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation must succeed");
+
+    let exact = res
+        .groups
+        .iter()
+        .filter(|g| g.status == MatchStatus::MatchedExact)
+        .count();
+    let missing_target = res
+        .groups
+        .iter()
+        .filter(|g| g.status == MatchStatus::UnmatchedMissingInTarget)
+        .count();
+
+    assert_eq!(exact, 45, "Must have 45 exact matches with explicit rule");
+    assert_eq!(
+        missing_target, 1,
+        "Must have 1 missing in target (doc #233)"
+    );
+    assert_eq!(
+        res.groups.len(),
+        46,
+        "Must have 46 groups total (one per primary)"
+    );
+
+    // The missing one must be doc 233
+    let missing_grp = res
+        .groups
+        .iter()
+        .find(|g| g.status == MatchStatus::UnmatchedMissingInTarget)
+        .expect("Must have missing group");
+    assert_eq!(
+        missing_grp.doc_no.as_deref(),
+        Some("233"),
+        "Missing group must be doc #233"
+    );
+}

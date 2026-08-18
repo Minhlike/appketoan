@@ -34,7 +34,7 @@ export interface ComparisonRule {
   secondarySourceKind: DataSourceKind;
   secondaryField: string;
   isRequired: boolean;
-  toleranceVnd: number | string;
+  toleranceVnd: MoneyValue;
   dateToleranceDays: number;
 }
 
@@ -104,7 +104,7 @@ export interface ReconciliationSession {
   optionalSourceIds?: string[];
   dataSources: DataSource[];
   comparisonRules?: ComparisonRule[];
-  matchingToleranceVnd: number | string;
+  matchingToleranceVnd: MoneyValue;
   dateToleranceDays: number;
   enableAggregateMatch: boolean;
 }
@@ -124,14 +124,14 @@ export interface CanonicalRecord {
   buyerTaxId?: string;
   sellerTaxId?: string;
   partnerName?: string;
-  pretaxAmount?: number | string;
-  vatAmount?: number | string;
-  discountAmount?: number | string;
-  feeAmount?: number | string;
-  totalAmount: number | string;
+  pretaxAmount?: MoneyValue;
+  vatAmount?: MoneyValue;
+  discountAmount?: MoneyValue;
+  feeAmount?: MoneyValue;
+  totalAmount: MoneyValue;
   totalAmountOrigin?: ValueOrigin;
-  debitAmount?: number | string;
-  creditAmount?: number | string;
+  debitAmount?: MoneyValue;
+  creditAmount?: MoneyValue;
   vatRate?: string;
   debitAccount?: string;
   creditAccount?: string;
@@ -153,13 +153,15 @@ export type MatchStatus =
   | "DUPLICATE_SUSPECT"
   | "AMBIGUOUS_MATCH"
   | "NEEDS_REVIEW"
-  | "INSUFFICIENT_MATCHING_EVIDENCE";
+  | "INSUFFICIENT_MATCHING_EVIDENCE"
+  /** Semantic was NOT evaluated — secondary source absent from this session */
+  | "NOT_CHECKED";
 
 export interface FieldDiscrepancy {
   fieldName: string;
   sourceValue?: string;
   targetValue?: string;
-  amountDiff?: number | string;
+  amountDiff?: MoneyValue;
   message: string;
 }
 
@@ -167,7 +169,7 @@ export interface SourceMatchBreakdown {
   sourceId: string;
   sourceName: string;
   recordIds: string[];
-  comparedAmount: number | string;
+  comparedAmount: MoneyValue;
   status: MatchStatus;
   discrepancies?: FieldDiscrepancy[];
 }
@@ -181,9 +183,9 @@ export interface SemanticFieldComparison {
   secondarySourceName: string;
   secondarySourceKind: DataSourceKind;
   semanticField: string;
-  expectedAmount: number | string;
-  actualAmount: number | string;
-  variance: number | string;
+  expectedAmount: MoneyValue;
+  actualAmount: MoneyValue;
+  variance: MoneyValue;
   status: MatchStatus;
   primaryRecordIds?: string[];
   secondaryRecordIds?: string[];
@@ -202,13 +204,13 @@ export interface MatchGroup {
   sourceBreakdowns?: Record<string, SourceMatchBreakdown>;
   discrepancies?: FieldDiscrepancy[];
   semanticComparisons?: SemanticFieldComparison[];
-  revenueVariance?: number | string;
-  vatVariance?: number | string;
-  receivableVariance?: number | string;
-  otherVariance?: number | string;
-  totalSourceAmount: number | string;
-  totalTargetAmount: number | string;
-  amountVariance: number | string;
+  revenueVariance?: MoneyValue;
+  vatVariance?: MoneyValue;
+  receivableVariance?: MoneyValue;
+  otherVariance?: MoneyValue;
+  totalSourceAmount: MoneyValue;
+  totalTargetAmount: MoneyValue;
+  amountVariance: MoneyValue;
 }
 
 export interface ReconciliationSummary {
@@ -223,11 +225,11 @@ export interface ReconciliationSummary {
   duplicatesCount: number;
   ambiguousCount: number;
   needsReviewCount?: number;
-  revenueVariance?: number | string;
-  vatVariance?: number | string;
-  receivableVariance?: number | string;
-  totalDiscrepantAmount?: number | string;
-  netFinancialVariance: number | string;
+  revenueVariance?: MoneyValue;
+  vatVariance?: MoneyValue;
+  receivableVariance?: MoneyValue;
+  totalDiscrepantAmount?: MoneyValue;
+  netFinancialVariance: MoneyValue;
 }
 
 export type MatchKeyType =
