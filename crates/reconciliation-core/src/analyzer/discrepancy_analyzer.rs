@@ -1,11 +1,13 @@
 use chrono::NaiveDate;
+use rust_decimal::Decimal;
 use crate::models::{CanonicalRecord, FieldDiscrepancy};
 
-/// Formats a float VND amount to Vietnamese thousand separated string (e.g. 10,000,000)
-pub fn format_vnd(amount: f64) -> String {
-    let is_neg = amount < 0.0;
-    let abs_val = amount.abs().round() as i64;
-    let s = abs_val.to_string();
+/// Formats a Decimal VND amount to Vietnamese thousand separated string (e.g. 10,000,000)
+pub fn format_vnd(amount: Decimal) -> String {
+    let is_neg = amount.is_sign_negative();
+    let abs_val = amount.abs();
+    let int_part = abs_val.trunc();
+    let s = int_part.to_string();
     let mut res = String::new();
     let chars: Vec<char> = s.chars().collect();
     let len = chars.len();
@@ -15,6 +17,15 @@ pub fn format_vnd(amount: f64) -> String {
             res.push(',');
         }
         res.push(c);
+    }
+
+    let fract = abs_val.fract();
+    if !fract.is_zero() {
+        let fract_str = fract.to_string();
+        if let Some(dot_idx) = fract_str.find('.') {
+            res.push('.');
+            res.push_str(&fract_str[dot_idx + 1..]);
+        }
     }
 
     if is_neg {
@@ -37,77 +48,42 @@ pub fn days_between(date_a_opt: &Option<String>, date_b_opt: &Option<String>) ->
 pub fn analyze_pair_discrepancies(
     primary: &CanonicalRecord,
     target: &CanonicalRecord,
-    amount_tolerance_vnd: f64,
+    primary_comp_amount: Decimal,
+    target_comp_amount: Decimal,
+    amount_tolerance_vnd: Decimal,
     date_tolerance_days: u32,
 ) -> Vec<FieldDiscrepancy> {
     let mut discrepancies = Vec::new();
 
-    // 1. Total Amount Check
-    let total_diff = (primary.total_amount - target.total_amount).abs();
-    if total_diff > 0.0 {
-        let is_within_tolerance = total_diff <= amount_tolerance_vnd;
+    // 1. Compared Amount Check (e.g. Invoice Pretax vs TK511 Credit)
+    let amount_diff = (primary_comp_amount - target_comp_amount).abs();
+    if amount_diff > Decimal::ZERO {
+        let is_within_tolerance = amount_diff <= amount_tolerance_vnd;
         let msg = if is_within_tolerance {
             format!(
                 "Chênh lệch làm tròn số tiền {} đ (trong ngưỡng dung sai <= {} đ)",
-                format_vnd(total_diff),
+                format_vnd(amount_diff),
                 format_vnd(amount_tolerance_vnd)
             )
         } else {
             format!(
-                "Lệch tổng tiền: Nguồn A ({}) đ vs Nguồn B ({}) đ, chênh lệch {} đ",
-                format_vnd(primary.total_amount),
-                format_vnd(target.total_amount),
-                format_vnd(total_diff)
+                "Lệch số tiền đối chiếu: Nguồn A ({}) đ vs Nguồn B ({}) đ, chênh lệch {} đ",
+                format_vnd(primary_comp_amount),
+                format_vnd(target_comp_amount),
+                format_vnd(amount_diff)
             )
         };
 
         discrepancies.push(FieldDiscrepancy {
-            field_name: "totalAmount".to_string(),
-            source_value: Some(format_vnd(primary.total_amount)),
-            target_value: Some(format_vnd(target.total_amount)),
-            amount_diff: Some(total_diff),
+            field_name: "amount".to_string(),
+            source_value: Some(format_vnd(primary_comp_amount)),
+            target_value: Some(format_vnd(target_comp_amount)),
+            amount_diff: Some(amount_diff),
             message: msg,
         });
     }
 
-    // 2. VAT Amount Check
-    if let (Some(vat_a), Some(vat_b)) = (primary.vat_amount, target.vat_amount) {
-        let vat_diff = (vat_a - vat_b).abs();
-        if vat_diff > amount_tolerance_vnd {
-            discrepancies.push(FieldDiscrepancy {
-                field_name: "vatAmount".to_string(),
-                source_value: Some(format_vnd(vat_a)),
-                target_value: Some(format_vnd(vat_b)),
-                amount_diff: Some(vat_diff),
-                message: format!(
-                    "Lệch tiền thuế GTGT: Nguồn A là {} đ, Nguồn B là {} đ (lệch {} đ)",
-                    format_vnd(vat_a),
-                    format_vnd(vat_b),
-                    format_vnd(vat_diff)
-                ),
-            });
-        }
-    }
-
-    // 3. Pretax Amount Check
-    if let (Some(pretax_a), Some(pretax_b)) = (primary.pretax_amount, target.pretax_amount) {
-        let pretax_diff = (pretax_a - pretax_b).abs();
-        if pretax_diff > amount_tolerance_vnd {
-            discrepancies.push(FieldDiscrepancy {
-                field_name: "pretaxAmount".to_string(),
-                source_value: Some(format_vnd(pretax_a)),
-                target_value: Some(format_vnd(pretax_b)),
-                amount_diff: Some(pretax_diff),
-                message: format!(
-                    "Lệch doanh thu chưa thuế: Nguồn A là {} đ, Nguồn B là {} đ",
-                    format_vnd(pretax_a),
-                    format_vnd(pretax_b)
-                ),
-            });
-        }
-    }
-
-    // 4. Partner Tax ID Check
+    // 2. Partner Tax ID Check
     if let (Some(tax_a), Some(tax_b)) = (&primary.partner_tax_id, &target.partner_tax_id) {
         if tax_a != tax_b && !tax_a.is_empty() && !tax_b.is_empty() {
             discrepancies.push(FieldDiscrepancy {
@@ -120,7 +96,7 @@ pub fn analyze_pair_discrepancies(
         }
     }
 
-    // 5. Date Difference Check
+    // 3. Date Difference Check
     if let Some(days) = days_between(&primary.date, &target.date) {
         if days > date_tolerance_days as i64 {
             discrepancies.push(FieldDiscrepancy {

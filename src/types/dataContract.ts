@@ -24,6 +24,8 @@ export interface ColumnMapping {
   pretaxAmountColumn?: string;
   vatAmountColumn?: string;
   totalAmountColumn?: string;
+  debitAmountColumn?: string;
+  creditAmountColumn?: string;
   vatRateColumn?: string;
   debitAccountColumn?: string;
   creditAccountColumn?: string;
@@ -85,6 +87,8 @@ export interface CanonicalRecord {
   pretaxAmount?: number;
   vatAmount?: number;
   totalAmount: number;
+  debitAmount?: number;
+  creditAmount?: number;
   vatRate?: string;
   debitAccount?: string;
   creditAccount?: string;
@@ -137,11 +141,21 @@ export interface FieldDiscrepancy {
   message: string;
 }
 
+export interface SourceMatchBreakdown {
+  sourceId: string;
+  sourceName: string;
+  recordIds: string[];
+  comparedAmount: number;
+  status: MatchStatus;
+  discrepancies?: FieldDiscrepancy[];
+}
+
 export interface MatchGroup {
   id: string;
   status: MatchStatus;
   primarySourceRecordIds: string[];
   targetSourceRecordIds: string[];
+  sourceBreakdowns?: Record<string, SourceMatchBreakdown>;
   discrepancies?: FieldDiscrepancy[];
   totalSourceAmount: number;
   totalTargetAmount: number;

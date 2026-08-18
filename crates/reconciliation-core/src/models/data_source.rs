@@ -1,3 +1,4 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +68,12 @@ pub struct ColumnMapping {
     pub total_amount_column: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub debit_amount_column: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credit_amount_column: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vat_rate_column: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -85,7 +92,7 @@ pub struct ColumnMapping {
     pub bank_account_column: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DataSource {
     pub id: String,
@@ -139,12 +146,12 @@ pub struct ReconciliationSession {
     pub session_id: String,
     pub scenario_name: String,
     pub data_sources: Vec<DataSource>,
-    pub matching_tolerance_vnd: f64,
+    pub matching_tolerance_vnd: Decimal,
     pub date_tolerance_days: u32,
     pub enable_aggregate_match: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSummary {
     pub output_path: String,
@@ -170,6 +177,7 @@ mod tests {
             column_mapping: ColumnMapping {
                 doc_no_column: Some("Số hóa đơn".to_string()),
                 total_amount_column: Some("Tổng tiền".to_string()),
+                credit_amount_column: Some("Phát sinh Có".to_string()),
                 ..Default::default()
             },
         };
@@ -177,6 +185,7 @@ mod tests {
         let json = serde_json::to_string(&ds).expect("Serialization failed");
         assert!(json.contains("e_invoice"));
         assert!(json.contains("ds_01"));
+        assert!(json.contains("creditAmountColumn"));
 
         let deserialized: DataSource = serde_json::from_str(&json).expect("Deserialization failed");
         assert_eq!(ds, deserialized);

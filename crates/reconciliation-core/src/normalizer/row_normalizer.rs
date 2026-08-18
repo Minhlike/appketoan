@@ -1,5 +1,7 @@
 use chrono::{Datelike, NaiveDate};
+use rust_decimal::Decimal;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use crate::models::{CanonicalRecord, DataSource};
 use crate::reader::header_detector::remove_diacritics;
@@ -70,10 +72,10 @@ pub fn parse_excel_date(input: &str) -> Option<String> {
     Some(trimmed.to_string())
 }
 
-/// Sanitizes monetary text into a standard float
-pub fn parse_amount(input: &str) -> Option<f64> {
+/// Sanitizes monetary text into a standard Decimal
+pub fn parse_amount(input: &str) -> Option<Decimal> {
     let trimmed = input.trim();
-    if trimmed.is_empty() || trimmed == "-" || trimmed == "N/A" || trimmed == "null" {
+    if trimmed.is_empty() || trimmed == "-" || trimmed == "N/A" || trimmed == "null" || trimmed == "nil" {
         return None;
     }
 
@@ -85,6 +87,8 @@ pub fn parse_amount(input: &str) -> Option<f64> {
         .replace("usd", "")
         .replace("USD", "")
         .replace("đồng", "")
+        .replace(' ', "")
+        .replace('\u{a0}', "") // non-breaking space
         .trim()
         .to_string();
 
@@ -100,10 +104,11 @@ pub fn parse_amount(input: &str) -> Option<f64> {
         s = s[..s.len() - 1].trim().to_string();
     }
 
+    if s.is_empty() {
+        return None;
+    }
+
     // Determine decimal and thousand separators
-    // e.g. "1.250.000,50" -> dot is thousand, comma is decimal
-    // e.g. "1,250,000.50" -> comma is thousand, dot is decimal
-    // e.g. "1.250.000" -> dot is thousand
     let has_comma = s.contains(',');
     let has_dot = s.contains('.');
 
@@ -111,14 +116,13 @@ pub fn parse_amount(input: &str) -> Option<f64> {
         let last_comma = s.rfind(',').unwrap();
         let last_dot = s.rfind('.').unwrap();
         if last_dot > last_comma {
-            // US format: comma thousand, dot decimal
+            // US format: 1,250,000.50 -> comma thousand, dot decimal
             s.replace(',', "")
         } else {
-            // European/VN format: dot thousand, comma decimal
+            // European/VN format: 1.250.000,50 -> dot thousand, comma decimal
             s.replace('.', "").replace(',', ".")
         }
     } else if has_comma {
-        // Check if comma is decimal or thousand
         let comma_count = s.chars().filter(|&c| c == ',').count();
         let last_comma_pos = s.rfind(',').unwrap();
         let digits_after = s.len() - 1 - last_comma_pos;
@@ -144,12 +148,11 @@ pub fn parse_amount(input: &str) -> Option<f64> {
         s
     };
 
-    let val = clean_str.parse::<f64>().ok()?;
+    let mut val = Decimal::from_str(&clean_str).ok()?;
     if is_negative {
-        Some(-val)
-    } else {
-        Some(val)
+        val.set_sign_negative(true);
     }
+    Some(val)
 }
 
 /// Checks if a row is a subtotal, summary, or garbage row
@@ -164,21 +167,35 @@ pub fn is_garbage_or_subtotal_row(cells: &[String]) -> bool {
         return true;
     }
 
-    // Check first 3 non-empty cells for subtotal / footer keywords
-    for cell in non_empty.iter().take(3) {
+    // Check all cells for subtotal / footer / summary keywords
+    for cell in &non_empty {
         let norm = remove_diacritics(cell).to_lowercase();
         if norm.starts_with("cong")
-            || norm.starts_with("tong cong")
-            || norm.starts_with("tong so")
-            || norm.starts_with("total")
-            || norm.starts_with("grand total")
-            || norm.starts_with("nguoi lap")
-            || norm.starts_with("ke toan truong")
-            || norm.starts_with("giam doc")
-            || norm.starts_with("thu truong")
-            || norm.starts_with("ngay ... thang")
-            || norm.starts_with("so du dau ky")
-            || norm.starts_with("so du cuoi ky")
+            || norm.contains("tong cong")
+            || norm.contains("tong so")
+            || norm.contains("total")
+            || norm.contains("grand total")
+            || norm.contains("nguoi lap")
+            || norm.contains("ke toan truong")
+            || norm.contains("giam doc")
+            || norm.contains("thu truong")
+            || norm.contains("ngay ... thang")
+            || norm.contains("ngay    thang")
+            || norm.contains("so du dau ky")
+            || norm.contains("so du cuoi ky")
+            || norm.contains("phat sinh trong ky")
+            || norm.contains("so phat sinh trong ky")
+            || norm.contains("tong phat sinh")
+            || norm.contains("cong phat sinh")
+            || norm.contains("cong thang")
+            || norm.contains("cong quy")
+            || norm.contains("cong nam")
+            || norm.contains("luy ke")
+            || norm.contains("bang ke hoa don")
+            || norm.contains("so chi tiet")
+            || norm.contains("so nhat ky")
+            || norm.contains("don vi bao cao")
+            || norm.contains("ky tinh thue")
         {
             return true;
         }
@@ -214,6 +231,8 @@ pub fn normalize_data_source_rows(
     let idx_pretax_amount = col_index(&mapping.pretax_amount_column);
     let idx_vat_amount = col_index(&mapping.vat_amount_column);
     let idx_total_amount = col_index(&mapping.total_amount_column);
+    let idx_debit_amount = col_index(&mapping.debit_amount_column);
+    let idx_credit_amount = col_index(&mapping.credit_amount_column);
     let idx_vat_rate = col_index(&mapping.vat_rate_column);
     let idx_debit_account = col_index(&mapping.debit_account_column);
     let idx_credit_account = col_index(&mapping.credit_account_column);
@@ -253,9 +272,11 @@ pub fn normalize_data_source_rows(
 
         let pretax_amount = get_val(idx_pretax_amount).and_then(|a| parse_amount(&a));
         let vat_amount = get_val(idx_vat_amount).and_then(|a| parse_amount(&a));
+        let debit_amount = get_val(idx_debit_amount).and_then(|a| parse_amount(&a));
+        let credit_amount = get_val(idx_credit_amount).and_then(|a| parse_amount(&a));
         let total_amount = get_val(idx_total_amount)
             .and_then(|a| parse_amount(&a))
-            .unwrap_or(0.0);
+            .unwrap_or(Decimal::ZERO);
 
         let vat_rate = get_val(idx_vat_rate);
         let debit_account = get_val(idx_debit_account);
@@ -286,6 +307,8 @@ pub fn normalize_data_source_rows(
             pretax_amount,
             vat_amount,
             total_amount,
+            debit_amount,
+            credit_amount,
             vat_rate,
             debit_account,
             credit_account,
@@ -297,12 +320,15 @@ pub fn normalize_data_source_rows(
 
         record.reconcile_monetary_invariants();
 
-        // If doc_no, partner_name, and total_amount are completely empty, skip row
-        if record.doc_no.is_none()
-            && record.partner_name.is_none()
-            && record.total_amount == 0.0
-            && record.voucher_no.is_none()
-        {
+        // STRICT FILTERING:
+        // 1. If row has no monetary values at all (empty/zero amount across pretax, vat, debit, credit, total), skip it!
+        // This prevents non-accounting or zero-value invoice header rows from being falsely flagged as missing.
+        if record.has_no_monetary_value() {
+            continue;
+        }
+
+        // 2. If row has no identifier (no doc_no, no voucher_no, no partner_name), skip it
+        if record.doc_no.is_none() && record.voucher_no.is_none() && record.partner_name.is_none() {
             continue;
         }
 
@@ -315,15 +341,17 @@ pub fn normalize_data_source_rows(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_decimal_macros::dec;
 
     #[test]
     fn test_parse_amount_variations() {
-        assert_eq!(parse_amount("10,000,000"), Some(10_000_000.0));
-        assert_eq!(parse_amount("10.000.000"), Some(10_000_000.0));
-        assert_eq!(parse_amount("1.250.000,50 ₫"), Some(1_250_000.50));
-        assert_eq!(parse_amount("(500.000 VND)"), Some(-500_000.0));
-        assert_eq!(parse_amount("-150.000"), Some(-150_000.0));
-        assert_eq!(parse_amount("150.000-"), Some(-150_000.0));
+        assert_eq!(parse_amount("10,000,000"), Some(dec!(10000000)));
+        assert_eq!(parse_amount("10.000.000"), Some(dec!(10000000)));
+        assert_eq!(parse_amount("1.250.000,50 ₫"), Some(dec!(1250000.50)));
+        assert_eq!(parse_amount("(500.000 VND)"), Some(dec!(-500000)));
+        assert_eq!(parse_amount("-150.000"), Some(dec!(-150000)));
+        assert_eq!(parse_amount("150.000-"), Some(dec!(-150000)));
+        assert_eq!(parse_amount("105000000.00"), Some(dec!(105000000.00)));
         assert_eq!(parse_amount("-"), None);
     }
 
@@ -346,6 +374,16 @@ mod tests {
             "Cộng".to_string(),
             "".to_string(),
             "10,000,000".to_string()
+        ]));
+        assert!(is_garbage_or_subtotal_row(&[
+            "SỐ DƯ ĐẦU KỲ".to_string(),
+            "".to_string(),
+            "100,000,000".to_string()
+        ]));
+        assert!(is_garbage_or_subtotal_row(&[
+            "".to_string(),
+            "Phát sinh trong kỳ".to_string(),
+            "7,223,121,057".to_string()
         ]));
         assert!(is_garbage_or_subtotal_row(&[
             "Người lập biểu".to_string(),

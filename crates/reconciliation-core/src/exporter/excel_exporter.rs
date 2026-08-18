@@ -1,4 +1,5 @@
 use std::path::Path;
+use rust_decimal::prelude::ToPrimitive;
 use rust_xlsxwriter::{Format, FormatBorder, Workbook};
 
 use crate::models::{ExportSummary, MatchStatus, ReconciliationResult};
@@ -69,6 +70,7 @@ pub fn export_reconciliation_to_excel<P: AsRef<Path>>(
     ws_summary.write_string_with_format(4, 1, &result.executed_at, &cell_format).map_err(|e| e.to_string())?;
 
     let sum = &result.summary;
+    let net_var_f64 = sum.net_financial_variance.to_f64().unwrap_or(0.0);
     let metrics = [
         ("Tổng số dòng Nguồn chính", sum.total_source_records as f64),
         ("Tổng số dòng Nguồn đối chiếu", sum.total_target_records as f64),
@@ -80,7 +82,7 @@ pub fn export_reconciliation_to_excel<P: AsRef<Path>>(
         ("Số chứng từ Thiếu bên nguồn chính", sum.missing_in_source_count as f64),
         ("Số bản ghi Trùng lặp", sum.duplicates_count as f64),
         ("Số nhóm Cần kiểm tra lại", sum.ambiguous_count as f64),
-        ("Tổng chênh lệch tài chính (VND)", sum.net_financial_variance),
+        ("Tổng chênh lệch tài chính (VND)", net_var_f64),
     ];
 
     ws_summary.write_string_with_format(6, 0, "CHỈ TIÊU ĐỐI CHIẾU", &header_format).map_err(|e| e.to_string())?;
@@ -135,12 +137,16 @@ pub fn export_reconciliation_to_excel<P: AsRef<Path>>(
             status_tag(&g.status).to_string()
         };
 
+        let src_f64 = g.total_source_amount.to_f64().unwrap_or(0.0);
+        let tgt_f64 = g.total_target_amount.to_f64().unwrap_or(0.0);
+        let var_f64 = g.amount_variance.to_f64().unwrap_or(0.0);
+
         ws_diff.write_number_with_format(diff_row_idx, 0, diff_row_idx as f64, &cell_format).map_err(|e| e.to_string())?;
         ws_diff.write_string_with_format(diff_row_idx, 1, &g.id, &cell_format).map_err(|e| e.to_string())?;
         ws_diff.write_string_with_format(diff_row_idx, 2, status_tag(&g.status), &cell_format).map_err(|e| e.to_string())?;
-        ws_diff.write_number_with_format(diff_row_idx, 3, g.total_source_amount, &num_format).map_err(|e| e.to_string())?;
-        ws_diff.write_number_with_format(diff_row_idx, 4, g.total_target_amount, &num_format).map_err(|e| e.to_string())?;
-        ws_diff.write_number_with_format(diff_row_idx, 5, g.amount_variance, &num_format).map_err(|e| e.to_string())?;
+        ws_diff.write_number_with_format(diff_row_idx, 3, src_f64, &num_format).map_err(|e| e.to_string())?;
+        ws_diff.write_number_with_format(diff_row_idx, 4, tgt_f64, &num_format).map_err(|e| e.to_string())?;
+        ws_diff.write_number_with_format(diff_row_idx, 5, var_f64, &num_format).map_err(|e| e.to_string())?;
         ws_diff.write_string_with_format(diff_row_idx, 6, &reason, &cell_format).map_err(|e| e.to_string())?;
 
         diff_row_idx += 1;
@@ -180,12 +186,16 @@ pub fn export_reconciliation_to_excel<P: AsRef<Path>>(
             status_tag(&g.status).to_string()
         };
 
+        let src_f64 = g.total_source_amount.to_f64().unwrap_or(0.0);
+        let tgt_f64 = g.total_target_amount.to_f64().unwrap_or(0.0);
+        let var_f64 = g.amount_variance.to_f64().unwrap_or(0.0);
+
         ws_all.write_number_with_format(row, 0, (idx + 1) as f64, &cell_format).map_err(|e| e.to_string())?;
         ws_all.write_string_with_format(row, 1, &g.id, &cell_format).map_err(|e| e.to_string())?;
         ws_all.write_string_with_format(row, 2, status_tag(&g.status), &cell_format).map_err(|e| e.to_string())?;
-        ws_all.write_number_with_format(row, 3, g.total_source_amount, &num_format).map_err(|e| e.to_string())?;
-        ws_all.write_number_with_format(row, 4, g.total_target_amount, &num_format).map_err(|e| e.to_string())?;
-        ws_all.write_number_with_format(row, 5, g.amount_variance, &num_format).map_err(|e| e.to_string())?;
+        ws_all.write_number_with_format(row, 3, src_f64, &num_format).map_err(|e| e.to_string())?;
+        ws_all.write_number_with_format(row, 4, tgt_f64, &num_format).map_err(|e| e.to_string())?;
+        ws_all.write_number_with_format(row, 5, var_f64, &num_format).map_err(|e| e.to_string())?;
         ws_all.write_string_with_format(row, 6, &reason, &cell_format).map_err(|e| e.to_string())?;
     }
 

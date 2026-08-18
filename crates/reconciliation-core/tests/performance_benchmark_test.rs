@@ -1,10 +1,15 @@
 use std::collections::HashMap;
 use std::time::Instant;
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use reconciliation_core::*;
 
 fn generate_synthetic_dataset(count: usize, source_id: &str) -> Vec<CanonicalRecord> {
     let mut records = Vec::with_capacity(count);
     for i in 1..=count {
+        let pretax = Decimal::from(i * 1000);
+        let vat = Decimal::from(i * 100);
+        let total = Decimal::from(i * 1100);
         records.push(CanonicalRecord {
             id: format!("{}_row_{}", source_id, i),
             source_id: source_id.to_string(),
@@ -15,9 +20,11 @@ fn generate_synthetic_dataset(count: usize, source_id: &str) -> Vec<CanonicalRec
             template_code: Some("1".to_string()),
             partner_tax_id: Some(format!("010{:07}", i % 500)),
             partner_name: Some(format!("Công ty Thử Nghiệm {}", i % 500)),
-            pretax_amount: Some((i * 1000) as f64),
-            vat_amount: Some((i * 100) as f64),
-            total_amount: (i * 1100) as f64,
+            pretax_amount: Some(pretax),
+            vat_amount: Some(vat),
+            total_amount: total,
+            debit_amount: None,
+            credit_amount: Some(pretax),
             vat_rate: Some("10%".to_string()),
             debit_account: Some("131".to_string()),
             credit_account: Some("5111".to_string()),
@@ -65,7 +72,7 @@ fn test_performance_scaling_1k_to_100k() {
                     column_mapping: ColumnMapping::default(),
                 },
             ],
-            matching_tolerance_vnd: 1.0,
+            matching_tolerance_vnd: dec!(1),
             date_tolerance_days: 0,
             enable_aggregate_match: false,
         };

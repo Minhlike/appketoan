@@ -1,4 +1,6 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -14,7 +16,7 @@ pub enum MatchStatus {
     AmbiguousMatch,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldDiscrepancy {
     pub field_name: String,
@@ -23,25 +25,39 @@ pub struct FieldDiscrepancy {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub amount_diff: Option<f64>,
+    pub amount_diff: Option<Decimal>,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceMatchBreakdown {
+    pub source_id: String,
+    pub source_name: String,
+    pub record_ids: Vec<String>,
+    pub compared_amount: Decimal,
+    pub status: MatchStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub discrepancies: Vec<FieldDiscrepancy>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MatchGroup {
     pub id: String,
     pub status: MatchStatus,
     pub primary_source_record_ids: Vec<String>,
     pub target_source_record_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub source_breakdowns: HashMap<String, SourceMatchBreakdown>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub discrepancies: Vec<FieldDiscrepancy>,
-    pub total_source_amount: f64,
-    pub total_target_amount: f64,
-    pub amount_variance: f64,
+    pub total_source_amount: Decimal,
+    pub total_target_amount: Decimal,
+    pub amount_variance: Decimal,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReconciliationSummary {
     pub total_source_records: usize,
@@ -54,10 +70,10 @@ pub struct ReconciliationSummary {
     pub missing_in_source_count: usize,
     pub duplicates_count: usize,
     pub ambiguous_count: usize,
-    pub net_financial_variance: f64,
+    pub net_financial_variance: Decimal,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReconciliationResult {
     pub session_id: String,
@@ -70,6 +86,7 @@ pub struct ReconciliationResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_decimal_macros::dec;
 
     #[test]
     fn test_reconciliation_result_summary() {
@@ -82,7 +99,7 @@ mod tests {
                 total_target_records: 10,
                 exact_matches_count: 9,
                 mismatches_count: 1,
-                net_financial_variance: 50_000.0,
+                net_financial_variance: dec!(50000),
                 ..Default::default()
             },
             groups: vec![
@@ -91,26 +108,28 @@ mod tests {
                     status: MatchStatus::MatchedExact,
                     primary_source_record_ids: vec!["rec_1".to_string()],
                     target_source_record_ids: vec!["rec_2".to_string()],
+                    source_breakdowns: HashMap::new(),
                     discrepancies: vec![],
-                    total_source_amount: 1_000_000.0,
-                    total_target_amount: 1_000_000.0,
-                    amount_variance: 0.0,
+                    total_source_amount: dec!(1000000),
+                    total_target_amount: dec!(1000000),
+                    amount_variance: Decimal::ZERO,
                 },
                 MatchGroup {
                     id: "grp_2".to_string(),
                     status: MatchStatus::MismatchAmount,
                     primary_source_record_ids: vec!["rec_3".to_string()],
                     target_source_record_ids: vec!["rec_4".to_string()],
+                    source_breakdowns: HashMap::new(),
                     discrepancies: vec![FieldDiscrepancy {
                         field_name: "totalAmount".to_string(),
                         source_value: Some("1,050,000".to_string()),
                         target_value: Some("1,000,000".to_string()),
-                        amount_diff: Some(50_000.0),
+                        amount_diff: Some(dec!(50000)),
                         message: "Lệch tiền thanh toán 50,000 VND".to_string(),
                     }],
-                    total_source_amount: 1_050_000.0,
-                    total_target_amount: 1_000_000.0,
-                    amount_variance: 50_000.0,
+                    total_source_amount: dec!(1050000),
+                    total_target_amount: dec!(1000000),
+                    amount_variance: dec!(50000),
                 },
             ],
         };

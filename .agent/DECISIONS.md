@@ -1,26 +1,29 @@
-# Architectural Decision Log
+# Architecture & Technical Decisions
 
-## DEC-0001: Technology Stack Selection (Tauri 2 + Rust + React + TS)
-- **Date**: 2026-08-18
-- **Context**: The product is an offline-first Windows desktop application processing sensitive, multi-source accounting Excel workbooks locally without servers, cloud databases, or containerization.
-- **Decision**: Adopt Tauri 2 with Rust for the core local backend and React + TypeScript + Vite for the UI.
-- **Status**: ACCEPTED (See [ADR-0001](file:///D:/appketoan/docs/04-architecture/adr/0001-stack-and-local-toolchain.md))
+## Decision 001: Separation of Concerns (Domain Engine vs Desktop Shell)
+- **Decision**: `crates/reconciliation-core` is a standalone Rust library without any UI, Tauri, or browser dependencies.
+- **Rationale**: Enables lightning-fast native CLI unit/integration tests and deterministic cross-platform accounting logic.
 
-## DEC-0002: Toolchain Selection on Windows (x86_64-pc-windows-gnu with MinGW w64devkit)
-- **Date**: 2026-08-18
-- **Context**: The developer environment lacked MSVC C++ Build Tools (`link.exe`).
-- **Decision**: Configure Rust toolchain `stable-x86_64-pc-windows-gnu` and MinGW GCC / dlltool via `w64devkit`, and set `crate-type = ["staticlib", "rlib"]` in `src-tauri/Cargo.toml`.
-- **Status**: ACCEPTED
+## Decision 002: Monetary Arithmetic Representation
+- **Decision**: Use `rust_decimal::Decimal` with `rust_decimal_macros` for all monetary computations, differences, sums, and tolerances.
+- **Rationale**: Eliminates IEEE-754 floating point precision errors (e.g. `0.1 + 0.2 = 0.30000000000000004`), essential for audit compliance.
 
-## DEC-0003: Multi-Source Architecture First
-- **Date**: 2026-08-18
-- **Context**: The reconciliation engine must support arbitrary numbers of data sources (e.g. 1-to-1, 1-to-N, N-to-M, bank vs invoice vs ledger vs branch files).
-- **Decision**: Architectural boundary is structured around generic `DataSource[]`, `ReconciliationSession`, `CanonicalRecord`, and `MatchingRule` concepts. Hardcoded binary comparison assumptions (`file1`/`file2`) are strictly prohibited.
-- **Status**: ACCEPTED
+## Decision 003: Semantic Accounting Column Classification
+- **Decision**: Introduce explicit `debit_amount_column` and `credit_amount_column` in `ColumnMapping` and never conflate them with `total_amount_column`.
+- **Rationale**: In Vietnamese accounting (VAS/Circular 200/133), TK511 revenue is recorded under "Phát sinh Có", and comparing against Invoice pretax requires semantic awareness of credit amounts.
 
-## DEC-0004: Standalone Domain Crate Architecture (`crates/reconciliation-core`)
-- **Date**: 2026-08-18
-- **Context**: Keeping domain models and matching algorithms coupled inside `src-tauri` forced test executables to link heavy GUI/WebView2 libraries, slowing test cycles and creating unwanted platform dependencies.
-- **Decision**: Extract domain logic and canonical models into a dedicated, standalone pure-Rust library crate `crates/reconciliation-core`. `src-tauri` consumes it via Cargo path dependency.
-- **Rationale**: Clean separation of concerns, blazing-fast standalone unit test runs (< 0.01s), zero GUI coupling.
-- **Status**: ACCEPTED
+## Decision 004: Ingestion Filtering Hierarchy
+- **Decision**:
+  1. Header sniffer ignores preliminary titles/meta rows.
+  2. Subtotal/summary scanner evaluates all cells in a row for keywords ("SỐ DƯ ĐẦU KỲ", "PHÁT SINH TRONG KỲ", "TỔNG CỘNG").
+  3. Empty/zero amount invoice rows without transactional values are filtered out of the reconciliation scope.
+- **Rationale**: Prevents summary and placeholder rows from creating false discrepancies in reconciliation runs.
+
+## Decision 005: Multi-Pass Deterministic Matching Pipeline
+- **Decision**:
+  - Pass 0: Intra-source duplicate detection.
+  - Pass 1: Primary Document Number & Series key matching.
+  - Pass 2: Secondary Tax ID + Amount key matching (only applied to doc-less rows to prevent false-matching different doc numbers).
+  - Pass 3: Residual sweep for missing records on either side.
+  - Aggregate 1-to-N: Sum target amounts within group before evaluation.
+- **Rationale**: Guarantees zero false-positive matches for invoices with identical amounts but distinct invoice numbers.

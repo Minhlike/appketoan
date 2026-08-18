@@ -61,22 +61,30 @@ const TAX_ID_KEYWORDS: &[&str] = &[
 
 const PARTNER_NAME_KEYWORDS: &[&str] = &[
     "ten khach hang", "ten nguoi mua", "ten don vi", "ten doi tac", "customer name",
-    "buyer name", "ten doi tuong", "don vi mua hang", "ten cong ty", "nguoi nop tien",
+    "buyer name", "ten doi tuong", "don vi mua hang", "ten cong ty", "nguoi nop tien", "doi tuong",
 ];
 
 const PRETAX_AMOUNT_KEYWORDS: &[&str] = &[
-    "tien chua thue", "doanh so", "tien hang", "doanh thu", "chua thue", "doanh thu ban hang",
-    "pretax", "amount before tax", "thanh tien chua thue", "gia tri chua thue",
+    "tien chua thue", "tong tien chua thue", "doanh so", "tien hang", "doanh thu", "chua thue",
+    "doanh thu ban hang", "pretax", "amount before tax", "thanh tien chua thue", "gia tri chua thue",
 ];
 
 const VAT_AMOUNT_KEYWORDS: &[&str] = &[
-    "tien thue", "thue gtgt", "tien thue gtgt", "thue vat", "vat amount", "tax amount",
-    "tien vat", "thue suat gtgt tien",
+    "tien thue", "tong tien thue", "thue gtgt", "tien thue gtgt", "thue vat", "vat amount",
+    "tax amount", "tien vat", "thue suat gtgt tien",
 ];
 
 const TOTAL_AMOUNT_KEYWORDS: &[&str] = &[
     "tong tien", "tong cong", "tong thanh toan", "thanh tien", "total amount", "grand total",
-    "so tien", "phat sinh no", "phat sinh co", "so tien thanh toan", "tong gia tri",
+    "tong gia tri", "so tien thanh toan", "tong tien tt",
+];
+
+const DEBIT_AMOUNT_KEYWORDS: &[&str] = &[
+    "phat sinh no", "so phat sinh no", "tien no", "debit amount", "ps no", "ps_no",
+];
+
+const CREDIT_AMOUNT_KEYWORDS: &[&str] = &[
+    "phat sinh co", "so phat sinh co", "tien co", "credit amount", "ps co", "ps_co",
 ];
 
 const VAT_RATE_KEYWORDS: &[&str] = &[
@@ -132,6 +140,8 @@ pub fn detect_header_and_mapping(
                 || matches_any(t, TOTAL_AMOUNT_KEYWORDS)
                 || matches_any(t, PRETAX_AMOUNT_KEYWORDS)
                 || matches_any(t, VAT_AMOUNT_KEYWORDS)
+                || matches_any(t, DEBIT_AMOUNT_KEYWORDS)
+                || matches_any(t, CREDIT_AMOUNT_KEYWORDS)
                 || matches_any(t, TAX_ID_KEYWORDS)
                 || matches_any(t, PARTNER_NAME_KEYWORDS)
                 || matches_any(t, SERIES_KEYWORDS)
@@ -171,7 +181,23 @@ pub fn detect_header_and_mapping(
     let mut matched_count = 0;
 
     for col in &columns {
-        if mapping.doc_no_column.is_none() && matches_any(col, DOC_NO_KEYWORDS) {
+        // Priority 1: Check debit amount vs credit amount first to prevent misclassifying as total
+        if mapping.credit_amount_column.is_none() && matches_any(col, CREDIT_AMOUNT_KEYWORDS) {
+            mapping.credit_amount_column = Some(col.clone());
+            matched_count += 1;
+        } else if mapping.debit_amount_column.is_none() && matches_any(col, DEBIT_AMOUNT_KEYWORDS) {
+            mapping.debit_amount_column = Some(col.clone());
+            matched_count += 1;
+        } else if mapping.pretax_amount_column.is_none() && matches_any(col, PRETAX_AMOUNT_KEYWORDS) {
+            mapping.pretax_amount_column = Some(col.clone());
+            matched_count += 1;
+        } else if mapping.vat_amount_column.is_none() && matches_any(col, VAT_AMOUNT_KEYWORDS) {
+            mapping.vat_amount_column = Some(col.clone());
+            matched_count += 1;
+        } else if mapping.total_amount_column.is_none() && matches_any(col, TOTAL_AMOUNT_KEYWORDS) {
+            mapping.total_amount_column = Some(col.clone());
+            matched_count += 1;
+        } else if mapping.doc_no_column.is_none() && matches_any(col, DOC_NO_KEYWORDS) {
             mapping.doc_no_column = Some(col.clone());
             matched_count += 1;
         } else if mapping.series_column.is_none() && matches_any(col, SERIES_KEYWORDS) {
@@ -185,15 +211,6 @@ pub fn detect_header_and_mapping(
             matched_count += 1;
         } else if mapping.partner_name_column.is_none() && matches_any(col, PARTNER_NAME_KEYWORDS) {
             mapping.partner_name_column = Some(col.clone());
-            matched_count += 1;
-        } else if mapping.pretax_amount_column.is_none() && matches_any(col, PRETAX_AMOUNT_KEYWORDS) {
-            mapping.pretax_amount_column = Some(col.clone());
-            matched_count += 1;
-        } else if mapping.vat_amount_column.is_none() && matches_any(col, VAT_AMOUNT_KEYWORDS) {
-            mapping.vat_amount_column = Some(col.clone());
-            matched_count += 1;
-        } else if mapping.total_amount_column.is_none() && matches_any(col, TOTAL_AMOUNT_KEYWORDS) {
-            mapping.total_amount_column = Some(col.clone());
             matched_count += 1;
         } else if mapping.vat_rate_column.is_none() && matches_any(col, VAT_RATE_KEYWORDS) {
             mapping.vat_rate_column = Some(col.clone());
@@ -211,9 +228,9 @@ pub fn detect_header_and_mapping(
     }
 
     // Infer Kind
-    let kind = if mapping.series_column.is_some() && mapping.vat_amount_column.is_some() {
+    let kind = if mapping.series_column.is_some() || mapping.vat_amount_column.is_some() || mapping.pretax_amount_column.is_some() {
         DataSourceKind::EInvoice
-    } else if mapping.debit_account_column.is_some() || mapping.credit_account_column.is_some() {
+    } else if mapping.credit_amount_column.is_some() || mapping.debit_amount_column.is_some() || mapping.debit_account_column.is_some() || mapping.credit_account_column.is_some() {
         DataSourceKind::Ledger511
     } else if mapping.bank_account_column.is_some() {
         DataSourceKind::BankStatement
@@ -223,7 +240,7 @@ pub fn detect_header_and_mapping(
         DataSourceKind::Custom
     };
 
-    let confidence = (matched_count as f64 / 6.0).min(1.0);
+    let confidence = (matched_count as f64 / 4.0).min(1.0);
 
     (
         header_row_idx_1based,
@@ -251,9 +268,9 @@ mod tests {
                 "Ngày lập".to_string(),
                 "Mã số thuế".to_string(),
                 "Tên khách hàng".to_string(),
-                "Doanh thu chưa thuế".to_string(),
-                "Thuế GTGT".to_string(),
-                "Tổng tiền".to_string(),
+                "Tổng tiền chưa thuế".to_string(),
+                "Tổng tiền thuế".to_string(),
+                "Tổng tiền thanh toán".to_string(),
             ],
             vec![
                 "1".to_string(),
@@ -276,10 +293,40 @@ mod tests {
         assert_eq!(mapping.series_column.as_deref(), Some("Ký hiệu HĐ"));
         assert_eq!(mapping.date_column.as_deref(), Some("Ngày lập"));
         assert_eq!(mapping.partner_tax_id_column.as_deref(), Some("Mã số thuế"));
-        assert_eq!(mapping.pretax_amount_column.as_deref(), Some("Doanh thu chưa thuế"));
-        assert_eq!(mapping.vat_amount_column.as_deref(), Some("Thuế GTGT"));
-        assert_eq!(mapping.total_amount_column.as_deref(), Some("Tổng tiền"));
+        assert_eq!(mapping.pretax_amount_column.as_deref(), Some("Tổng tiền chưa thuế"));
+        assert_eq!(mapping.vat_amount_column.as_deref(), Some("Tổng tiền thuế"));
+        assert_eq!(mapping.total_amount_column.as_deref(), Some("Tổng tiền thanh toán"));
         assert_eq!(kind, DataSourceKind::EInvoice);
         assert!(conf >= 0.9);
+    }
+
+    #[test]
+    fn test_header_detection_tk511_credit_debit() {
+        let rows = vec![
+            vec![
+                "Ngày ct".to_string(),
+                "Số ct".to_string(),
+                "Diễn giải".to_string(),
+                "TK đối ứng".to_string(),
+                "Phát sinh nợ".to_string(),
+                "Phát sinh có".to_string(),
+            ],
+            vec![
+                "05/01/2026".to_string(),
+                "101".to_string(),
+                "Bán hàng".to_string(),
+                "131".to_string(),
+                "".to_string(),
+                "10,000,000".to_string(),
+            ],
+        ];
+
+        let (_, _, _, mapping, kind, _) = detect_header_and_mapping(&rows);
+        assert_eq!(mapping.doc_no_column.as_deref(), Some("Số ct"));
+        assert_eq!(mapping.date_column.as_deref(), Some("Ngày ct"));
+        assert_eq!(mapping.debit_amount_column.as_deref(), Some("Phát sinh nợ"));
+        assert_eq!(mapping.credit_amount_column.as_deref(), Some("Phát sinh có"));
+        assert_eq!(mapping.total_amount_column, None); // MUST NOT map Phát sinh nợ/có to total_amount
+        assert_eq!(kind, DataSourceKind::Ledger511);
     }
 }

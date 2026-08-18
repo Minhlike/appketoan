@@ -1,37 +1,29 @@
 # Current Task
 
 ## Task Name
-End-to-End Implementation & Windows Desktop Production Delivery
+FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
 
-## Status
-COMPLETED (Verified & Packaged)
-
-## Implemented Deliverables
-1. **Core Ingestion & Auto-detection Engine (`crates/reconciliation-core/src/reader/`)**:
-   - `header_detector.rs`: Sniffs Vietnamese accounting headers, detects data start rows, assigns confidence scores, and auto-maps columns.
-   - `excel_reader.rs`: Calamine streaming reader for `.xlsx`, `.xls`, `.xlsb`, `.xlsm` with sheet inspection, preview rows, and byte buffer parsing.
-2. **Robust Normalization Pipeline (`crates/reconciliation-core/src/normalizer/`)**:
-   - `row_normalizer.rs`: Number parsing with dot/comma & negative parentheses `(1.000.000)` $\rightarrow$ `-1000000.0`, Excel serial float dates & string dates, DocNo normalization (`0000123` $\rightarrow$ `123`, `123.0` $\rightarrow$ `123`), Tax ID sanitization, subtotal/total garbage row exclusion.
-3. **Multi-Pass Reconciliation Engine (`crates/reconciliation-core/src/matcher/`)**:
-   - `engine.rs`: Multi-source matching pipeline supporting $1 \leftrightarrow 1$, $1 \leftrightarrow N$, $N \leftrightarrow 1$, $N \leftrightarrow M$ across 5 deterministic passes with $O(N)$ hash indexing.
-4. **Discrepancy Analyzer & Excel Exporter (`crates/reconciliation-core/src/analyzer/`, `exporter/`)**:
-   - `discrepancy_analyzer.rs`: Accurate field diffs with Vietnamese audit explanations.
-   - `excel_exporter.rs`: Generates professional 3-tab audit workbook (`Tong quan`, `Sai lech & Can chu y`, `Chi tiet tat ca`).
-5. **Tauri IPC Commands (`src-tauri/src/commands.rs`, `lib.rs`)**:
-   - `cmd_inspect_excel_file`, `cmd_inspect_excel_bytes`, `cmd_run_reconciliation`, `cmd_export_reconciliation_report`.
-6. **Modern React 19 + TypeScript Desktop UI (`src/`)**:
-   - Header with 100% Offline shield badge & Demo data loader.
-   - Scenario selector with 4 preconfigured workflows.
-   - Multi-file drag & drop ingestion with sheet selector and confidence indicators.
-   - Interactive column mapping modal.
-   - Dashboard KPI metric cards (Total, Exact, Tolerance, Aggregate, Mismatches, Missing in Target, Missing in Source, Duplicates, Net financial variance).
-   - Filterable & searchable comparison table with pagination.
-   - Side-by-side discrepancy inspector modal.
-   - One-click Excel report export.
-7. **Production Windows Desktop Release**:
-   - NSIS Setup (`appketoan_0.1.0_x64-setup.exe`) & WiX MSI (`appketoan_0.1.0_x64_en-US.msi`).
-
-## Verification Results
-- 10 Vitest tests: PASS (100%)
-- 13 Rust domain & benchmark tests: PASS (100%)
-- Performance scaling benchmark: 100,000 records matched in $1.27\text{ s}$ ($< 2.5\text{ s}$ target).
+## Objectives & Status
+1. [x] Migrate all monetary values to `rust_decimal::Decimal` (eliminating `f64` float rounding issues across ingestion, models, rules, engine, discrepancies, and export).
+2. [x] Fix Header Sniffer & Column Mapping:
+   - Added distinct `debit_amount_column` and `credit_amount_column` in `ColumnMapping` and `MappingModal`.
+   - Removed "Phát sinh Nợ" and "Phát sinh Có" from `total_amount` detection.
+   - Accurately mapped "Phát sinh Có" $\rightarrow$ `credit_amount_column` and "Phát sinh Nợ" $\rightarrow$ `debit_amount_column`.
+3. [x] Fix Accounting Profile Rules (Revenue Matching):
+   - Configured `Invoice.pretax_amount` matching against `TK511.credit_amount`.
+4. [x] Fix Full-Row Garbage & Summary Detection:
+   - Scanned all columns for "SỐ DƯ ĐẦU KỲ", "PHÁT SINH TRONG KỲ", "SỐ DƯ CUỐI KỲ", "TỔNG CỘNG", "CỘNG PHÁT SINH", etc.
+   - Result: Exactly 45 valid TK511 rows out of 49 raw rows.
+5. [x] Fix Empty-Amount Invoice Rows:
+   - Rows with doc numbers but empty/zero monetary amounts are excluded from reconciliation scope rather than falsely flagged as missing.
+   - Result: Exactly 46 valid invoice rows out of 64 raw rows.
+6. [x] Fix Missing Document Detection:
+   - Correctly identified Invoice `#233` (Date `06/07/2026`, Pretax `105.000.000` đ, Tax `10.500.000` đ, Total `115.500.000` đ) as Missing in TK511.
+   - Financial variance: `105.000.000` đ.
+   - 45 Exact Matches, 0 Amount Mismatches, 0 Missing in Invoice.
+7. [x] Multi-Source Architecture & Source Identity:
+   - Preserved per-source match breakdown (`SourceMatchBreakdown`, `source_breakdowns`).
+8. [x] Regression & Acceptance Test Verification:
+   - 17 Rust tests passed (`cargo test`).
+   - 10 Vitest frontend tests passed (`npm test`).
+   - Production Vite frontend build passed (`npm run build`).
