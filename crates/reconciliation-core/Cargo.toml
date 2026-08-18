@@ -2,8 +2,11 @@
 name = "reconciliation-core"
 version = "0.1.0"
 edition = "2021"
-description = "Core Domain Models and Reconciliation Engine for Offline Accounting Desktop"
+description = "Core Domain Models, Streaming Excel Ingestion, Normalization, and Multi-Source Reconciliation Engine"
 
 [dependencies]
+calamine = "0.26"
+rust_xlsxwriter = "0.79"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

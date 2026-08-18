@@ -20,6 +20,22 @@ impl Default for DataSourceKind {
     }
 }
 
+impl DataSourceKind {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::EInvoice => "Hóa đơn điện tử",
+            Self::Ledger511 => "Sổ cái TK 511 (Doanh thu)",
+            Self::Ledger3331 => "Sổ cái TK 3331 (Thuế GTGT)",
+            Self::Ledger133 => "Sổ cái TK 133 (Thuế đầu vào)",
+            Self::Ledger131 => "Sổ công nợ TK 131 (Phải thu)",
+            Self::BankStatement => "Sao kê ngân hàng",
+            Self::CashBook => "Sổ quỹ tiền mặt",
+            Self::BranchLedger => "Sổ chi nhánh",
+            Self::Custom => "Bảng kê Excel tùy chỉnh",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ColumnMapping {
@@ -91,6 +107,50 @@ fn default_header_row() -> u32 {
 
 fn default_data_start_row() -> u32 {
     2
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetMetadata {
+    pub name: String,
+    pub total_rows: usize,
+    pub total_cols: usize,
+    pub detected_header_row: u32,
+    pub detected_data_start_row: u32,
+    pub columns: Vec<String>,
+    pub suggested_mapping: ColumnMapping,
+    pub suggested_kind: DataSourceKind,
+    pub confidence_score: f64,
+    pub preview_rows: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExcelFileMetadata {
+    pub file_path: String,
+    pub file_name: String,
+    pub file_size_bytes: u64,
+    pub sheets: Vec<SheetMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationSession {
+    pub session_id: String,
+    pub scenario_name: String,
+    pub data_sources: Vec<DataSource>,
+    pub matching_tolerance_vnd: f64,
+    pub date_tolerance_days: u32,
+    pub enable_aggregate_match: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportSummary {
+    pub output_path: String,
+    pub file_size_bytes: u64,
+    pub total_groups_exported: usize,
+    pub created_at: String,
 }
 
 #[cfg(test)]

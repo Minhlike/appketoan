@@ -1,6 +1,6 @@
 /**
  * Data Contract Interfaces for Multi-Source Accounting Reconciliation
- * Synchronized with Rust models in `src-tauri/src/models/`
+ * Synchronized with Rust models in `crates/reconciliation-core/src/models/`
  */
 
 export type DataSourceKind =
@@ -41,6 +41,35 @@ export interface DataSource {
   headerRow: number;
   dataStartRow: number;
   columnMapping: ColumnMapping;
+}
+
+export interface SheetMetadata {
+  name: string;
+  totalRows: number;
+  totalCols: number;
+  detectedHeaderRow: number;
+  detectedDataStartRow: number;
+  columns: string[];
+  suggestedMapping: ColumnMapping;
+  suggestedKind: DataSourceKind;
+  confidenceScore: number;
+  previewRows: string[][];
+}
+
+export interface ExcelFileMetadata {
+  filePath: string;
+  fileName: string;
+  fileSizeBytes: number;
+  sheets: SheetMetadata[];
+}
+
+export interface ReconciliationSession {
+  sessionId: string;
+  scenarioName: string;
+  dataSources: DataSource[];
+  matchingToleranceVnd: number;
+  dateToleranceDays: number;
+  enableAggregateMatch: boolean;
 }
 
 export interface CanonicalRecord {
@@ -139,4 +168,26 @@ export interface ReconciliationResult {
   profileId: string;
   summary: ReconciliationSummary;
   groups: MatchGroup[];
+}
+
+export interface ExportSummary {
+  outputPath: string;
+  fileSizeBytes: number;
+  totalGroupsExported: number;
+  createdAt: string;
+}
+
+export interface PreconfiguredScenario {
+  id: string;
+  name: string;
+  description: string;
+  recommendedSources: {
+    kind: DataSourceKind;
+    title: string;
+    description: string;
+    required: boolean;
+  }[];
+  defaultToleranceVnd: number;
+  defaultDateDays: number;
+  enableAggregate: boolean;
 }

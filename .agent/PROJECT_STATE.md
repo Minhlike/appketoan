@@ -8,42 +8,33 @@ A standalone, 100% offline desktop application for Windows to perform automated 
 - **Local Engine (Domain Crate)**: `reconciliation-core` (Rust standalone pure crate, zero UI coupling)
 - **Toolchain**: Rust stable GNU (`x86_64-pc-windows-gnu`) with GCC 16.2.0 (w64devkit)
 - **Frontend**: React 19 + TypeScript + Vite + Vanilla CSS
-- **Testing**: Vitest (Frontend), `cargo test` (Rust Domain Crate & Golden Datasets)
-- **Security**: 100% Offline Air-Gapped Mode (Zero Telemetry, Zero Cloud, Zero AI APIs)
+- **Testing**: Vitest (Frontend), `cargo test` (Rust Domain Crate, Golden Datasets & Performance Benchmarks)
+- **Security**: 100% Offline Air-Gapped Mode (Zero Telemetry, Zero Cloud, Zero External APIs)
 - **VCS**: Git
 
 ## High-Level Architecture
 ```text
 UI Layer (React 19 / TypeScript in src/)
-    ↓ IPC Commands / Events
+    ↓ IPC Commands (cmd_inspect_excel_file, cmd_inspect_excel_bytes, cmd_run_reconciliation, cmd_export_reconciliation_report)
 Desktop Shell (Tauri 2 in src-tauri/)
     ↓ Rust crate dependency
 Reconciliation Core (crates/reconciliation-core/)
-    ├── Models (CanonicalRecord, DataSource, MatchingRule, ReconciliationResult)
-    ├── Parser Engine (Calamine streaming reader - Next Phase)
-    ├── Matching Engine (Deterministic multi-pass matching pipeline - Next Phase)
-    └── Discrepancy Analyzer & Report Generator
+    ├── Models (CanonicalRecord, DataSource, MatchingRule, ReconciliationResult, ExcelFileMetadata, ExportSummary)
+    ├── Reader Engine (Calamine streaming reader, Vietnamese accounting keyword sniffer & header auto-detector)
+    ├── Normalizer Engine (DocNo, TaxID, Excel float & string dates, Vietnamese dot/comma amounts, garbage row filter)
+    ├── Matching Engine (Pass 0: duplicates, Pass 1: exact keys & tolerance, Pass 2: tax ID + amount, Pass 3: residual sweep, Pass 4: 1-to-N aggregate)
+    ├── Discrepancy Analyzer (Detailed field diffs & Vietnamese audit explanations)
+    └── Excel Exporter (3-tab formatted audit workbook using rust_xlsxwriter)
 ```
 
 ## Current Phase
-- **Pre-Development Preparation**: 100% COMPLETED & AUDITED
-- **Next Phase**: READY_FOR_IMPLEMENTATION (Implementation of Calamine Ingestion & Matching Engine)
+- **Implementation & Production Release**: 100% COMPLETED & VERIFIED
+- **Application Status**: Fully functional, tested, and packaged into Windows native standalone executable and installers.
 
-## Completed Preparation Deliverables
-- Multi-Source Requirements & UX Workflows (`docs/01-requirements/`).
-- Accounting Rules, VAS Standards & 5 Built-in Profiles (`docs/02-accounting-rules/`).
-- Canonical Data Contract & Normalization Specs (`docs/03-data-contract/`).
-- Engine Pipeline Architecture & $O(N)$ Indexing Strategy (`docs/04-architecture/`).
-- Test Strategy & Performance Benchmark Targets (`docs/05-testing/`).
-- Offline Security & Zero-Exfiltration Policy (`docs/06-security/`).
-- Windows Production Release Strategy (`docs/07-release/`).
-- Standalone Domain Crate (`crates/reconciliation-core`) with serialization, normalizers, and invariants.
-- Synchronized TypeScript types in `src/types/dataContract.ts`.
-- Comprehensive synthetic fixtures & golden test results in `fixtures/`.
-- 12 automated test suites passing 100% in $< 1$ second.
+## Production Artifacts
+- **NSIS Setup Installer**: `src-tauri/target/release/bundle/nsis/appketoan_0.1.0_x64-setup.exe` (4.99 MB)
+- **WiX MSI Installer**: `src-tauri/target/release/bundle/msi/appketoan_0.1.0_x64_en-US.msi` (7.78 MB)
+- **Portable Executable**: `src-tauri/target/release/tauri-app.exe` (26.4 MB)
 
 ## Blockers
 - NONE.
-
-## Release Status
-- v0.1.0-alpha.1 (Pre-Development Ready).
