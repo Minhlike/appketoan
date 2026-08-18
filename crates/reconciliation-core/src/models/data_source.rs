@@ -23,17 +23,25 @@ impl SourceRole {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
 pub enum DataSourceKind {
+    #[serde(rename = "e_invoice", alias = "einvoice")]
     EInvoice,
+    #[serde(rename = "ledger_511", alias = "ledger511")]
     Ledger511,
+    #[serde(rename = "ledger_3331", alias = "ledger3331")]
     Ledger3331,
+    #[serde(rename = "ledger_133", alias = "ledger133")]
     Ledger133,
+    #[serde(rename = "ledger_131", alias = "ledger131")]
     Ledger131,
+    #[serde(rename = "bank_statement", alias = "bankstatement")]
     BankStatement,
+    #[serde(rename = "cash_book", alias = "cashbook")]
     CashBook,
+    #[serde(rename = "branch_ledger", alias = "branchledger")]
     BranchLedger,
     #[default]
+    #[serde(rename = "custom")]
     Custom,
 }
 

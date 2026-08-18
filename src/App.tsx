@@ -519,7 +519,25 @@ export function App() {
               summary={result.summary}
               activeFilter={statusFilter}
               onSelectFilter={(st) => setStatusFilter(st)}
-              activeSemantics={selectedScenario.rules.map((r) => r.semantic as ComparisonSemantic)}
+              activeSemantics={(() => {
+                const presentKinds = new Set(sources.map((s) => s.source.kind));
+                const checked = new Set<ComparisonSemantic>();
+                for (const rule of selectedScenario.rules) {
+                  const secKind: DataSourceKind =
+                    rule.secondarySourceKind ||
+                    (rule.semantic === "VAT"
+                      ? selectedScenario.id === "scenario_input_vat"
+                        ? "ledger_133"
+                        : "ledger_3331"
+                      : rule.semantic === "RECEIVABLE"
+                      ? "ledger_131"
+                      : "ledger_511");
+                  if (presentKinds.has(secKind)) {
+                    checked.add(rule.semantic as ComparisonSemantic);
+                  }
+                }
+                return Array.from(checked);
+              })()}
             />
 
             <ResultTable

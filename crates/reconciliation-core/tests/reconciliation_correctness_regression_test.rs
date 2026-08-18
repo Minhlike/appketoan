@@ -1125,6 +1125,52 @@ fn test_14_decimal_rust_serialization_and_artifact_generation() {
             }
         }
     }
+
+    // Verify all DataSourceKinds serialize to canonical snake_case
+    let kinds = vec![
+        DataSourceKind::EInvoice,
+        DataSourceKind::Ledger511,
+        DataSourceKind::Ledger3331,
+        DataSourceKind::Ledger131,
+        DataSourceKind::Ledger133,
+        DataSourceKind::BankStatement,
+        DataSourceKind::CashBook,
+        DataSourceKind::BranchLedger,
+        DataSourceKind::Custom,
+    ];
+    let serialized_kinds: Vec<String> = kinds
+        .iter()
+        .map(|k| serde_json::to_string(k).unwrap())
+        .collect();
+    assert_eq!(serialized_kinds[0], "\"e_invoice\"");
+    assert_eq!(serialized_kinds[1], "\"ledger_511\"");
+    assert_eq!(serialized_kinds[2], "\"ledger_3331\"");
+    assert_eq!(serialized_kinds[3], "\"ledger_131\"");
+    assert_eq!(serialized_kinds[4], "\"ledger_133\"");
+    assert_eq!(serialized_kinds[5], "\"bank_statement\"");
+    assert_eq!(serialized_kinds[6], "\"cash_book\"");
+    assert_eq!(serialized_kinds[7], "\"branch_ledger\"");
+    assert_eq!(serialized_kinds[8], "\"custom\"");
+
+    // Test TS-generated session deserialization if present
+    for ts_path in &[
+        "fixtures/artifacts/ts_generated_session.json",
+        "../../fixtures/artifacts/ts_generated_session.json",
+    ] {
+        let p = Path::new(ts_path);
+        if p.exists() {
+            let content = std::fs::read_to_string(p).unwrap();
+            let parsed_session: Result<ReconciliationSession, _> = serde_json::from_str(&content);
+            assert!(
+                parsed_session.is_ok(),
+                "Failed to deserialize TS generated session: {:?}",
+                parsed_session.err()
+            );
+            let sess = parsed_session.unwrap();
+            assert_eq!(sess.data_sources.len(), 9);
+            assert_eq!(sess.data_sources[1].kind, DataSourceKind::Ledger511);
+        }
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1151,44 +1197,314 @@ fn test_15_source_detection_fail_closed() {
 }
 
 // -------------------------------------------------------------------------------------------------
-// 16. DIRTY EXCEL METAMORPHIC ROBUSTNESS
+// 16. DIRTY EXCEL METAMORPHIC ROBUSTNESS (14 DISTINCT VARIANTS)
 // -------------------------------------------------------------------------------------------------
 #[test]
 fn test_16_dirty_excel_metamorphic_robustness() {
-    // Header at row 4 with leading titles and extra spaces
-    let dirty_rows = vec![
-        vec!["CÔNG TY TNHH KẾ TOÁN MẪU".to_string()],
-        vec!["BẢNG KÊ DOANH THU THÁNG 7".to_string()],
-        vec!["".to_string()],
+    // 01: Header at row 1 standard
+    let v01 = vec![
         vec![
-            "  KÝ HIỆU HÓA ĐƠN  ".to_string(),
-            "SỐ HÓA ĐƠN".to_string(),
-            "NGÀY LẬP".to_string(),
-            "TỔNG TIỀN CHƯA THUẾ".to_string(),
-            "TỔNG TIỀN THUẾ".to_string(),
-            "TỔNG TIỀN THANH TOÁN".to_string(),
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền chưa thuế".into(),
+            "Tiền thuế GTGT".into(),
         ],
         vec![
-            "1C26TAA".to_string(),
-            "00000101".to_string(),
-            "05/01/2026".to_string(),
-            "10.000.000".to_string(),
-            "1.000.000".to_string(),
-            "11.000.000".to_string(),
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+            "1000000".into(),
         ],
     ];
+    let (h1, d1, _, m1, k1, _) = detect_header_and_mapping_with_context("Hóa đơn", &v01);
+    assert_eq!(h1, 1);
+    assert_eq!(d1, 2);
+    assert_eq!(k1, DataSourceKind::EInvoice);
 
-    let (hdr_idx, data_idx, _, mapping, kind, _) =
-        detect_header_and_mapping_with_context("HĐ", &dirty_rows);
-    assert_eq!(hdr_idx, 4);
-    assert_eq!(data_idx, 5);
-    assert_eq!(kind, DataSourceKind::EInvoice);
-    assert!(mapping.doc_no_column.is_some());
-    assert!(mapping.pretax_amount_column.is_some());
+    // 02: Header at row 5
+    let v02 = vec![
+        vec!["Title 1".into()],
+        vec!["Title 2".into()],
+        vec!["Title 3".into()],
+        vec!["".into()],
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền chưa thuế".into(),
+            "Tiền thuế GTGT".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+            "1000000".into(),
+        ],
+    ];
+    let (h2, d2, _, _, k2, _) = detect_header_and_mapping_with_context("Hóa đơn", &v02);
+    assert_eq!(h2, 5);
+    assert_eq!(d2, 6);
+    assert_eq!(k2, DataSourceKind::EInvoice);
+
+    // 03: Company title above headers
+    let v03 = vec![
+        vec!["CÔNG TY CỔ PHẦN THƯƠNG MẠI DỊCH VỤ ABC".into()],
+        vec!["Mã số thuế: 0101234567".into()],
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày HĐ".into(),
+            "Tổng tiền chưa thuế".into(),
+            "Thuế GTGT".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+            "1000000".into(),
+        ],
+    ];
+    let (h3, d3, _, _, k3, _) = detect_header_and_mapping_with_context("Hóa đơn", &v03);
+    assert_eq!(h3, 3);
+    assert_eq!(d3, 4);
+    assert_eq!(k3, DataSourceKind::EInvoice);
+
+    // 04: Extra STT (Sequential No) column
+    let v04 = vec![
+        vec![
+            "STT".into(),
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền hàng".into(),
+        ],
+        vec![
+            "1".into(),
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+        ],
+    ];
+    let (_, _, _, m4, _, _) = detect_header_and_mapping_with_context("HĐ", &v04);
+    assert!(m4.doc_no_column.is_some());
+
+    // 05: Extra Notes / Ghi chú column
+    let v05 = vec![
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền hàng".into(),
+            "Ghi chú thêm".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+            "Đã thanh toán".into(),
+        ],
+    ];
+    let (_, _, _, m5, _, _) = detect_header_and_mapping_with_context("HĐ", &v05);
+    assert!(m5.doc_no_column.is_some());
+
+    // 06: Shuffled columns order
+    let v06 = vec![
+        vec![
+            "Tổng tiền chưa thuế".into(),
+            "Ngày lập".into(),
+            "Ký hiệu".into(),
+            "Số HĐ".into(),
+        ],
+        vec![
+            "10000000".into(),
+            "2026-01-05".into(),
+            "AA".into(),
+            "001".into(),
+        ],
+    ];
+    let (_, _, _, m6, _, _) = detect_header_and_mapping_with_context("HĐ", &v06);
+    assert_eq!(m6.doc_no_column.as_deref(), Some("Số HĐ"));
+    assert_eq!(
+        m6.pretax_amount_column.as_deref(),
+        Some("Tổng tiền chưa thuế")
+    );
+
+    // 07: Uppercase headers
+    let v07 = vec![
+        vec![
+            "SỐ HÓA ĐƠN".into(),
+            "KÝ HIỆU".into(),
+            "NGÀY LẬP".into(),
+            "TIỀN CHƯA THUẾ".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+        ],
+    ];
+    let (_, _, _, m7, _, _) = detect_header_and_mapping_with_context("HĐ", &v07);
+    assert!(m7.doc_no_column.is_some());
+
+    // 08: Whitespace-padded headers
+    let v08 = vec![
+        vec![
+            "   Số Hóa Đơn   ".into(),
+            "  Ký Hiệu  ".into(),
+            "  Ngày Lập  ".into(),
+            "  Tổng Tiền Chưa Thuế  ".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+        ],
+    ];
+    let (_, _, _, m8, _, _) = detect_header_and_mapping_with_context("HĐ", &v08);
+    assert!(m8.doc_no_column.is_some());
+
+    // 09: Blank rows between header and data
+    let v09 = vec![
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền chưa thuế".into(),
+        ],
+        vec!["".into(), "".into(), "".into(), "".into()],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+        ],
+    ];
+    let ds09 = DataSource {
+        id: "src9".into(),
+        name: "S9".into(),
+        file_path: "mock.xlsx".into(),
+        sheet_name: "S1".into(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: m1.clone(),
+    };
+    let recs09 = normalize_data_source_rows(&ds09, &v09[0], &v09);
+    assert_eq!(recs09.len(), 1, "Blank row should be filtered");
+
+    // 10: Subtotal / footer row filtered out
+    let v10 = vec![
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền chưa thuế".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+        ],
+        vec!["Tổng cộng:".into(), "".into(), "".into(), "10000000".into()],
+    ];
+    let ds10 = DataSource {
+        id: "src10".into(),
+        name: "S10".into(),
+        file_path: "mock.xlsx".into(),
+        sheet_name: "S1".into(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: m1.clone(),
+    };
+    let recs10 = normalize_data_source_rows(&ds10, &v10[0], &v10);
+    assert_eq!(
+        recs10.len(),
+        1,
+        "Total/footer row must not become a canonical record"
+    );
+
+    // 11: Date Excel Serial format (e.g. 46022 -> 2025-12-31)
+    let v11 = vec![
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền chưa thuế".into(),
+        ],
+        vec!["001".into(), "AA".into(), "46022".into(), "10000000".into()],
+    ];
+    let recs11 = normalize_data_source_rows(&ds09, &v11[0], &v11);
+    assert_eq!(recs11[0].date.as_deref(), Some("2025-12-31"));
+
+    // 12: Date text format DD/MM/YYYY
+    let v12 = vec![
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền chưa thuế".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "05/01/2026".into(),
+            "10000000".into(),
+        ],
+    ];
+    let recs12 = normalize_data_source_rows(&ds09, &v12[0], &v12);
+    assert_eq!(recs12[0].date.as_deref(), Some("2026-01-05"));
+
+    // 13: Money numeric exact
+    let v13 = vec![
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền chưa thuế".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10000000".into(),
+        ],
+    ];
+    let recs13 = normalize_data_source_rows(&ds09, &v13[0], &v13);
+    assert_eq!(recs13[0].pretax_amount, Some(dec!(10000000)));
+
+    // 14: Money text formatted with dots, commas, and currency symbols
+    let v14 = vec![
+        vec![
+            "Số HĐ".into(),
+            "Ký hiệu".into(),
+            "Ngày lập".into(),
+            "Tiền chưa thuế".into(),
+        ],
+        vec![
+            "001".into(),
+            "AA".into(),
+            "2026-01-05".into(),
+            "10.000.000,50 VND".into(),
+        ],
+    ];
+    let recs14 = normalize_data_source_rows(&ds09, &v14[0], &v14);
+    assert_eq!(recs14[0].pretax_amount, Some(dec!(10000000.50)));
 }
 
 // -------------------------------------------------------------------------------------------------
-// 17. DETERMINISM TEST (20 PERMUTATIONS)
+// 17. DETERMINISM TEST (20+ PERMUTATIONS WITH MULTI-SOURCE & SECONDARY SHUFFLE)
 // -------------------------------------------------------------------------------------------------
 #[test]
 fn test_17_determinism_20_permutations() {
@@ -1217,18 +1533,30 @@ fn test_17_determinism_20_permutations() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_det_rev".to_string(),
+            name: "Rev".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
         matching_tolerance_vnd: dec!(0),
-        date_tolerance_days: 3,
+        date_tolerance_days: 5,
         enable_aggregate_match: true,
     };
 
-    let base_records = vec![
+    let base_primary = vec![
         CanonicalRecord {
             id: "inv_3".to_string(),
             source_id: "src_inv".to_string(),
             source_row: 4,
             doc_no: Some("00000300".to_string()),
+            series: Some("AA".to_string()),
             date: Some("2026-01-03".to_string()),
             pretax_amount: Some(dec!(30000000)),
             total_amount: dec!(30000000),
@@ -1239,6 +1567,7 @@ fn test_17_determinism_20_permutations() {
             source_id: "src_inv".to_string(),
             source_row: 2,
             doc_no: Some("00000100".to_string()),
+            series: Some("AA".to_string()),
             date: Some("2026-01-01".to_string()),
             pretax_amount: Some(dec!(10000000)),
             total_amount: dec!(10000000),
@@ -1249,6 +1578,7 @@ fn test_17_determinism_20_permutations() {
             source_id: "src_inv".to_string(),
             source_row: 3,
             doc_no: Some("00000200".to_string()),
+            series: Some("AA".to_string()),
             date: Some("2026-01-02".to_string()),
             pretax_amount: Some(dec!(20000000)),
             total_amount: dec!(20000000),
@@ -1256,19 +1586,64 @@ fn test_17_determinism_20_permutations() {
         },
     ];
 
+    let base_secondary = vec![
+        CanonicalRecord {
+            id: "tk_2".to_string(),
+            source_id: "src_511".to_string(),
+            source_row: 3,
+            doc_no: Some("00000200".to_string()),
+            series: Some("AA".to_string()),
+            date: Some("2026-01-02".to_string()),
+            credit_amount: Some(dec!(20000000)),
+            total_amount: dec!(20000000),
+            ..Default::default()
+        },
+        CanonicalRecord {
+            id: "tk_1".to_string(),
+            source_id: "src_511".to_string(),
+            source_row: 2,
+            doc_no: Some("00000100".to_string()),
+            series: Some("AA".to_string()),
+            date: Some("2026-01-01".to_string()),
+            credit_amount: Some(dec!(10000000)),
+            total_amount: dec!(10000000),
+            ..Default::default()
+        },
+        CanonicalRecord {
+            id: "tk_3".to_string(),
+            source_id: "src_511".to_string(),
+            source_row: 4,
+            doc_no: Some("00000300".to_string()),
+            series: Some("AA".to_string()),
+            date: Some("2026-01-03".to_string()),
+            credit_amount: Some(dec!(30000000)),
+            total_amount: dec!(30000000),
+            ..Default::default()
+        },
+    ];
+
     let mut first_json = String::new();
 
-    for i in 0..20 {
-        let mut permuted = base_records.clone();
+    for i in 0..24 {
+        let mut permuted_pri = base_primary.clone();
+        let mut permuted_sec = base_secondary.clone();
+
         if i % 2 == 0 {
-            permuted.reverse();
-        } else if i % 3 == 0 {
-            permuted.swap(0, 1);
+            permuted_pri.reverse();
+        }
+        if i % 3 == 0 {
+            permuted_pri.swap(0, 1);
+        }
+        if i % 4 == 0 {
+            permuted_sec.reverse();
+        }
+        if i % 5 == 0 {
+            permuted_sec.swap(1, 2);
         }
 
         let mut records_map = HashMap::new();
-        records_map.insert("src_inv".to_string(), permuted);
-        records_map.insert("src_511".to_string(), vec![]);
+        records_map.insert("src_inv".to_string(), permuted_pri);
+        records_map.insert("src_511".to_string(), permuted_sec);
 
         let res = execute_reconciliation(&session, &records_map).expect("Should succeed");
         let json = serde_json::to_string(&res.groups).expect("JSON failed");
@@ -1282,7 +1657,7 @@ fn test_17_determinism_20_permutations() {
 }
 
 // -------------------------------------------------------------------------------------------------
-// 18. FALSE-POSITIVE ADVERSARIAL SUITE
+// 18. FALSE-POSITIVE ADVERSARIAL SUITE (10 DISTINCT ADVERSARIAL CASES)
 // -------------------------------------------------------------------------------------------------
 #[test]
 fn test_18_false_positive_adversarial_suite() {
@@ -1311,44 +1686,442 @@ fn test_18_false_positive_adversarial_suite() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_adv_rev".to_string(),
+            name: "Rev".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 3,
+        }],
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: true,
     };
 
-    // Case: Same amount, completely different doc numbers
-    let mut records_map = HashMap::new();
-    records_map.insert(
+    // Case 01: Same amount, different doc numbers -> 0 false match
+    let mut map01 = HashMap::new();
+    map01.insert(
         "src_inv".to_string(),
         vec![CanonicalRecord {
-            id: "inv_1".to_string(),
-            source_id: "src_inv".to_string(),
+            id: "p1".into(),
+            source_id: "src_inv".into(),
             source_row: 2,
-            doc_no: Some("00000111".to_string()),
+            doc_no: Some("001".into()),
             pretax_amount: Some(dec!(99999999)),
             total_amount: dec!(99999999),
             ..Default::default()
         }],
     );
-    records_map.insert(
+    map01.insert(
         "src_511".to_string(),
         vec![CanonicalRecord {
-            id: "tk_1".to_string(),
-            source_id: "src_511".to_string(),
+            id: "s1".into(),
+            source_id: "src_511".into(),
             source_row: 2,
-            doc_no: Some("00000222".to_string()), // Different doc!
+            doc_no: Some("002".into()),
             credit_amount: Some(dec!(99999999)),
             total_amount: dec!(99999999),
             ..Default::default()
         }],
     );
+    let res01 = execute_reconciliation(&session, &map01).unwrap();
+    assert_eq!(
+        res01.summary.exact_matches_count, 0,
+        "Case 01 must not match"
+    );
 
-    let res = execute_reconciliation(&session, &records_map).expect("Should succeed");
-    // FALSE MATCH MUST BE 0!
-    assert_eq!(res.summary.exact_matches_count, 0);
-    assert_eq!(res.summary.missing_in_target_count, 1);
-    assert_eq!(res.summary.missing_in_source_count, 1);
+    // Case 02: Same doc, different series -> collision prevented
+    let mut map02 = HashMap::new();
+    map02.insert(
+        "src_inv".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "p2a".into(),
+                source_id: "src_inv".into(),
+                source_row: 2,
+                doc_no: Some("100".into()),
+                series: Some("1C26TAA".into()),
+                pretax_amount: Some(dec!(1000)),
+                total_amount: dec!(1000),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "p2b".into(),
+                source_id: "src_inv".into(),
+                source_row: 3,
+                doc_no: Some("100".into()),
+                series: Some("2C26TBB".into()),
+                pretax_amount: Some(dec!(2000)),
+                total_amount: dec!(2000),
+                ..Default::default()
+            },
+        ],
+    );
+    map02.insert(
+        "src_511".to_string(),
+        vec![CanonicalRecord {
+            id: "s2".into(),
+            source_id: "src_511".into(),
+            source_row: 2,
+            doc_no: Some("100".into()),
+            series: Some("2C26TBB".into()),
+            credit_amount: Some(dec!(2000)),
+            total_amount: dec!(2000),
+            ..Default::default()
+        }],
+    );
+    let res02 = execute_reconciliation(&session, &map02).unwrap();
+    let grp2b = res02
+        .groups
+        .iter()
+        .find(|g| g.primary_source_record_ids.contains(&"p2b".to_string()))
+        .unwrap();
+    assert_eq!(grp2b.status, MatchStatus::MatchedExact);
+    let grp2a = res02
+        .groups
+        .iter()
+        .find(|g| g.primary_source_record_ids.contains(&"p2a".to_string()))
+        .unwrap();
+    assert_eq!(grp2a.status, MatchStatus::UnmatchedMissingInTarget);
+
+    // Case 03: Same doc, outside date tolerance -> 0 exact match
+    let mut map03 = HashMap::new();
+    map03.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "p3".into(),
+            source_id: "src_inv".into(),
+            source_row: 2,
+            doc_no: Some("100".into()),
+            date: Some("2026-01-01".into()),
+            pretax_amount: Some(dec!(1000)),
+            total_amount: dec!(1000),
+            ..Default::default()
+        }],
+    );
+    map03.insert(
+        "src_511".to_string(),
+        vec![CanonicalRecord {
+            id: "s3".into(),
+            source_id: "src_511".into(),
+            source_row: 2,
+            doc_no: Some("100".into()),
+            date: Some("2026-02-01".into()),
+            credit_amount: Some(dec!(1000)),
+            total_amount: dec!(1000),
+            ..Default::default()
+        }],
+    );
+    let res03 = execute_reconciliation(&session, &map03).unwrap();
+    assert_eq!(
+        res03.summary.exact_matches_count, 0,
+        "Case 03 date out of bounds must not match exact"
+    );
+
+    // Case 04: Same doc/date, incompatible MST -> 0 match
+    let mut map04 = HashMap::new();
+    map04.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "p4".into(),
+            source_id: "src_inv".into(),
+            source_row: 2,
+            doc_no: Some("100".into()),
+            partner_tax_id: Some("010111".into()),
+            pretax_amount: Some(dec!(1000)),
+            total_amount: dec!(1000),
+            ..Default::default()
+        }],
+    );
+    map04.insert(
+        "src_511".to_string(),
+        vec![CanonicalRecord {
+            id: "s4".into(),
+            source_id: "src_511".into(),
+            source_row: 2,
+            doc_no: Some("100".into()),
+            partner_tax_id: Some("030999".into()),
+            credit_amount: Some(dec!(1000)),
+            total_amount: dec!(1000),
+            ..Default::default()
+        }],
+    );
+    let res04 = execute_reconciliation(&session, &map04).unwrap();
+    assert_eq!(
+        res04.summary.exact_matches_count, 0,
+        "Case 04 incompatible MST must not match"
+    );
+
+    // Case 05: Aggregate cross-customer MST -> rejected
+    let mut map05 = HashMap::new();
+    map05.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "p5".into(),
+            source_id: "src_inv".into(),
+            source_row: 2,
+            doc_no: Some("500".into()),
+            partner_tax_id: Some("0101".into()),
+            pretax_amount: Some(dec!(100)),
+            total_amount: dec!(100),
+            ..Default::default()
+        }],
+    );
+    map05.insert(
+        "src_511".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "s5a".into(),
+                source_id: "src_511".into(),
+                source_row: 2,
+                doc_no: Some("500".into()),
+                partner_tax_id: Some("0101".into()),
+                credit_amount: Some(dec!(40)),
+                total_amount: dec!(40),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "s5b".into(),
+                source_id: "src_511".into(),
+                source_row: 3,
+                doc_no: Some("500".into()),
+                partner_tax_id: Some("0202".into()),
+                credit_amount: Some(dec!(60)),
+                total_amount: dec!(60),
+                ..Default::default()
+            },
+        ],
+    );
+    let res05 = execute_reconciliation(&session, &map05).unwrap();
+    assert_ne!(
+        res05.groups[0].status,
+        MatchStatus::MatchedAggregate,
+        "Cross-customer aggregate must be rejected"
+    );
+
+    // Case 06: Multiple valid aggregate subsets -> Ambiguous
+    let mut map06 = HashMap::new();
+    map06.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "p6".into(),
+            source_id: "src_inv".into(),
+            source_row: 2,
+            doc_no: Some("600".into()),
+            pretax_amount: Some(dec!(100)),
+            total_amount: dec!(100),
+            ..Default::default()
+        }],
+    );
+    map06.insert(
+        "src_511".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "s6a".into(),
+                source_id: "src_511".into(),
+                source_row: 2,
+                doc_no: Some("600".into()),
+                credit_amount: Some(dec!(100)),
+                total_amount: dec!(100),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "s6b".into(),
+                source_id: "src_511".into(),
+                source_row: 3,
+                doc_no: Some("600".into()),
+                credit_amount: Some(dec!(100)),
+                total_amount: dec!(100),
+                ..Default::default()
+            },
+        ],
+    );
+    let res06 = execute_reconciliation(&session, &map06).unwrap();
+    assert_eq!(res06.groups[0].status, MatchStatus::AmbiguousMatch);
+
+    // Case 07: No-doc insufficient evidence (no MST, no Date) -> NeedsReview, never disappears
+    let mut map07 = HashMap::new();
+    map07.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "p7".into(),
+            source_id: "src_inv".into(),
+            source_row: 2,
+            doc_no: None,
+            partner_tax_id: None,
+            date: None,
+            pretax_amount: Some(dec!(100)),
+            total_amount: dec!(100),
+            ..Default::default()
+        }],
+    );
+    map07.insert("src_511".to_string(), vec![]);
+    let res07 = execute_reconciliation(&session, &map07).unwrap();
+    assert_eq!(res07.groups[0].status, MatchStatus::NeedsReview);
+
+    // Case 08: No-doc multiple candidates for same MST+Amount -> Ambiguous fallback
+    let mut map08 = HashMap::new();
+    map08.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "p8".into(),
+            source_id: "src_inv".into(),
+            source_row: 2,
+            doc_no: None,
+            partner_tax_id: Some("0101".into()),
+            date: Some("2026-01-05".into()),
+            pretax_amount: Some(dec!(100)),
+            total_amount: dec!(100),
+            ..Default::default()
+        }],
+    );
+    map08.insert(
+        "src_511".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "s8a".into(),
+                source_id: "src_511".into(),
+                source_row: 2,
+                doc_no: None,
+                partner_tax_id: Some("0101".into()),
+                date: Some("2026-01-05".into()),
+                credit_amount: Some(dec!(100)),
+                total_amount: dec!(100),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "s8b".into(),
+                source_id: "src_511".into(),
+                source_row: 3,
+                doc_no: None,
+                partner_tax_id: Some("0101".into()),
+                date: Some("2026-01-05".into()),
+                credit_amount: Some(dec!(100)),
+                total_amount: dec!(100),
+                ..Default::default()
+            },
+        ],
+    );
+    let res08 = execute_reconciliation(&session, &map08).unwrap();
+    assert_eq!(res08.groups[0].status, MatchStatus::AmbiguousMatch);
+
+    // Case 09: Mismatch candidate does not block exact match for another primary
+    let mut map09 = HashMap::new();
+    map09.insert(
+        "src_inv".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "p9a".into(),
+                source_id: "src_inv".into(),
+                source_row: 2,
+                doc_no: Some("900".into()),
+                series: Some("1C26TAA".into()),
+                pretax_amount: Some(dec!(200)),
+                total_amount: dec!(200),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "p9b".into(),
+                source_id: "src_inv".into(),
+                source_row: 3,
+                doc_no: Some("900".into()),
+                series: Some("2C26TBB".into()),
+                pretax_amount: Some(dec!(100)),
+                total_amount: dec!(100),
+                ..Default::default()
+            },
+        ],
+    );
+    map09.insert(
+        "src_511".to_string(),
+        vec![CanonicalRecord {
+            id: "s9".into(),
+            source_id: "src_511".into(),
+            source_row: 2,
+            doc_no: Some("900".into()),
+            series: Some("2C26TBB".into()),
+            credit_amount: Some(dec!(100)),
+            total_amount: dec!(100),
+            ..Default::default()
+        }],
+    );
+    let res09 = execute_reconciliation(&session, &map09).unwrap();
+    let grp9b = res09
+        .groups
+        .iter()
+        .find(|g| g.primary_source_record_ids.contains(&"p9b".to_string()))
+        .unwrap();
+    assert_eq!(grp9b.status, MatchStatus::MatchedExact);
+
+    // Case 10: Ambiguous candidate does not lock candidate from exact match
+    let mut map10 = HashMap::new();
+    map10.insert(
+        "src_inv".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "p10a".into(),
+                source_id: "src_inv".into(),
+                source_row: 2,
+                doc_no: Some("1000".into()),
+                pretax_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "p10b".into(),
+                source_id: "src_inv".into(),
+                source_row: 3,
+                doc_no: Some("2000".into()),
+                pretax_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+        ],
+    );
+    map10.insert(
+        "src_511".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "s10a".into(),
+                source_id: "src_511".into(),
+                source_row: 2,
+                doc_no: Some("1000".into()),
+                credit_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "s10b".into(),
+                source_id: "src_511".into(),
+                source_row: 3,
+                doc_no: Some("1000".into()),
+                credit_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "s10c".into(),
+                source_id: "src_511".into(),
+                source_row: 4,
+                doc_no: Some("2000".into()),
+                credit_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+        ],
+    );
+    let res10 = execute_reconciliation(&session, &map10).unwrap();
+    let grp10b = res10
+        .groups
+        .iter()
+        .find(|g| g.primary_source_record_ids.contains(&"p10b".to_string()))
+        .unwrap();
+    assert_eq!(grp10b.status, MatchStatus::MatchedExact);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1419,9 +2192,20 @@ fn test_19_real_2_file_baseline_46_45_missing_233() {
         required_source_ids: Some(vec!["src_real_tk511".to_string()]),
         optional_source_ids: None,
         data_sources: vec![ds_inv, ds_tk],
-        comparison_rules: vec![],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_real_revenue".to_string(),
+            name: "Doanh thu chưa thuế (HĐĐT ↔ TK511 Phát sinh Có)".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
         matching_tolerance_vnd: dec!(0),
-        date_tolerance_days: 3,
+        date_tolerance_days: 5,
         enable_aggregate_match: true,
     };
 
@@ -1490,7 +2274,7 @@ fn test_20_independent_oracle_verification() {
     };
     let records_tk = normalize_data_source_rows(&ds_tk, &meta_tk.sheets[0].columns, &raw_tk);
 
-    // Minimal Independent Oracle Lookup
+    // 1. Compute Oracle Results Independently
     let mut oracle_tk_map: HashMap<String, Decimal> = HashMap::new();
     for rec in &records_tk {
         if let Some(doc) = &rec.doc_no {
@@ -1502,6 +2286,7 @@ fn test_20_independent_oracle_verification() {
     let mut oracle_exact = 0;
     let mut oracle_missing = 0;
     let mut oracle_missing_doc = String::new();
+    let mut oracle_rev_variance = Decimal::ZERO;
 
     for inv in &records_inv {
         let clean = CanonicalRecord::normalize_doc_no(inv.doc_no.as_deref().unwrap_or(""));
@@ -1513,12 +2298,65 @@ fn test_20_independent_oracle_verification() {
         } else {
             oracle_missing += 1;
             oracle_missing_doc = clean;
+            oracle_rev_variance += inv_amt;
         }
     }
 
-    assert_eq!(oracle_exact, 45);
-    assert_eq!(oracle_missing, 1);
-    assert_eq!(oracle_missing_doc, "233");
+    // 2. Execute Production Reconciliation Engine
+    let session = ReconciliationSession {
+        session_id: "sess_oracle_test".to_string(),
+        scenario_name: "Oracle Verification".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_tk".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![ds_inv, ds_tk],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_oracle".to_string(),
+            name: "Oracle Revenue".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let mut map = HashMap::new();
+    map.insert("src_inv".to_string(), records_inv);
+    map.insert("src_tk".to_string(), records_tk);
+
+    let res = execute_reconciliation(&session, &map).expect("Engine execution failed");
+
+    // 3. Direct Comparison between Engine and Independent Oracle
+    assert_eq!(
+        res.summary.exact_matches_count, oracle_exact,
+        "Engine exact matches must equal oracle"
+    );
+    assert_eq!(
+        res.summary.missing_in_target_count, oracle_missing,
+        "Engine missing count must equal oracle"
+    );
+    assert_eq!(
+        res.summary.revenue_variance, oracle_rev_variance,
+        "Engine revenue variance must equal oracle"
+    );
+    let missing_grp = res
+        .groups
+        .iter()
+        .find(|g| g.status == MatchStatus::UnmatchedMissingInTarget)
+        .unwrap();
+    assert_eq!(
+        missing_grp.doc_no.as_deref(),
+        Some(oracle_missing_doc.as_str()),
+        "Engine missing doc must match oracle"
+    );
 }
 
 // -------------------------------------------------------------------------------------------------

@@ -3,11 +3,5 @@ Changes not staged for commit:
   (use "git add <file>..." to update what will be committed)
   (use "git restore <file>..." to discard changes in working directory)
 	modified:   audit/commit.txt
-	modified:   audit/generated-ipc-contract.json
-	modified:   audit/git-diff-stat.txt
-	modified:   audit/git-status.txt
-	modified:   audit/test-results.txt
-	modified:   crates/reconciliation-core/audit/generated-ipc-contract.json
-	modified:   crates/reconciliation-core/fixtures/artifacts/ipc_contract_output.json
 
 no changes added to commit (use "git add" and/or "git commit -a")

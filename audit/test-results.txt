@@ -1,10 +1,11 @@
 ﻿================================================================================
-AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V6 HARDENED BUILD
-Date: 2026-08-19 02:29:46
+AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V8 HARDENED BUILD
+Date: 2026-08-19 03:08:16
 ================================================================================
 
 --- 1. RUST CORE RECONCILIATION TEST SUITE (cargo test --workspace) ---
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+   Compiling reconciliation-core v0.1.0 (D:\appketoan\crates\reconciliation-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.58s
      Running unittests src\lib.rs (target\debug\deps\reconciliation_core-6d212257172c4466.exe)
 
 running 10 tests
@@ -12,11 +13,11 @@ test models::canonical_record::tests::test_tax_id_normalization ... ok
 test models::canonical_record::tests::test_doc_no_normalization ... ok
 test normalizer::row_normalizer::tests::test_company_names_never_filtered_as_subtotal ... ok
 test models::reconciliation_rule::tests::test_comparison_rule_serialization ... ok
-test models::reconciliation_rule::tests::test_matching_rule_serialization ... ok
-test models::reconciliation_result::tests::test_reconciliation_result_summary ... ok
 test normalizer::row_normalizer::tests::test_parse_amount_variations ... ok
+test models::reconciliation_rule::tests::test_matching_rule_serialization ... ok
 test normalizer::row_normalizer::tests::test_parse_excel_dates ... ok
 test models::data_source::tests::test_data_source_serialization ... ok
+test models::reconciliation_result::tests::test_reconciliation_result_summary ... ok
 test reader::header_detector::tests::test_einvoice_named_doanh_thu_correctly_classified_as_einvoice ... ok
 
 test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -26,7 +27,7 @@ test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 1 test
 test test_end_to_end_reconciliation_engine_flow ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
 
      Running tests\golden_dataset_test.rs (target\debug\deps\golden_dataset_test-54e6ad33467acf0d.exe)
 
@@ -40,40 +41,44 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test test_performance_scaling_1k_to_100k ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.08s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.09s
 
      Running tests\reconciliation_correctness_regression_test.rs (target\debug\deps\reconciliation_correctness_regression_test-2fb9c02d044b8190.exe)
 
-running 27 tests
-test test_01_required_source_missing_before_run ... ok
-test test_03_optional_source_absent ... ok
-test test_02_required_source_uploaded_but_record_missing ... ok
-test test_07_aggregate_boundary_date_filtering ... ok
-test test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess ... ok
-test test_09_single_candidate_validates_metadata ... ok
-test test_10_no_doc_fallback_requires_multi_evidence_and_evaluates_all_secondaries ... ok
-test test_11_all_secondary_missing_preserves_semantic_comparisons ... ok
-test test_05_scenario_dynamic_comparison_rules_execution ... ok
+running 31 tests
 test test_04_primary_kind_validation_rejects_wrong_kind ... ok
-test test_12_residual_secondary_semantics_by_kind ... ok
-test test_13_variance_isolation_no_canceling_rev_vat ... ok
-test test_06_same_doc_no_different_series_collision_prevention ... ok
+test test_01_required_source_missing_before_run ... ok
 test test_18_false_positive_adversarial_suite ... ok
+test test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess ... ok
+test test_10_no_doc_fallback_requires_multi_evidence_and_evaluates_all_secondaries ... ok
+test test_09_single_candidate_validates_metadata ... ok
+test test_03_optional_source_absent ... ok
+test test_13_variance_isolation_no_canceling_rev_vat ... ok
+test test_05_scenario_dynamic_comparison_rules_execution ... ok
+test test_12_residual_secondary_semantics_by_kind ... ok
+test test_07_aggregate_boundary_date_filtering ... ok
+test test_06_same_doc_no_different_series_collision_prevention ... ok
+test test_02_required_source_uploaded_but_record_missing ... ok
+test test_11_all_secondary_missing_preserves_semantic_comparisons ... ok
 test test_21_property_invariants ... ok
 test test_22_primary_record_never_disappears_even_without_doc_and_tax_id ... ok
 test test_24_aggregate_cross_counterparty_tax_id_rejected ... ok
-test test_25_rule_specific_tolerance_precedence ... ok
-test test_14_decimal_rust_serialization_and_artifact_generation ... ok
 test test_23_candidate_not_consumed_by_ambiguous_or_mismatch ... ok
+test test_25_rule_specific_tolerance_precedence ... ok
+test test_29_ambiguous_does_not_lock_candidates ... ok
+test test_28_mismatch_does_not_consume_candidate ... ok
 test test_26_table_driven_all_builtin_scenarios ... ok
+test test_14_decimal_rust_serialization_and_artifact_generation ... ok
+test test_30_no_phantom_vat_when_tk3331_absent ... ok
+test test_15_source_detection_fail_closed ... ok
 test test_27_record_conservation_property_invariant ... ok
 test test_16_dirty_excel_metamorphic_robustness ... ok
-test test_15_source_detection_fail_closed ... ok
+test test_31_baseline_with_explicit_rule_no_fallback ... ok
 test test_17_determinism_20_permutations ... ok
 test test_20_independent_oracle_verification ... ok
 test test_19_real_2_file_baseline_46_45_missing_233 ... ok
 
-test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
 
      Running unittests src\lib.rs (target\debug\deps\tauri_app_lib-31a85b1b44a4d0ed.exe)
 
@@ -108,14 +113,14 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 [1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90mD:/appketoan[39m
 
- [32mΓ£ô[39m src/types/ipcContract.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32mΓ£ô[39m src/types/ipcContract.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
  [32mΓ£ô[39m src/types/dataContract.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 4[2mms[22m[39m
- [32mΓ£ô[39m src/App.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 1158[2mms[22m[39m
-     [33m[2mΓ£ô[22m[39m executes reconciliation on demo datasets and renders Dashboard KPIs & Result Table [33m 511[2mms[22m[39m
-     [33m[2mΓ£ô[22m[39m opens Detail Inspector modal when clicking 'Xem' on a row [33m 493[2mms[22m[39m
+ [32mΓ£ô[39m src/App.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 1142[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m executes reconciliation on demo datasets and renders Dashboard KPIs & Result Table [33m 506[2mms[22m[39m
+     [33m[2mΓ£ô[22m[39m opens Detail Inspector modal when clicking 'Xem' on a row [33m 481[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
-[2m      Tests [22m [1m[32m12 passed[39m[22m[90m (12)[39m
-[2m   Start at [22m 02:29:44
-[2m   Duration [22m 2.22s[2m (transform 196ms, setup 0ms, import 373ms, tests 1.17s, environment 2.00s)[22m
+[2m      Tests [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m   Start at [22m 03:08:14
+[2m   Duration [22m 2.24s[2m (transform 236ms, setup 0ms, import 402ms, tests 1.15s, environment 2.04s)[22m
 

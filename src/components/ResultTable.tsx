@@ -91,28 +91,36 @@ export const ResultTable: React.FC<ResultTableProps> = ({
     return filteredGroups.slice(start, start + pageSize);
   }, [filteredGroups, validPage, pageSize]);
 
-  const renderSemanticStatus = (
-    variance: string | number | undefined,
-    status: MatchStatus,
+  const renderSemanticCell = (
+    group: MatchGroup,
+    semantic: "REVENUE" | "VAT" | "RECEIVABLE",
     missingLabel: string
   ) => {
-    if (variance === undefined || isZeroMoney(variance)) {
-      if (status === "MATCHED_EXACT") {
-        return <span style={{ color: "#16a34a", fontSize: "0.85rem" }}>✓ Khớp</span>;
-      }
-      return <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>-</span>;
-    }
-    if (status === "UNMATCHED_MISSING_IN_TARGET") {
+    const comp = group.semanticComparisons?.find((c) => c.semantic === semantic);
+    if (!comp || comp.status === "NOT_CHECKED") {
       return (
-        <span style={{ color: "#dc2626", fontWeight: 600, fontSize: "0.85rem" }}>
-          ✕ {missingLabel}: {formatVND(variance)}
+        <span style={{ color: "#94a3b8", fontSize: "0.75rem", fontStyle: "italic" }}>
+          Chưa đối chiếu
         </span>
       );
     }
-    const isNeg = String(variance).startsWith("-");
+
+    if (comp.status === "MATCHED_EXACT" || (isZeroMoney(comp.variance) && (comp.status === "MATCHED_WITH_TOLERANCE" || comp.status === "MATCHED_AGGREGATE"))) {
+      return <span style={{ color: "#16a34a", fontSize: "0.85rem", fontWeight: 600 }}>✓ Khớp</span>;
+    }
+
+    if (comp.status === "UNMATCHED_MISSING_IN_TARGET") {
+      return (
+        <span style={{ color: "#dc2626", fontWeight: 600, fontSize: "0.85rem" }}>
+          ✕ {missingLabel}: {formatVND(comp.expectedAmount || comp.variance)}
+        </span>
+      );
+    }
+
+    const isNeg = String(comp.variance).startsWith("-");
     return (
       <span style={{ color: isNeg ? "#dc2626" : "#d97706", fontWeight: 600, fontSize: "0.85rem" }}>
-        {formatVND(variance)}
+        {formatVND(comp.variance)}
       </span>
     );
   };
@@ -212,13 +220,13 @@ export const ResultTable: React.FC<ResultTableProps> = ({
                     </td>
                     <td>{g.date || "-"}</td>
                     <td className="cell-num" style={{ textAlign: "right" }}>
-                      {renderSemanticStatus(g.revenueVariance, g.status, "Thiếu TK511")}
+                      {renderSemanticCell(g, "REVENUE", "Thiếu TK511")}
                     </td>
                     <td className="cell-num" style={{ textAlign: "right" }}>
-                      {renderSemanticStatus(g.vatVariance, g.status, "Thiếu TK3331")}
+                      {renderSemanticCell(g, "VAT", "Thiếu TK3331")}
                     </td>
                     <td className="cell-num" style={{ textAlign: "right" }}>
-                      {renderSemanticStatus(g.receivableVariance, g.status, "Thiếu TK131")}
+                      {renderSemanticCell(g, "RECEIVABLE", "Thiếu TK131")}
                     </td>
                     <td className="cell-reason" title={reasonText}>
                       {reasonText}
