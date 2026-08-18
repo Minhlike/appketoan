@@ -18,6 +18,8 @@ fn test_end_to_end_reconciliation_engine_flow() {
         session_id: "sess_e2e_test_01".to_string(),
         scenario_name: "Đối chiếu Doanh thu & Thuế đầu ra (3 nguồn)".to_string(),
         primary_source_id: Some("src_e_invoice".to_string()),
+        required_source_ids: None,
+        optional_source_ids: None,
         data_sources: vec![
             DataSource {
                 id: "src_e_invoice".to_string(),

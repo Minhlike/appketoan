@@ -3,7 +3,7 @@ use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::models::{CanonicalRecord, DataSource};
+use crate::models::{CanonicalRecord, DataSource, ValueOrigin};
 use crate::reader::header_detector::remove_diacritics;
 
 /// Normalizes Excel serial date floats (e.g. 45300.0 -> "2024-01-09")
@@ -16,7 +16,6 @@ pub fn parse_excel_date(input: &str) -> Option<String> {
     // Try parsing as numeric Excel serial date
     if let Ok(serial) = trimmed.parse::<f64>() {
         if serial > 1000.0 && serial < 100000.0 {
-            // Days since 1899-12-30 (accounting for Excel leap year bug in 1900)
             let base_date = NaiveDate::from_ymd_opt(1899, 12, 30)?;
             let days = serial.floor() as i64;
             if let Some(target_date) = base_date.checked_add_signed(chrono::Duration::days(days)) {
@@ -107,7 +106,6 @@ pub fn parse_amount(input: &str) -> Option<Decimal> {
         return None;
     }
 
-    // Determine decimal and thousand separators
     let has_comma = s.contains(',');
     let has_dot = s.contains('.');
 
@@ -115,10 +113,8 @@ pub fn parse_amount(input: &str) -> Option<Decimal> {
         let last_comma = s.rfind(',').unwrap();
         let last_dot = s.rfind('.').unwrap();
         if last_dot > last_comma {
-            // US format: 1,250,000.50 -> comma thousand, dot decimal
             s.replace(',', "")
         } else {
-            // European/VN format: 1.250.000,50 -> dot thousand, comma decimal
             s.replace('.', "").replace(',', ".")
         }
     } else if has_comma {
@@ -126,10 +122,8 @@ pub fn parse_amount(input: &str) -> Option<Decimal> {
         let last_comma_pos = s.rfind(',').unwrap();
         let digits_after = s.len() - 1 - last_comma_pos;
         if comma_count == 1 && digits_after != 3 {
-            // Decimal comma e.g. "1250,5"
             s.replace(',', ".")
         } else {
-            // Thousand separator e.g. "1,250,000"
             s.replace(',', "")
         }
     } else if has_dot {
@@ -137,10 +131,8 @@ pub fn parse_amount(input: &str) -> Option<Decimal> {
         let last_dot_pos = s.rfind('.').unwrap();
         let digits_after = s.len() - 1 - last_dot_pos;
         if dot_count == 1 && digits_after != 3 {
-            // Decimal dot e.g. "1250.5"
             s
         } else {
-            // Thousand separator e.g. "1.250.000"
             s.replace('.', "")
         }
     } else {
@@ -163,12 +155,16 @@ fn is_summary_keyword(cell: &str) -> bool {
         .trim()
         .to_lowercase();
 
-    // Critical Safeguard: If the cell contains "cong ty" (company), it is a customer/vendor name, NEVER a summary row!
-    if norm.contains("cong ty") || norm.contains("doanh nghiep") || norm.contains("chi nhanh") || norm.contains("hop tac xa") {
+    // Safeguard: company / partner names are never summary rows
+    if norm.contains("cong ty")
+        || norm.contains("doanh nghiep")
+        || norm.contains("chi nhanh")
+        || norm.contains("hop tac xa")
+        || norm.contains("tong cong ty")
+    {
         return false;
     }
 
-    // Exact summary tokens
     matches!(
         norm.as_str(),
         "cong"
@@ -215,7 +211,6 @@ pub fn is_garbage_or_subtotal_row(cells: &[String]) -> bool {
         return true;
     }
 
-    // If any non-empty cell matches an exact summary keyword, treat as garbage/subtotal row
     for cell in &non_empty {
         if is_summary_keyword(cell) {
             return true;
@@ -255,6 +250,7 @@ pub fn normalize_data_source_rows(
     let idx_pretax_amount = col_index(&mapping.pretax_amount_column);
     let idx_vat_amount = col_index(&mapping.vat_amount_column);
     let idx_discount_amount = col_index(&mapping.discount_amount_column);
+    let idx_fee_amount = col_index(&mapping.fee_amount_column);
     let idx_total_amount = col_index(&mapping.total_amount_column);
     let idx_debit_amount = col_index(&mapping.debit_amount_column);
     let idx_credit_amount = col_index(&mapping.credit_amount_column);
@@ -306,23 +302,25 @@ pub fn normalize_data_source_rows(
         let pretax_amount = get_val(idx_pretax_amount).and_then(|a| parse_amount(&a));
         let vat_amount = get_val(idx_vat_amount).and_then(|a| parse_amount(&a));
         let discount_amount = get_val(idx_discount_amount).and_then(|a| parse_amount(&a));
+        let fee_amount = get_val(idx_fee_amount).and_then(|a| parse_amount(&a));
         let debit_amount = get_val(idx_debit_amount).and_then(|a| parse_amount(&a));
         let credit_amount = get_val(idx_credit_amount).and_then(|a| parse_amount(&a));
 
         // Read total_amount directly from total_amount_column if mapped
-        let total_amount = if let Some(tot) = get_val(idx_total_amount).and_then(|a| parse_amount(&a)) {
-            tot
+        let (total_amount, total_amount_origin) = if let Some(tot) = get_val(idx_total_amount).and_then(|a| parse_amount(&a)) {
+            (tot, ValueOrigin::Source)
         } else if let (Some(pretax), Some(vat)) = (pretax_amount, vat_amount) {
-            // Derived value when total amount column is not present in workbook
-            pretax + vat
+            let disc = discount_amount.unwrap_or(Decimal::ZERO);
+            let fee = fee_amount.unwrap_or(Decimal::ZERO);
+            (pretax + vat - disc + fee, ValueOrigin::Derived)
         } else if let Some(pretax) = pretax_amount {
-            pretax
+            (pretax, ValueOrigin::Derived)
         } else if let Some(credit) = credit_amount {
-            credit
+            (credit, ValueOrigin::Derived)
         } else if let Some(debit) = debit_amount {
-            debit
+            (debit, ValueOrigin::Derived)
         } else {
-            Decimal::ZERO
+            (Decimal::ZERO, ValueOrigin::Derived)
         };
 
         let vat_rate = get_val(idx_vat_rate);
@@ -357,7 +355,9 @@ pub fn normalize_data_source_rows(
             pretax_amount,
             vat_amount,
             discount_amount,
+            fee_amount,
             total_amount,
+            total_amount_origin,
             debit_amount,
             credit_amount,
             vat_rate,
@@ -369,13 +369,10 @@ pub fn normalize_data_source_rows(
             raw_fields,
         };
 
-        // STRICT FILTERING:
-        // 1. If row has no monetary values at all (empty/zero amount across pretax, vat, debit, credit, total), skip it!
         if record.has_no_monetary_value() {
             continue;
         }
 
-        // 2. If row has no identifier (no doc_no, no voucher_no, no partner_name), skip it
         if record.doc_no.is_none() && record.voucher_no.is_none() && record.partner_name.is_none() {
             continue;
         }
@@ -413,7 +410,6 @@ mod tests {
 
     #[test]
     fn test_company_names_never_filtered_as_subtotal() {
-        // MUST NOT be treated as summary / garbage
         assert!(!is_garbage_or_subtotal_row(&[
             "1".to_string(),
             "00000101".to_string(),
@@ -433,7 +429,6 @@ mod tests {
             "5,000,000".to_string()
         ]));
 
-        // MUST be treated as summary / garbage
         assert!(is_garbage_or_subtotal_row(&[
             "CỘNG".to_string(),
             "".to_string(),

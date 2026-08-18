@@ -2,12 +2,15 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::models::DataSourceKind;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum MatchStatus {
     MatchedExact,
     MatchedWithTolerance,
     MatchedAggregate,
+    MatchedWithMissingSource,
     MismatchAmount,
     MismatchMetadata,
     UnmatchedMissingInTarget,
@@ -43,6 +46,19 @@ pub struct SourceMatchBreakdown {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SemanticFieldComparison {
+    pub primary_source_id: String,
+    pub secondary_source_id: String,
+    pub secondary_source_kind: DataSourceKind,
+    pub semantic_field: String,
+    pub expected_amount: Decimal,
+    pub actual_amount: Decimal,
+    pub variance: Decimal,
+    pub status: MatchStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MatchGroup {
     pub id: String,
     pub status: MatchStatus,
@@ -52,6 +68,16 @@ pub struct MatchGroup {
     pub source_breakdowns: HashMap<String, SourceMatchBreakdown>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub discrepancies: Vec<FieldDiscrepancy>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub semantic_comparisons: Vec<SemanticFieldComparison>,
+    #[serde(default)]
+    pub revenue_variance: Decimal,
+    #[serde(default)]
+    pub vat_variance: Decimal,
+    #[serde(default)]
+    pub receivable_variance: Decimal,
+    #[serde(default)]
+    pub other_variance: Decimal,
     pub total_source_amount: Decimal,
     pub total_target_amount: Decimal,
     pub amount_variance: Decimal,
@@ -70,6 +96,12 @@ pub struct ReconciliationSummary {
     pub missing_in_source_count: usize,
     pub duplicates_count: usize,
     pub ambiguous_count: usize,
+    #[serde(default)]
+    pub revenue_variance: Decimal,
+    #[serde(default)]
+    pub vat_variance: Decimal,
+    #[serde(default)]
+    pub receivable_variance: Decimal,
     pub net_financial_variance: Decimal,
 }
 
@@ -99,6 +131,9 @@ mod tests {
                 total_target_records: 10,
                 exact_matches_count: 9,
                 mismatches_count: 1,
+                revenue_variance: dec!(0),
+                vat_variance: dec!(0),
+                receivable_variance: dec!(0),
                 net_financial_variance: dec!(50000),
                 ..Default::default()
             },
@@ -110,6 +145,11 @@ mod tests {
                     target_source_record_ids: vec!["rec_2".to_string()],
                     source_breakdowns: HashMap::new(),
                     discrepancies: vec![],
+                    semantic_comparisons: vec![],
+                    revenue_variance: Decimal::ZERO,
+                    vat_variance: Decimal::ZERO,
+                    receivable_variance: Decimal::ZERO,
+                    other_variance: Decimal::ZERO,
                     total_source_amount: dec!(1000000),
                     total_target_amount: dec!(1000000),
                     amount_variance: Decimal::ZERO,
@@ -127,6 +167,11 @@ mod tests {
                         amount_diff: Some(dec!(50000)),
                         message: "Lệch tiền thanh toán 50,000 VND".to_string(),
                     }],
+                    semantic_comparisons: vec![],
+                    revenue_variance: dec!(50000),
+                    vat_variance: Decimal::ZERO,
+                    receivable_variance: Decimal::ZERO,
+                    other_variance: Decimal::ZERO,
                     total_source_amount: dec!(1050000),
                     total_target_amount: dec!(1000000),
                     amount_variance: dec!(50000),

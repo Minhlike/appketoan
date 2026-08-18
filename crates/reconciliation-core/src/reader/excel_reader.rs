@@ -3,7 +3,7 @@ use calamine::{open_workbook_auto, open_workbook_auto_from_rs, Data, Range, Read
 use std::io::Cursor;
 
 use crate::models::{ExcelFileMetadata, SheetMetadata};
-use crate::reader::header_detector::detect_header_and_mapping;
+use crate::reader::header_detector::detect_header_and_mapping_with_context;
 
 /// Formats a Calamine cell value into a clean string representation
 pub fn cell_to_string(cell: &Data) -> String {
@@ -20,7 +20,6 @@ pub fn cell_to_string(cell: &Data) -> String {
         Data::Int(i) => format!("{}", i),
         Data::Bool(b) => format!("{}", b),
         Data::DateTime(d) => {
-            // Excel serial float date or Calamine datetime
             format!("{}", d)
         }
         Data::DateTimeIso(iso) => iso.clone(),
@@ -78,7 +77,7 @@ pub fn inspect_excel_file<P: AsRef<Path>>(path: P) -> Result<ExcelFileMetadata, 
 
             let preview_string_rows = range_to_string_rows(&range, Some(25));
             let (detected_header, detected_start, columns, suggested_mapping, suggested_kind, conf) =
-                detect_header_and_mapping(&preview_string_rows);
+                detect_header_and_mapping_with_context(sheet_name, &preview_string_rows);
 
             let preview_rows: Vec<Vec<String>> = preview_string_rows
                 .into_iter()
@@ -124,7 +123,7 @@ pub fn inspect_excel_bytes(bytes: &[u8], file_name: &str) -> Result<ExcelFileMet
 
             let preview_string_rows = range_to_string_rows(&range, Some(25));
             let (detected_header, detected_start, columns, suggested_mapping, suggested_kind, conf) =
-                detect_header_and_mapping(&preview_string_rows);
+                detect_header_and_mapping_with_context(sheet_name, &preview_string_rows);
 
             let preview_rows: Vec<Vec<String>> = preview_string_rows
                 .into_iter()

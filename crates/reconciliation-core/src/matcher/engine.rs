@@ -5,7 +5,8 @@ use std::collections::{HashMap, HashSet};
 use crate::analyzer::discrepancy_analyzer::{analyze_pair_discrepancies, format_vnd};
 use crate::models::{
     CanonicalRecord, DataSourceKind, FieldDiscrepancy, MatchGroup, MatchStatus,
-    ReconciliationResult, ReconciliationSession, ReconciliationSummary, SourceMatchBreakdown,
+    ReconciliationResult, ReconciliationSession, ReconciliationSummary, SemanticFieldComparison,
+    SourceMatchBreakdown,
 };
 
 /// Resolves pairwise accounting comparison amounts based on exact source relationship
@@ -152,6 +153,11 @@ pub fn execute_reconciliation(
                         doc_no
                     ),
                 }],
+                semantic_comparisons: vec![],
+                revenue_variance: total_src,
+                vat_variance: Decimal::ZERO,
+                receivable_variance: Decimal::ZERO,
+                other_variance: Decimal::ZERO,
                 total_source_amount: total_src,
                 total_target_amount: Decimal::ZERO,
                 amount_variance: total_src,
@@ -238,16 +244,43 @@ pub fn execute_reconciliation(
         let mut group_target_ids: Vec<String> = Vec::new();
         let mut group_discrepancies: Vec<FieldDiscrepancy> = Vec::new();
         let mut group_source_breakdowns: HashMap<String, SourceMatchBreakdown> = HashMap::new();
+        let mut group_semantic_comparisons: Vec<SemanticFieldComparison> = Vec::new();
+
         let mut total_target_amount = Decimal::ZERO;
         let mut matched_in_any_secondary = false;
         let mut all_secondaries_exact = true;
+        let mut has_missing_secondary = false;
         let mut has_mismatch = false;
         let mut has_tolerance = false;
         let mut has_aggregate = false;
 
+        let mut grp_revenue_var = Decimal::ZERO;
+        let mut grp_vat_var = Decimal::ZERO;
+        let mut grp_receivable_var = Decimal::ZERO;
+        let mut grp_other_var = Decimal::ZERO;
+
         let primary_display_amount = primary.pretax_amount.unwrap_or(primary.total_amount);
 
         for sec_idx in &secondary_indexes {
+            let semantic_field = match (&primary_kind, &sec_idx.source_kind) {
+                (DataSourceKind::EInvoice, DataSourceKind::Ledger511) => {
+                    "Doanh thu (Pretax ↔ TK511 Phát sinh Có)"
+                }
+                (DataSourceKind::EInvoice, DataSourceKind::Ledger3331) => {
+                    "Thuế GTGT (VAT ↔ TK3331 Phát sinh Có)"
+                }
+                (DataSourceKind::EInvoice, DataSourceKind::Ledger131) => {
+                    "Công nợ phải thu (Total ↔ TK131 Phát sinh Nợ)"
+                }
+                (DataSourceKind::EInvoice, DataSourceKind::Ledger133) => {
+                    "Thuế GTGT đầu vào (VAT ↔ TK133 Phát sinh Nợ)"
+                }
+                (DataSourceKind::EInvoice, DataSourceKind::BankStatement) => {
+                    "Dòng tiền sao kê (Total ↔ Bank Phát sinh Có)"
+                }
+                _ => "So sánh số tiền đối chiếu",
+            };
+
             let candidates = sec_idx.by_doc_no.get(&doc_key);
             if let Some(candidates) = candidates {
                 let available: Vec<&&CanonicalRecord> = candidates
@@ -257,6 +290,33 @@ pub fn execute_reconciliation(
 
                 if available.is_empty() {
                     all_secondaries_exact = false;
+                    has_missing_secondary = true;
+                    let (pri_comp, _) = resolve_pair_comparison_amounts(
+                        primary,
+                        primary_kind,
+                        primary, // fallback
+                        &sec_idx.source_kind,
+                    );
+                    group_source_breakdowns.insert(
+                        sec_idx.source_id.clone(),
+                        SourceMatchBreakdown {
+                            source_id: sec_idx.source_id.clone(),
+                            source_name: sec_idx.source_name.clone(),
+                            record_ids: vec![],
+                            compared_amount: Decimal::ZERO,
+                            status: MatchStatus::UnmatchedMissingInTarget,
+                            discrepancies: vec![FieldDiscrepancy {
+                                field_name: "docNo".to_string(),
+                                source_value: primary.doc_no.clone(),
+                                target_value: None,
+                                amount_diff: Some(pri_comp),
+                                message: format!(
+                                    "Chứng từ #{} không tìm thấy trong {}",
+                                    doc_key, sec_idx.source_name
+                                ),
+                            }],
+                        },
+                    );
                     continue;
                 }
 
@@ -271,6 +331,22 @@ pub fn execute_reconciliation(
                         &sec_idx.source_kind,
                     );
                     total_target_amount += tgt_comp;
+
+                    let pair_variance = pri_comp - tgt_comp;
+                    match (&primary_kind, &sec_idx.source_kind) {
+                        (DataSourceKind::EInvoice, DataSourceKind::Ledger511) => {
+                            grp_revenue_var += pair_variance;
+                        }
+                        (DataSourceKind::EInvoice, DataSourceKind::Ledger3331) => {
+                            grp_vat_var += pair_variance;
+                        }
+                        (DataSourceKind::EInvoice, DataSourceKind::Ledger131) => {
+                            grp_receivable_var += pair_variance;
+                        }
+                        _ => {
+                            grp_other_var += pair_variance;
+                        }
+                    }
 
                     let discrepancies = analyze_pair_discrepancies(
                         primary,
@@ -303,6 +379,17 @@ pub fn execute_reconciliation(
                     consumed_secondary_ids.insert(target.id.clone());
                     group_target_ids.push(target.id.clone());
                     group_discrepancies.extend(discrepancies.clone());
+
+                    group_semantic_comparisons.push(SemanticFieldComparison {
+                        primary_source_id: primary_source_id.to_string(),
+                        secondary_source_id: sec_idx.source_id.clone(),
+                        secondary_source_kind: sec_idx.source_kind.clone(),
+                        semantic_field: semantic_field.to_string(),
+                        expected_amount: pri_comp,
+                        actual_amount: tgt_comp,
+                        variance: pair_variance,
+                        status: sec_status.clone(),
+                    });
 
                     group_source_breakdowns.insert(
                         sec_idx.source_id.clone(),
@@ -337,6 +424,23 @@ pub fn execute_reconciliation(
                     total_target_amount += sum_target;
 
                     let agg_diff = (pri_comp - sum_target).abs();
+                    let pair_variance = pri_comp - sum_target;
+
+                    match (&primary_kind, &sec_idx.source_kind) {
+                        (DataSourceKind::EInvoice, DataSourceKind::Ledger511) => {
+                            grp_revenue_var += pair_variance;
+                        }
+                        (DataSourceKind::EInvoice, DataSourceKind::Ledger3331) => {
+                            grp_vat_var += pair_variance;
+                        }
+                        (DataSourceKind::EInvoice, DataSourceKind::Ledger131) => {
+                            grp_receivable_var += pair_variance;
+                        }
+                        _ => {
+                            grp_other_var += pair_variance;
+                        }
+                    }
+
                     let target_ids: Vec<String> = available.iter().map(|c| c.id.clone()).collect();
                     for id in &target_ids {
                         consumed_secondary_ids.insert(id.clone());
@@ -362,6 +466,17 @@ pub fn execute_reconciliation(
                         } else {
                             vec![]
                         };
+
+                        group_semantic_comparisons.push(SemanticFieldComparison {
+                            primary_source_id: primary_source_id.to_string(),
+                            secondary_source_id: sec_idx.source_id.clone(),
+                            secondary_source_kind: sec_idx.source_kind.clone(),
+                            semantic_field: semantic_field.to_string(),
+                            expected_amount: pri_comp,
+                            actual_amount: sum_target,
+                            variance: pair_variance,
+                            status: MatchStatus::MatchedAggregate,
+                        });
 
                         group_discrepancies.extend(discrepancies.clone());
                         group_source_breakdowns.insert(
@@ -392,6 +507,17 @@ pub fn execute_reconciliation(
                             ),
                         }];
 
+                        group_semantic_comparisons.push(SemanticFieldComparison {
+                            primary_source_id: primary_source_id.to_string(),
+                            secondary_source_id: sec_idx.source_id.clone(),
+                            secondary_source_kind: sec_idx.source_kind.clone(),
+                            semantic_field: semantic_field.to_string(),
+                            expected_amount: pri_comp,
+                            actual_amount: sum_target,
+                            variance: pair_variance,
+                            status: MatchStatus::MismatchAmount,
+                        });
+
                         group_discrepancies.extend(discrepancies.clone());
                         group_source_breakdowns.insert(
                             sec_idx.source_id.clone(),
@@ -408,6 +534,33 @@ pub fn execute_reconciliation(
                 }
             } else {
                 all_secondaries_exact = false;
+                has_missing_secondary = true;
+                let (pri_comp, _) = resolve_pair_comparison_amounts(
+                    primary,
+                    primary_kind,
+                    primary,
+                    &sec_idx.source_kind,
+                );
+                group_source_breakdowns.insert(
+                    sec_idx.source_id.clone(),
+                    SourceMatchBreakdown {
+                        source_id: sec_idx.source_id.clone(),
+                        source_name: sec_idx.source_name.clone(),
+                        record_ids: vec![],
+                        compared_amount: Decimal::ZERO,
+                        status: MatchStatus::UnmatchedMissingInTarget,
+                        discrepancies: vec![FieldDiscrepancy {
+                            field_name: "docNo".to_string(),
+                            source_value: primary.doc_no.clone(),
+                            target_value: None,
+                            amount_diff: Some(pri_comp),
+                            message: format!(
+                                "Chứng từ #{} không tồn tại trong {}",
+                                doc_key, sec_idx.source_name
+                            ),
+                        }],
+                    },
+                );
             }
         }
 
@@ -416,6 +569,8 @@ pub fn execute_reconciliation(
 
             let overall_status = if has_mismatch {
                 MatchStatus::MismatchAmount
+            } else if has_missing_secondary {
+                MatchStatus::UnmatchedMissingInTarget
             } else if all_secondaries_exact && !group_source_breakdowns.is_empty() {
                 MatchStatus::MatchedExact
             } else if has_tolerance {
@@ -423,10 +578,14 @@ pub fn execute_reconciliation(
             } else if has_aggregate {
                 MatchStatus::MatchedAggregate
             } else {
-                MatchStatus::MatchedExact
+                MatchStatus::MismatchMetadata
             };
 
-            let amount_variance = primary_display_amount - total_target_amount;
+            let amount_variance = if secondary_indexes.len() == 1 {
+                primary_display_amount - total_target_amount
+            } else {
+                grp_revenue_var + grp_vat_var + grp_receivable_var + grp_other_var
+            };
 
             groups.push(MatchGroup {
                 id: format!("grp_match_{}", primary.id),
@@ -435,6 +594,11 @@ pub fn execute_reconciliation(
                 target_source_record_ids: group_target_ids,
                 source_breakdowns: group_source_breakdowns,
                 discrepancies: group_discrepancies,
+                semantic_comparisons: group_semantic_comparisons,
+                revenue_variance: grp_revenue_var,
+                vat_variance: grp_vat_var,
+                receivable_variance: grp_receivable_var,
+                other_variance: grp_other_var,
                 total_source_amount: primary_display_amount,
                 total_target_amount,
                 amount_variance,
@@ -496,6 +660,11 @@ pub fn execute_reconciliation(
                                 target_source_record_ids: vec![target.id.clone()],
                                 source_breakdowns: HashMap::new(),
                                 discrepancies,
+                                semantic_comparisons: vec![],
+                                revenue_variance: pri_comp - tgt_comp,
+                                vat_variance: Decimal::ZERO,
+                                receivable_variance: Decimal::ZERO,
+                                other_variance: Decimal::ZERO,
                                 total_source_amount: pri_comp,
                                 total_target_amount: tgt_comp,
                                 amount_variance: pri_comp - tgt_comp,
@@ -537,6 +706,11 @@ pub fn execute_reconciliation(
                     format_vnd(primary_comp_amount)
                 ),
             }],
+            semantic_comparisons: vec![],
+            revenue_variance: primary_comp_amount,
+            vat_variance: Decimal::ZERO,
+            receivable_variance: Decimal::ZERO,
+            other_variance: Decimal::ZERO,
             total_source_amount: primary_comp_amount,
             total_target_amount: Decimal::ZERO,
             amount_variance: primary_comp_amount,
@@ -579,6 +753,11 @@ pub fn execute_reconciliation(
                         sec_idx.source_name
                     ),
                 }],
+                semantic_comparisons: vec![],
+                revenue_variance: -sec_comp_amount,
+                vat_variance: Decimal::ZERO,
+                receivable_variance: Decimal::ZERO,
+                other_variance: Decimal::ZERO,
                 total_source_amount: Decimal::ZERO,
                 total_target_amount: sec_comp_amount,
                 amount_variance: -sec_comp_amount,
@@ -597,6 +776,10 @@ pub fn execute_reconciliation(
     let mut missing_source_count = 0;
     let mut duplicate_count = 0;
     let mut ambiguous_count = 0;
+
+    let mut sum_revenue_var = Decimal::ZERO;
+    let mut sum_vat_var = Decimal::ZERO;
+    let mut sum_receivable_var = Decimal::ZERO;
     let mut net_variance = Decimal::ZERO;
 
     for g in &groups {
@@ -605,11 +788,16 @@ pub fn execute_reconciliation(
             MatchStatus::MatchedWithTolerance => tolerance_count += 1,
             MatchStatus::MatchedAggregate => aggregate_count += 1,
             MatchStatus::MismatchAmount | MatchStatus::MismatchMetadata => mismatch_count += 1,
-            MatchStatus::UnmatchedMissingInTarget => missing_target_count += 1,
+            MatchStatus::UnmatchedMissingInTarget | MatchStatus::MatchedWithMissingSource => {
+                missing_target_count += 1
+            }
             MatchStatus::UnmatchedMissingInSource => missing_source_count += 1,
             MatchStatus::DuplicateSuspect => duplicate_count += g.primary_source_record_ids.len(),
             MatchStatus::AmbiguousMatch => ambiguous_count += 1,
         }
+        sum_revenue_var += g.revenue_variance;
+        sum_vat_var += g.vat_variance;
+        sum_receivable_var += g.receivable_variance;
         net_variance += g.amount_variance;
     }
 
@@ -624,6 +812,9 @@ pub fn execute_reconciliation(
         missing_in_source_count: missing_source_count,
         duplicates_count: duplicate_count,
         ambiguous_count,
+        revenue_variance: sum_revenue_var,
+        vat_variance: sum_vat_var,
+        receivable_variance: sum_receivable_var,
         net_financial_variance: net_variance,
     };
 

@@ -30,14 +30,16 @@ export const ResultTable: React.FC<ResultTableProps> = ({
         return <span className="status-badge badge-tolerance">≈ Dung sai</span>;
       case "MATCHED_AGGREGATE":
         return <span className="status-badge badge-aggregate">∑ Khớp gộp</span>;
+      case "MATCHED_WITH_MISSING_SOURCE":
+        return <span className="status-badge badge-missing-target">⚠️ Thiếu nguồn thứ cấp</span>;
       case "MISMATCH_AMOUNT":
         return <span className="status-badge badge-mismatch">⚠️ Lệch tiền</span>;
       case "MISMATCH_METADATA":
         return <span className="status-badge badge-mismatch">⚠️ Lệch thông tin</span>;
       case "UNMATCHED_MISSING_IN_TARGET":
-        return <span className="status-badge badge-missing-target">✕ Thiếu bên B</span>;
+        return <span className="status-badge badge-missing-target">✕ Thiếu bên đối chiếu</span>;
       case "UNMATCHED_MISSING_IN_SOURCE":
-        return <span className="status-badge badge-missing-source">✕ Thiếu bên A</span>;
+        return <span className="status-badge badge-missing-source">✕ Thiếu bên nguồn chính</span>;
       case "DUPLICATE_SUSPECT":
         return <span className="status-badge badge-duplicate">⚇ Trùng lặp</span>;
       case "AMBIGUOUS_MATCH":

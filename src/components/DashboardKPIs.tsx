@@ -75,23 +75,71 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
     },
   ];
 
+  const hasSemanticBreakdowns =
+    (summary.revenueVariance !== undefined && summary.revenueVariance !== 0) ||
+    (summary.vatVariance !== undefined && summary.vatVariance !== 0) ||
+    (summary.receivableVariance !== undefined && summary.receivableVariance !== 0);
+
   return (
     <section className="dashboard-section">
       <div className="section-title-row">
         <h2 className="section-title">Kết quả đối chiếu tổng quan</h2>
-        <div className="net-variance-badge">
-          <span className="var-label">Tổng chênh lệch tài chính:</span>
-          <span
-            className={`var-value ${
-              summary.netFinancialVariance === 0
-                ? "var-zero"
-                : summary.netFinancialVariance > 0
-                ? "var-pos"
-                : "var-neg"
-            }`}
-          >
-            {formatMoney(summary.netFinancialVariance)}
-          </span>
+        <div className="variance-badges-container" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+          {summary.revenueVariance !== undefined && (
+            <div className="net-variance-badge" title="Chênh lệch Doanh thu (Pretax ↔ TK 511)">
+              <span className="var-label">Lệch Doanh thu:</span>
+              <span
+                className={`var-value ${
+                  summary.revenueVariance === 0 ? "var-zero" : "var-pos"
+                }`}
+              >
+                {formatMoney(summary.revenueVariance)}
+              </span>
+            </div>
+          )}
+
+          {summary.vatVariance !== undefined && (
+            <div className="net-variance-badge" title="Chênh lệch Thuế GTGT (VAT ↔ TK 3331)">
+              <span className="var-label">Lệch Thuế GTGT:</span>
+              <span
+                className={`var-value ${
+                  summary.vatVariance === 0 ? "var-zero" : "var-pos"
+                }`}
+              >
+                {formatMoney(summary.vatVariance)}
+              </span>
+            </div>
+          )}
+
+          {summary.receivableVariance !== undefined && (
+            <div className="net-variance-badge" title="Chênh lệch Công nợ (Total ↔ TK 131)">
+              <span className="var-label">Lệch Công nợ:</span>
+              <span
+                className={`var-value ${
+                  summary.receivableVariance === 0 ? "var-zero" : "var-pos"
+                }`}
+              >
+                {formatMoney(summary.receivableVariance)}
+              </span>
+            </div>
+          )}
+
+          {!hasSemanticBreakdowns && (
+            <div className="net-variance-badge">
+              <span className="var-label">Chênh lệch tài chính:</span>
+              <span
+                className={`var-value ${
+                  summary.netFinancialVariance === 0
+                    ? "var-zero"
+                    : summary.netFinancialVariance > 0
+                    ? "var-pos"
+                    : "var-neg"
+                }`}
+              >
+                {formatMoney(summary.netFinancialVariance)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

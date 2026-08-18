@@ -39,6 +39,7 @@ pub fn export_reconciliation_to_excel<P: AsRef<Path>>(
             MatchStatus::MatchedExact => "Khớp hoàn toàn",
             MatchStatus::MatchedWithTolerance => "Khớp có dung sai",
             MatchStatus::MatchedAggregate => "Khớp gộp tổng",
+            MatchStatus::MatchedWithMissingSource => "Thiếu nguồn thứ cấp",
             MatchStatus::MismatchAmount => "Sai lệch số tiền",
             MatchStatus::MismatchMetadata => "Sai lệch thông tin",
             MatchStatus::UnmatchedMissingInTarget => "Thiếu bên đối chiếu",

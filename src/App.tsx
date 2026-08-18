@@ -3,6 +3,7 @@ import "./App.css";
 
 import type {
   DataSource,
+  DataSourceKind,
   ExcelFileMetadata,
   MatchGroup,
   PreconfiguredScenario,
@@ -89,6 +90,23 @@ export function App() {
         }
         return item;
       })
+    );
+  };
+
+  // Update source kind
+  const handleUpdateKind = (id: string, newKind: DataSourceKind) => {
+    setSources((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              source: {
+                ...item.source,
+                kind: newKind,
+              },
+            }
+          : item
+      )
     );
   };
 
@@ -307,6 +325,7 @@ export function App() {
           onAddSource={handleAddSource}
           onRemoveSource={handleRemoveSource}
           onUpdateSheet={handleUpdateSheet}
+          onUpdateKind={handleUpdateKind}
           onOpenMapping={(item) => setActiveMappingItem(item)}
           disabled={isRunning}
         />

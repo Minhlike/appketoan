@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import type { DataSource, ExcelFileMetadata } from "../types/dataContract";
+import type { DataSource, ExcelFileMetadata, DataSourceKind } from "../types/dataContract";
 import { inspectExcelBytes } from "../services/api";
 
 interface IngestedSourceItem {
@@ -14,6 +14,7 @@ interface FileIngestionDropzoneProps {
   onAddSource: (item: IngestedSourceItem) => void;
   onRemoveSource: (id: string) => void;
   onUpdateSheet: (id: string, newSheetName: string) => void;
+  onUpdateKind?: (id: string, newKind: DataSourceKind) => void;
   onOpenMapping: (item: IngestedSourceItem) => void;
   disabled?: boolean;
 }
@@ -23,6 +24,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
   onAddSource,
   onRemoveSource,
   onUpdateSheet,
+  onUpdateKind,
   onOpenMapping,
   disabled = false,
 }) => {
@@ -211,6 +213,33 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                   </div>
 
                   <div className="source-field-row">
+                    <label className="field-label">Loại nguồn dữ liệu:</label>
+                    <select
+                      className="select-control"
+                      value={item.source.kind}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const newKind = e.target.value as DataSourceKind;
+                        if (onUpdateKind) {
+                          onUpdateKind(item.id, newKind);
+                        } else {
+                          item.source.kind = newKind;
+                        }
+                      }}
+                    >
+                      <option value="e_invoice">Hóa đơn điện tử</option>
+                      <option value="ledger_511">TK 511 - Doanh thu</option>
+                      <option value="ledger_3331">TK 3331 - Thuế GTGT</option>
+                      <option value="ledger_131">TK 131 - Công nợ (Phải thu)</option>
+                      <option value="ledger_133">TK 133 - Thuế đầu vào</option>
+                      <option value="bank_statement">Sao kê ngân hàng</option>
+                      <option value="cash_book">Sổ quỹ tiền mặt</option>
+                      <option value="branch_ledger">Sổ chi nhánh</option>
+                      <option value="custom">Khác / Tùy chỉnh</option>
+                    </select>
+                  </div>
+
+                  <div className="source-field-row">
                     <label className="field-label">Sheet đối chiếu:</label>
                     <select
                       className="select-control"
@@ -239,7 +268,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                           : "conf-low"
                       }`}
                     >
-                      {confidencePercent >= 80 ? "✓ Tự map cột (" : "⚠️ Cần xem ("}
+                      {confidencePercent >= 80 ? "✓ Tự nhận diện (" : "⚠️ Cần kiểm tra ("}
                       {confidencePercent}%)
                     </span>
                   </div>

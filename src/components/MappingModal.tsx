@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { DataSource, ExcelFileMetadata, ColumnMapping } from "../types/dataContract";
+import type { DataSource, ExcelFileMetadata, ColumnMapping, DataSourceKind } from "../types/dataContract";
 
 interface MappingModalProps {
   source: DataSource;
@@ -24,6 +24,8 @@ export const MappingModal: React.FC<MappingModalProps> = ({
   const availableColumns = currentSheet ? currentSheet.columns : [];
 
   const [mapping, setMapping] = useState<ColumnMapping>({ ...source.columnMapping });
+  const [sourceKind, setSourceKind] = useState<DataSourceKind>(source.kind);
+  const [sourceName, setSourceName] = useState<string>(source.name);
   const [headerRow, setHeaderRow] = useState<number>(source.headerRow);
   const [dataStartRow, setDataStartRow] = useState<number>(source.dataStartRow);
 
@@ -37,6 +39,8 @@ export const MappingModal: React.FC<MappingModalProps> = ({
   const handleSave = () => {
     onSave({
       ...source,
+      name: sourceName,
+      kind: sourceKind,
       headerRow,
       dataStartRow,
       columnMapping: mapping,
@@ -62,6 +66,7 @@ export const MappingModal: React.FC<MappingModalProps> = ({
     { key: "pretaxAmountColumn", label: "Doanh thu chưa thuế", description: "Tiền hàng trước thuế" },
     { key: "vatAmountColumn", label: "Tiền thuế GTGT", description: "Số tiền thuế GTGT" },
     { key: "discountAmountColumn", label: "Tiền chiết khấu thương mại", description: "Số tiền chiết khấu (nếu có)" },
+    { key: "feeAmountColumn", label: "Tiền phí / Lệ phí", description: "Số tiền phí (nếu có)" },
     { key: "totalAmountColumn", label: "Tổng tiền thanh toán", description: "Tổng tiền sau thuế thanh toán" },
     { key: "creditAmountColumn", label: "Phát sinh Có", description: "Dành cho sổ cái TK 511, TK 3331" },
     { key: "debitAmountColumn", label: "Phát sinh Nợ", description: "Dành cho sổ cái TK 131, TK 133" },
@@ -78,7 +83,7 @@ export const MappingModal: React.FC<MappingModalProps> = ({
       <div className="modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <h3 className="modal-title">⚙️ Cấu hình cột dữ liệu: {source.name}</h3>
+            <h3 className="modal-title">⚙️ Cấu hình loại nguồn & cột dữ liệu: {source.name}</h3>
             <p className="modal-subtitle">
               Sheet: <strong>{source.sheetName}</strong> • File: {fileMetadata.fileName}
             </p>
@@ -89,10 +94,37 @@ export const MappingModal: React.FC<MappingModalProps> = ({
         </div>
 
         <div className="modal-body">
-          {/* Row config */}
-          <div className="mapping-row-config">
+          {/* Source classification & row config */}
+          <div className="mapping-row-config" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
             <div className="form-group">
-              <label className="field-label">Dòng Tiêu đề (Header Row):</label>
+              <label className="field-label">Tên nguồn dữ liệu:</label>
+              <input
+                type="text"
+                className="input-control"
+                value={sourceName}
+                onChange={(e) => setSourceName(e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label className="field-label">Loại nguồn đối chiếu:</label>
+              <select
+                className="select-control"
+                value={sourceKind}
+                onChange={(e) => setSourceKind(e.target.value as DataSourceKind)}
+              >
+                <option value="e_invoice">Hóa đơn điện tử</option>
+                <option value="ledger_511">TK 511 - Doanh thu</option>
+                <option value="ledger_3331">TK 3331 - Thuế GTGT</option>
+                <option value="ledger_131">TK 131 - Công nợ (Phải thu)</option>
+                <option value="ledger_133">TK 133 - Thuế đầu vào</option>
+                <option value="bank_statement">Sao kê ngân hàng</option>
+                <option value="cash_book">Sổ quỹ tiền mặt</option>
+                <option value="branch_ledger">Sổ chi nhánh</option>
+                <option value="custom">Khác / Tùy chỉnh</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="field-label">Dòng Tiêu đề (Header):</label>
               <input
                 type="number"
                 min="1"
@@ -102,7 +134,7 @@ export const MappingModal: React.FC<MappingModalProps> = ({
               />
             </div>
             <div className="form-group">
-              <label className="field-label">Dòng Bắt đầu Dữ liệu:</label>
+              <label className="field-label">Dòng Dữ liệu bắt đầu:</label>
               <input
                 type="number"
                 min="1"
@@ -147,7 +179,7 @@ export const MappingModal: React.FC<MappingModalProps> = ({
             Hủy bỏ
           </button>
           <button type="button" className="btn btn-primary" onClick={handleSave}>
-            Lưu cấu hình cột
+            Lưu cấu hình nguồn & cột
           </button>
         </div>
       </div>

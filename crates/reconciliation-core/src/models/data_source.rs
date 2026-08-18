@@ -27,7 +27,7 @@ impl DataSourceKind {
             Self::BankStatement => "Sao kê ngân hàng",
             Self::CashBook => "Sổ quỹ tiền mặt",
             Self::BranchLedger => "Sổ chi nhánh",
-            Self::Custom => "Bảng kê Excel tùy chỉnh",
+            Self::Custom => "Khác / Tùy chỉnh (Cần xác định)",
         }
     }
 }
@@ -70,6 +70,9 @@ pub struct ColumnMapping {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discount_amount_column: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fee_amount_column: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_amount_column: Option<String>,
@@ -153,6 +156,10 @@ pub struct ReconciliationSession {
     pub session_id: String,
     pub scenario_name: String,
     pub primary_source_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required_source_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optional_source_ids: Option<Vec<String>>,
     pub data_sources: Vec<DataSource>,
     pub matching_tolerance_vnd: Decimal,
     pub date_tolerance_days: u32,

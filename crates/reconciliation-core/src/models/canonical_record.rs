@@ -2,6 +2,14 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ValueOrigin {
+    #[default]
+    Source,
+    Derived,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CanonicalRecord {
@@ -45,7 +53,13 @@ pub struct CanonicalRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discount_amount: Option<Decimal>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fee_amount: Option<Decimal>,
+
     pub total_amount: Decimal,
+
+    #[serde(default)]
+    pub total_amount_origin: ValueOrigin,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debit_amount: Option<Decimal>,
@@ -120,6 +134,8 @@ impl CanonicalRecord {
         self.total_amount.is_zero()
             && is_none_or_zero(self.pretax_amount)
             && is_none_or_zero(self.vat_amount)
+            && is_none_or_zero(self.discount_amount)
+            && is_none_or_zero(self.fee_amount)
             && is_none_or_zero(self.debit_amount)
             && is_none_or_zero(self.credit_amount)
     }

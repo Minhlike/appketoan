@@ -26,7 +26,9 @@ fn generate_synthetic_dataset(count: usize, source_id: &str) -> Vec<CanonicalRec
             pretax_amount: Some(pretax),
             vat_amount: Some(vat),
             discount_amount: None,
+            fee_amount: None,
             total_amount: total,
+            total_amount_origin: ValueOrigin::Source,
             debit_amount: None,
             credit_amount: Some(pretax),
             vat_rate: Some("10%".to_string()),
@@ -55,6 +57,8 @@ fn test_performance_scaling_1k_to_100k() {
             session_id: format!("perf_test_{}", count),
             scenario_name: "Benchmark Performance".to_string(),
             primary_source_id: Some("src_a".to_string()),
+            required_source_ids: None,
+            optional_source_ids: None,
             data_sources: vec![
                 DataSource {
                     id: "src_a".to_string(),

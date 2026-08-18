@@ -27,6 +27,7 @@ export interface ColumnMapping {
   pretaxAmountColumn?: string;
   vatAmountColumn?: string;
   discountAmountColumn?: string;
+  feeAmountColumn?: string;
   totalAmountColumn?: string;
   debitAmountColumn?: string;
   creditAmountColumn?: string;
@@ -73,11 +74,15 @@ export interface ReconciliationSession {
   sessionId: string;
   scenarioName: string;
   primarySourceId?: string;
+  requiredSourceIds?: string[];
+  optionalSourceIds?: string[];
   dataSources: DataSource[];
   matchingToleranceVnd: number;
   dateToleranceDays: number;
   enableAggregateMatch: boolean;
 }
+
+export type ValueOrigin = "SOURCE" | "DERIVED";
 
 export interface CanonicalRecord {
   id: string;
@@ -95,7 +100,9 @@ export interface CanonicalRecord {
   pretaxAmount?: number;
   vatAmount?: number;
   discountAmount?: number;
+  feeAmount?: number;
   totalAmount: number;
+  totalAmountOrigin?: ValueOrigin;
   debitAmount?: number;
   creditAmount?: number;
   vatRate?: string;
@@ -135,6 +142,7 @@ export type MatchStatus =
   | "MATCHED_EXACT"
   | "MATCHED_WITH_TOLERANCE"
   | "MATCHED_AGGREGATE"
+  | "MATCHED_WITH_MISSING_SOURCE"
   | "MISMATCH_AMOUNT"
   | "MISMATCH_METADATA"
   | "UNMATCHED_MISSING_IN_TARGET"
@@ -159,6 +167,17 @@ export interface SourceMatchBreakdown {
   discrepancies?: FieldDiscrepancy[];
 }
 
+export interface SemanticFieldComparison {
+  primarySourceId: string;
+  secondarySourceId: string;
+  secondarySourceKind: DataSourceKind;
+  semanticField: string;
+  expectedAmount: number;
+  actualAmount: number;
+  variance: number;
+  status: MatchStatus;
+}
+
 export interface MatchGroup {
   id: string;
   status: MatchStatus;
@@ -166,6 +185,11 @@ export interface MatchGroup {
   targetSourceRecordIds: string[];
   sourceBreakdowns?: Record<string, SourceMatchBreakdown>;
   discrepancies?: FieldDiscrepancy[];
+  semanticComparisons?: SemanticFieldComparison[];
+  revenueVariance?: number;
+  vatVariance?: number;
+  receivableVariance?: number;
+  otherVariance?: number;
   totalSourceAmount: number;
   totalTargetAmount: number;
   amountVariance: number;
@@ -182,6 +206,9 @@ export interface ReconciliationSummary {
   missingInSourceCount: number;
   duplicatesCount: number;
   ambiguousCount: number;
+  revenueVariance?: number;
+  vatVariance?: number;
+  receivableVariance?: number;
   netFinancialVariance: number;
 }
 
