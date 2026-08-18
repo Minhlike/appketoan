@@ -278,7 +278,7 @@ export interface ScenarioRuleDefinition {
   primaryField: string;
   secondarySourceKind?: DataSourceKind;
   secondaryField: string;
-  toleranceVnd?: number;
+  toleranceVnd?: MoneyValue;
   dateToleranceDays?: number;
 }
 
@@ -294,7 +294,7 @@ export interface PreconfiguredScenario {
     required: boolean;
   }[];
   rules: ScenarioRuleDefinition[];
-  defaultToleranceVnd: number;
+  defaultToleranceVnd: MoneyValue;
   defaultDateDays: number;
   enableAggregate: boolean;
 }

@@ -24,7 +24,7 @@ Thumbs.db
 *.sw?
 *.tmp
 
-# Logs & scratch
+# Logs, scratch & audit runtime
 logs/
 *.log
 npm-debug.log*
@@ -34,6 +34,12 @@ pnpm-debug.log*
 lerna-debug.log*
 scratch/
 temp/
+audit/
+audit-runtime/
+.audit-runtime/
+fixtures/artifacts/
+**/fixtures/artifacts/
+crates/reconciliation-core/fixtures/
 
 # Releases and installers
 releases/*.exe

@@ -113,3 +113,11 @@ export function isZeroMoney(val: string | number | undefined | null): boolean {
   const clean = s.replace(/[-+]/g, "").replace(/\./g, "").replace(/,/g, "");
   return /^0*$/.test(clean);
 }
+
+/**
+ * Normalizes user input for monetary settings/tolerance without floating-point conversion
+ */
+export function normalizeMoneyInput(val: string): MoneyValue {
+  const clean = val.replace(/[^0-9.-]/g, "");
+  return clean === "" ? "0" : clean;
+}

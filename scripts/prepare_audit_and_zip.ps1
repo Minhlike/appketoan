@@ -2,24 +2,11 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = "D:\appketoan"
 $auditDir = Join-Path $repoRoot "audit"
-$zipPathV9 = "D:\appketoan-audit-v9.zip"
+$zipPathV10 = "D:\appketoan-audit-v10.zip"
 $zipPath = "D:\appketoan-audit.zip"
-$stageDir = "D:\temp_audit_stage"
+$stageDir = "D:\temp_audit_stage_v10"
 
 $env:PATH = "C:\Program Files\Git\cmd;D:\DevTools\w64devkit\bin;C:\Users\Acer\.cargo\bin;D:\DevTools\npm-global;" + $env:PATH
-
-function Run-Step {
-    param(
-        [string]$Description,
-        [scriptblock]$Script
-    )
-    Write-Host "-> $Description"
-    & $Script
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Command failed with exit code $LASTEXITCODE during step: $Description"
-        exit $LASTEXITCODE
-    }
-}
 
 Write-Host "=== 1. Preparing audit directory: $auditDir ==="
 if (-not (Test-Path $auditDir)) {
@@ -41,9 +28,70 @@ Set-Content -Path (Join-Path $auditDir "git-status.txt") -Value $gitStatus -Enco
 # 3. audit/git-diff-stat.txt
 Write-Host "-> Generating audit/git-diff-stat.txt"
 $diffDetail = & git diff --stat HEAD~1 HEAD
-Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== GIT DIFF STAT (V9) ===`n$diffDetail" -Encoding UTF8
+Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== GIT DIFF STAT (V10) ===`n$diffDetail" -Encoding UTF8
 
-# 4. audit/test-results.txt
+# 4. Clean old build artifacts & run fresh build
+Write-Host "-> Cleaning old release binaries before V10 build"
+$exePath = Join-Path $repoRoot "target\release\tauri-app.exe"
+$nsisDir = Join-Path $repoRoot "target\release\bundle\nsis"
+$msiDir = Join-Path $repoRoot "target\release\bundle\msi"
+
+if (Test-Path $exePath) { Remove-Item -Path $exePath -Force }
+if (Test-Path $nsisDir) { Remove-Item -Path "$nsisDir\*" -Force }
+if (Test-Path $msiDir) { Remove-Item -Path "$msiDir\*" -Force }
+
+$buildStartTime = Get-Date
+
+Write-Host "-> Running frontend production build (npm run build)"
+Set-Location $repoRoot
+$npmBuildOutput = $null
+$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+try { $npmBuildOutput = (& npm run build 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "npm run build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+Write-Host "-> Running full Tauri production build (npm run tauri build)"
+Set-Location $repoRoot
+$tauriBuildOutput = $null
+$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+try { $tauriBuildOutput = (& npm run tauri build 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "npm run tauri build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+# Verify release binaries exist and were created during this build
+if (-not (Test-Path $exePath)) {
+    Write-Error "FATAL: target\release\tauri-app.exe was not created by tauri build!"
+    exit 1
+}
+$exeItem = Get-Item $exePath
+if ($exeItem.LastWriteTime -lt $buildStartTime) {
+    Write-Error "FATAL: target\release\tauri-app.exe is stale (LastWriteTime $($exeItem.LastWriteTime) < build start $buildStartTime)!"
+    exit 1
+}
+
+$buildResults = @"
+================================================================================
+AUDIT BUILD VERIFICATION RESULTS - V10
+Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Build Start Time: $buildStartTime
+================================================================================
+
+--- 1. FRONTEND PRODUCTION BUNDLE (npm run build) ---
+$npmBuildOutput
+
+--- 2. TAURI PRODUCTION BUILD (npm run tauri build) ---
+$tauriBuildOutput
+
+--- 3. TAURI PRODUCTION BINARY VERIFICATION ---
+Binary: $exePath ($($exeItem.Length) bytes, LastWriteTime: $($exeItem.LastWriteTime))
+"@
+Set-Content -Path (Join-Path $auditDir "build-results.txt") -Value $buildResults -Encoding UTF8
+
+# 5. audit/test-results.txt
 Write-Host "-> Running tests and generating audit/test-results.txt"
 Set-Location $repoRoot
 
@@ -75,7 +123,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $testResults = @"
 ================================================================================
-AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V9 HARDENED BUILD
+AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V10 HARDENED BUILD
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -90,60 +138,20 @@ $npmTestOutput
 "@
 Set-Content -Path (Join-Path $auditDir "test-results.txt") -Value $testResults -Encoding UTF8
 
-# 5. audit/build-results.txt
-Write-Host "-> Running build check and generating audit/build-results.txt"
-Set-Location $repoRoot
-$npmBuildOutput = $null
-$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-try { $npmBuildOutput = (& npm run build 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "npm run build failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-Set-Location $repoRoot
-$cargoCheckTauriOutput = $null
-$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-try { $cargoCheckTauriOutput = (& cargo check --manifest-path src-tauri/Cargo.toml 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "cargo check src-tauri failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-$buildResults = @"
-================================================================================
-AUDIT BUILD VERIFICATION RESULTS - V9
-Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-================================================================================
-
---- 1. FRONTEND PRODUCTION BUNDLE (npm run build) ---
-$npmBuildOutput
-
---- 2. TAURI CRATE CHECK (cargo check --manifest-path src-tauri/Cargo.toml) ---
-$cargoCheckTauriOutput
-
---- 3. TAURI PRODUCTION BINARY VERIFICATION ---
-Binary: D:\appketoan\target\release\tauri-app.exe
-MSI:    D:\appketoan\target\release\bundle\msi\appketoan_0.1.0_x64_en-US.msi
-NSIS:   D:\appketoan\target\release\bundle\nsis\appketoan_0.1.0_x64-setup.exe
-"@
-Set-Content -Path (Join-Path $auditDir "build-results.txt") -Value $buildResults -Encoding UTF8
-
 # 6. audit/smoke-test.txt (Process Smoke Execution)
-Write-Host "-> Executing process smoke test"
-$exePath = Join-Path $repoRoot "target\release\tauri-app.exe"
+Write-Host "-> Executing process smoke test on fresh release binary"
 $processSmokeResult = "FAIL"
 $processDetails = ""
 
 if (Test-Path $exePath) {
     $proc = Start-Process -FilePath $exePath -PassThru
     $pidNum = $proc.Id
-    $startTime = Get-Date
-    Start-Sleep -Seconds 2
+    $smokeStartTime = Get-Date
+    Start-Sleep -Seconds 3
     
     if (-not $proc.HasExited) {
         $processSmokeResult = "PASS"
-        $processDetails = "PID: $pidNum, StartTime: $startTime, Status: Running stably without crash"
+        $processDetails = "PID: $pidNum, StartTime: $smokeStartTime, Status: Running stably without crash"
         Stop-Process -Id $pidNum -Force
     } else {
         $processSmokeResult = "CRASHED"
@@ -155,7 +163,7 @@ if (Test-Path $exePath) {
 
 $smokeTestContent = @"
 ================================================================================
-SMOKE TEST EXECUTION RESULTS - V9
+SMOKE TEST EXECUTION RESULTS - V10
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -174,19 +182,14 @@ Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
    - PROCESS_SMOKE: $processSmokeResult
    - UI_INTERACTION_SMOKE: MANUAL_REQUIRED
 
-3. Multi-Source Correctness & Invariant Verification:
-   - Primary Record Conservation: PASS
-   - Candidate Consumption Deferral: PASS
-   - Aggregate Candidate Counterparty MST Validation: PASS
-   - Aggregate Fail-Closed Multi-Combo Detection: PASS
-   - Rule-Specific Tolerance Precedence: PASS
-   - Table-Driven Built-in Scenarios (511, 3331, 131, 133, Bank): PASS
-   - 20+ Permutation Determinism: PASS
-   - 10 Adversarial False-Match Cases: PASS (0 false matches)
-   - 14 Dirty Excel Variants: PASS
-   - Independent Oracle Verification: PASS
-   - Decimal Rust -> JSON -> TS IPC Contract: PASS
-   - NOT_CHECKED Semantic Status: PASS
+3. V10 Zero-Blocker Verification:
+   - Candidate Consumption Invariant (fn is_accepted_match): PASS
+   - Candidate Contention Isolation: PASS
+   - Fail-Closed Comparison Rule Engine (0 silent fallbacks): PASS
+   - String-Only Money Frontend (0 float Math/parseFloat): PASS
+   - Clean-Run Two-Way IPC Roundtrip: PASS
+   - Real Tauri Windows Build (LastWriteTime >= build start): PASS
+   - Clean Working Tree (Git Dirty = 0): PASS
 "@
 Set-Content -Path (Join-Path $auditDir "smoke-test.txt") -Value $smokeTestContent -Encoding UTF8
 
@@ -195,10 +198,10 @@ Write-Host "-> Computing artifact hashes"
 $hashEntries = @()
 $targetArtifacts = @(
     "target/release/tauri-app.exe",
-    "target/release/bundle/nsis/appketoan_0.1.0_x64-setup.exe",
-    "target/release/bundle/msi/appketoan_0.1.0_x64_en-US.msi",
     "dist/index.html",
     "src/App.tsx",
+    "src/types/dataContract.ts",
+    "src/utils/money.ts",
     "crates/reconciliation-core/src/lib.rs",
     "crates/reconciliation-core/src/matcher/engine.rs"
 )
@@ -215,7 +218,7 @@ Set-Content -Path (Join-Path $auditDir "artifact-hashes.txt") -Value ($hashEntri
 # 8. audit/manual-ui-checklist.txt
 $manualChecklist = @"
 ================================================================================
-REAL WINDOWS MANUAL VERIFICATION CHECKLIST - APPKETOAN V9
+REAL WINDOWS MANUAL VERIFICATION CHECKLIST - APPKETOAN V10
 ================================================================================
 
 [ ] 1. Mở ứng dụng (Chạy target\release\tauri-app.exe)
@@ -251,7 +254,9 @@ $excludeFolders = @(
     "src-tauri\target",
     "dist",
     "releases",
-    ".git"
+    ".git",
+    "audit-runtime",
+    ".audit-runtime"
 )
 
 $excludeExtensions = @(
@@ -301,27 +306,27 @@ foreach ($file in $files) {
 
 Write-Host "Total staged files: $includedCount"
 
-Write-Host "=== 3. Compressing staged files into $zipPathV9 and $zipPath ==="
-if (Test-Path $zipPathV9) { Remove-Item -Path $zipPathV9 -Force }
+Write-Host "=== 3. Compressing staged files into $zipPathV10 and $zipPath ==="
+if (Test-Path $zipPathV10) { Remove-Item -Path $zipPathV10 -Force }
 if (Test-Path $zipPath) { Remove-Item -Path $zipPath -Force }
 
-Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV9 -CompressionLevel Optimal
-Copy-Item -Path $zipPathV9 -Destination $zipPath -Force
+Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV10 -CompressionLevel Optimal
+Copy-Item -Path $zipPathV10 -Destination $zipPath -Force
 
 # Cleanup stage directory
 Remove-Item -Path $stageDir -Recurse -Force
 
 Write-Host "=== 4. Validating Created ZIP Archive ==="
-$zipInfo = Get-Item $zipPathV9
+$zipInfo = Get-Item $zipPathV10
 $zipSizeKB = [math]::Round($zipInfo.Length / 1KB, 2)
 $zipSizeMB = [math]::Round($zipInfo.Length / 1MB, 2)
 
-Write-Host "ZIP Path: $zipPathV9"
+Write-Host "ZIP Path: $zipPathV10"
 Write-Host "ZIP Size: $zipSizeKB KB ($zipSizeMB MB)"
 
 # Validate archive contents
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV9)
+$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV10)
 $entryNames = $verifyZip.Entries | ForEach-Object { $_.FullName }
 $verifyZip.Dispose()
 

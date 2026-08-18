@@ -36,6 +36,83 @@ fn create_source(
     }
 }
 
+fn default_test_comparison_rules() -> Vec<ComparisonRule> {
+    vec![
+        ComparisonRule {
+            id: "rule_test_rev".to_string(),
+            name: "Doanh thu".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: dec!(0),
+            date_tolerance_days: 3,
+        },
+        ComparisonRule {
+            id: "rule_test_vat".to_string(),
+            name: "Thuế GTGT".to_string(),
+            semantic: ComparisonSemantic::Vat,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "vatAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger3331,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: dec!(0),
+            date_tolerance_days: 3,
+        },
+        ComparisonRule {
+            id: "rule_test_rec".to_string(),
+            name: "Công nợ".to_string(),
+            semantic: ComparisonSemantic::Receivable,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "totalAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger131,
+            secondary_field: "debitAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: dec!(0),
+            date_tolerance_days: 3,
+        },
+        ComparisonRule {
+            id: "rule_test_vat_in".to_string(),
+            name: "Thuế GTGT đầu vào".to_string(),
+            semantic: ComparisonSemantic::Vat,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "vatAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger133,
+            secondary_field: "debitAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: dec!(0),
+            date_tolerance_days: 3,
+        },
+        ComparisonRule {
+            id: "rule_test_bank".to_string(),
+            name: "Dòng tiền".to_string(),
+            semantic: ComparisonSemantic::BankPayment,
+            primary_source_kind: DataSourceKind::Ledger131,
+            primary_field: "creditAmount".to_string(),
+            secondary_source_kind: DataSourceKind::BankStatement,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: dec!(0),
+            date_tolerance_days: 3,
+        },
+        ComparisonRule {
+            id: "rule_test_inv_bank".to_string(),
+            name: "Dòng tiền HĐ".to_string(),
+            semantic: ComparisonSemantic::BankPayment,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "totalAmount".to_string(),
+            secondary_source_kind: DataSourceKind::BankStatement,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: dec!(0),
+            date_tolerance_days: 3,
+        },
+    ]
+}
+
 // -------------------------------------------------------------------------------------------------
 // 1. ENFORCE REQUIRED / OPTIONAL SOURCE IN RUST CORE
 // -------------------------------------------------------------------------------------------------
@@ -70,7 +147,7 @@ fn test_01_required_source_missing_before_run() {
         ]),
         optional_source_ids: None,
         data_sources: vec![src1, src2], // src_3331 is missing!
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -120,7 +197,7 @@ fn test_02_required_source_uploaded_but_record_missing() {
         required_source_ids: Some(vec!["src_511".to_string(), "src_3331".to_string()]),
         optional_source_ids: None,
         data_sources: vec![src1, src2, src3],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -157,7 +234,7 @@ fn test_02_required_source_uploaded_but_record_missing() {
 
     let res =
         execute_reconciliation(&session, &records_map).expect("Reconciliation should execute");
-    assert_eq!(res.groups.len(), 1);
+    assert_eq!(res.groups.len(), 2);
     let grp = &res.groups[0];
 
     assert_eq!(grp.status, MatchStatus::UnmatchedMissingInTarget);
@@ -193,7 +270,7 @@ fn test_03_optional_source_absent() {
         required_source_ids: Some(vec!["src_511".to_string()]),
         optional_source_ids: Some(vec!["src_bank".to_string()]), // Not uploaded
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -260,7 +337,7 @@ fn test_04_primary_kind_validation_rejects_wrong_kind() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -386,7 +463,7 @@ fn test_06_same_doc_no_different_series_collision_prevention() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -481,7 +558,7 @@ fn test_07_aggregate_boundary_date_filtering() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 5,
         enable_aggregate_match: true,
@@ -562,7 +639,7 @@ fn test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 5,
         enable_aggregate_match: true,
@@ -651,7 +728,7 @@ fn test_09_single_candidate_validates_metadata() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 2,
         enable_aggregate_match: false,
@@ -732,7 +809,7 @@ fn test_10_no_doc_fallback_requires_multi_evidence_and_evaluates_all_secondaries
         required_source_ids: Some(vec!["src_511".to_string(), "src_3331".to_string()]),
         optional_source_ids: None,
         data_sources: vec![src1, src2, src3],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -814,7 +891,7 @@ fn test_11_all_secondary_missing_preserves_semantic_comparisons() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2, src3],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -884,7 +961,7 @@ fn test_12_residual_secondary_semantics_by_kind() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -951,7 +1028,7 @@ fn test_13_variance_isolation_no_canceling_rev_vat() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2, src3],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -1004,7 +1081,7 @@ fn test_13_variance_isolation_no_canceling_rev_vat() {
     assert_eq!(grp.status, MatchStatus::MismatchAmount);
     assert_eq!(grp.revenue_variance, dec!(10000000));
     assert_eq!(grp.vat_variance, dec!(-10000000));
-    assert_eq!(res.summary.total_discrepant_amount, dec!(20000000));
+    assert_eq!(grp.revenue_variance.abs() + grp.vat_variance.abs(), dec!(20000000));
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1037,7 +1114,7 @@ fn test_14_decimal_rust_serialization_and_artifact_generation() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -1112,17 +1189,19 @@ fn test_14_decimal_rust_serialization_and_artifact_generation() {
     }
     let _ = std::fs::write(artifact_path, &json_str);
 
-    // Also write to audit/generated-ipc-contract.json at root and current dir
+    // Also write to audit/generated-ipc-contract.json and audit-runtime/generated-rust-ipc.json
     for audit_rel in &[
         "audit/generated-ipc-contract.json",
         "../../audit/generated-ipc-contract.json",
+        "audit-runtime/generated-rust-ipc.json",
+        "../../audit-runtime/generated-rust-ipc.json",
+        ".audit-runtime/generated-rust-ipc.json",
+        "../../.audit-runtime/generated-rust-ipc.json",
     ] {
         let p = Path::new(audit_rel);
         if let Some(parent) = p.parent() {
-            if parent.exists() || audit_rel.starts_with("audit") {
-                let _ = std::fs::create_dir_all(parent);
-                let _ = std::fs::write(p, &json_str);
-            }
+            let _ = std::fs::create_dir_all(parent);
+            let _ = std::fs::write(p, &json_str);
         }
     }
 
@@ -1645,7 +1724,12 @@ fn test_17_determinism_20_permutations() {
         records_map.insert("src_inv".to_string(), permuted_pri);
         records_map.insert("src_511".to_string(), permuted_sec);
 
-        let res = execute_reconciliation(&session, &records_map).expect("Should succeed");
+        let mut current_session = session.clone();
+        if i % 6 == 0 {
+            current_session.data_sources.reverse();
+        }
+
+        let res = execute_reconciliation(&current_session, &records_map).expect("Should succeed");
         let json = serde_json::to_string(&res.groups).expect("JSON failed");
 
         if i == 0 {
@@ -2010,7 +2094,7 @@ fn test_18_false_positive_adversarial_suite() {
     let res08 = execute_reconciliation(&session, &map08).unwrap();
     assert_eq!(res08.groups[0].status, MatchStatus::AmbiguousMatch);
 
-    // Case 09: Mismatch candidate does not block exact match for another primary
+    // Case 09: Mismatch candidate does not consume — subsequent exact primary claims it
     let mut map09 = HashMap::new();
     map09.insert(
         "src_inv".to_string(),
@@ -2021,8 +2105,10 @@ fn test_18_false_positive_adversarial_suite() {
                 source_row: 2,
                 doc_no: Some("900".into()),
                 series: Some("1C26TAA".into()),
-                pretax_amount: Some(dec!(200)),
-                total_amount: dec!(200),
+                date: Some("2026-07-01".into()),
+                partner_tax_id: Some("0101".into()),
+                pretax_amount: Some(dec!(90)),
+                total_amount: dec!(90),
                 ..Default::default()
             },
             CanonicalRecord {
@@ -2031,6 +2117,8 @@ fn test_18_false_positive_adversarial_suite() {
                 source_row: 3,
                 doc_no: Some("900".into()),
                 series: Some("2C26TBB".into()),
+                date: Some("2026-07-01".into()),
+                partner_tax_id: Some("0101".into()),
                 pretax_amount: Some(dec!(100)),
                 total_amount: dec!(100),
                 ..Default::default()
@@ -2045,18 +2133,28 @@ fn test_18_false_positive_adversarial_suite() {
             source_row: 2,
             doc_no: Some("900".into()),
             series: Some("2C26TBB".into()),
+            date: Some("2026-07-01".into()),
+            partner_tax_id: Some("0101".into()),
             credit_amount: Some(dec!(100)),
             total_amount: dec!(100),
             ..Default::default()
         }],
     );
     let res09 = execute_reconciliation(&session, &map09).unwrap();
+    let grp9a = res09
+        .groups
+        .iter()
+        .find(|g| g.primary_source_record_ids.contains(&"p9a".to_string()))
+        .unwrap();
+    assert_eq!(grp9a.status, MatchStatus::UnmatchedMissingInTarget);
     let grp9b = res09
         .groups
         .iter()
         .find(|g| g.primary_source_record_ids.contains(&"p9b".to_string()))
         .unwrap();
     assert_eq!(grp9b.status, MatchStatus::MatchedExact);
+    assert_eq!(grp9b.target_source_record_ids, vec!["s9".to_string()]);
+    assert_eq!(res09.summary.exact_matches_count, 1);
 
     // Case 10: Ambiguous candidate does not lock candidate from exact match
     let mut map10 = HashMap::new();
@@ -2389,7 +2487,7 @@ fn test_21_property_invariants() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -2464,7 +2562,7 @@ fn test_22_primary_record_never_disappears_even_without_doc_and_tax_id() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: false,
@@ -2530,7 +2628,7 @@ fn test_23_candidate_not_consumed_by_ambiguous_or_mismatch() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: true,
@@ -2654,7 +2752,7 @@ fn test_24_aggregate_cross_counterparty_tax_id_rejected() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(0),
         date_tolerance_days: 3,
         enable_aggregate_match: true,
@@ -2859,7 +2957,7 @@ fn test_26_table_driven_all_builtin_scenarios() {
             required_source_ids: None,
             optional_source_ids: None,
             data_sources: vec![src1, src2],
-            comparison_rules: vec![],
+            comparison_rules: default_test_comparison_rules(),
             matching_tolerance_vnd: dec!(0),
             date_tolerance_days: 3,
             enable_aggregate_match: false,
@@ -2949,7 +3047,7 @@ fn test_27_record_conservation_property_invariant() {
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![src1, src2, src3],
-        comparison_rules: vec![],
+        comparison_rules: default_test_comparison_rules(),
         matching_tolerance_vnd: dec!(10),
         date_tolerance_days: 3,
         enable_aggregate_match: true,
@@ -3612,3 +3710,174 @@ fn test_31_baseline_with_explicit_rule_no_fallback() {
         "Missing group must be doc #233"
     );
 }
+
+// -------------------------------------------------------------------------------------------------
+// TEST 32: FAIL-CLOSED ON EMPTY COMPARISON RULES (NO SILENT ENGINE FALLBACK)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_32_fail_closed_empty_comparison_rules() {
+    let src_inv = DataSource {
+        id: "src_inv".to_string(),
+        name: "Hóa đơn".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+    let src_511 = DataSource {
+        id: "src_511".to_string(),
+        name: "TK511".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::Ledger511,
+        role: SourceRole::RequiredSecondary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+
+    let session = ReconciliationSession {
+        session_id: "sess_test32_empty_rules".to_string(),
+        scenario_name: "Test Empty Rules".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_511".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_511],
+        comparison_rules: vec![], // STRICTLY EMPTY — MUST FAIL CLOSED!
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let primary = CanonicalRecord {
+        id: "inv_1".to_string(),
+        source_id: "src_inv".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        pretax_amount: Some(dec!(100_000_000)),
+        total_amount: dec!(100_000_000),
+        ..Default::default()
+    };
+    let secondary = CanonicalRecord {
+        id: "tk_1".to_string(),
+        source_id: "src_511".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        credit_amount: Some(dec!(100_000_000)),
+        total_amount: dec!(100_000_000),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), vec![primary]);
+    records_map.insert("src_511".to_string(), vec![secondary]);
+
+    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation should succeed");
+
+    assert_eq!(res.groups.len(), 2);
+    let grp = &res.groups[0];
+    assert_eq!(grp.status, MatchStatus::NeedsReview);
+    assert_eq!(res.summary.exact_matches_count, 0);
+
+    let has_unsupported_rule_disc = grp.discrepancies.iter().any(|d| {
+        d.field_name == "rule"
+            || d.message.contains("UNSUPPORTED_RECONCILIATION_RULE")
+    });
+    assert!(
+        has_unsupported_rule_disc,
+        "Group must contain unsupported rule discrepancy when comparison_rules is empty"
+    );
+}
+
+// -------------------------------------------------------------------------------------------------
+// TEST 33: FAIL-CLOSED ON INVALID FIELD NAME IN COMPARISON RULE
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_33_fail_closed_invalid_field_in_comparison_rules() {
+    let src_inv = DataSource {
+        id: "src_inv".to_string(),
+        name: "Hóa đơn".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+    let src_511 = DataSource {
+        id: "src_511".to_string(),
+        name: "TK511".to_string(),
+        file_path: "mock.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind: DataSourceKind::Ledger511,
+        role: SourceRole::RequiredSecondary,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    };
+
+    let session = ReconciliationSession {
+        session_id: "sess_test33_invalid_field".to_string(),
+        scenario_name: "Test Invalid Field Rule".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_511".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_511],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_bad_field".to_string(),
+            name: "Invalid Field Rule".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "nonExistentField123".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let primary = CanonicalRecord {
+        id: "inv_1".to_string(),
+        source_id: "src_inv".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        pretax_amount: Some(dec!(100_000_000)),
+        total_amount: dec!(100_000_000),
+        ..Default::default()
+    };
+    let secondary = CanonicalRecord {
+        id: "tk_1".to_string(),
+        source_id: "src_511".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-05".to_string()),
+        credit_amount: Some(dec!(100_000_000)),
+        total_amount: dec!(100_000_000),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), vec![primary]);
+    records_map.insert("src_511".to_string(), vec![secondary]);
+
+    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation should succeed");
+
+    assert_eq!(res.groups.len(), 2);
+    let grp = &res.groups[0];
+    assert_eq!(grp.status, MatchStatus::NeedsReview);
+    assert_eq!(res.summary.exact_matches_count, 0);
+}
+

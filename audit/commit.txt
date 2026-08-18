@@ -1,3 +1,0 @@
-﻿COMMIT_HASH: 7cadb5f49e3e4fef8ab1528987efba5aa98e5761
-
-commit 7cadb5f49e3e4fef8ab1528987efba5aa98e5761 Author:     Antigravity Architect <architect@appketoan.local> AuthorDate: Wed Aug 19 03:08:01 2026 +0700 Commit:     Antigravity Architect <architect@appketoan.local> CommitDate: Wed Aug 19 03:08:01 2026 +0700      feat(v8): complete reliability hardening: candidate deferral, NOT_CHECKED semantics, string money types, and fail-closed audit packaging

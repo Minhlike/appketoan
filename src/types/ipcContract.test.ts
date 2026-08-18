@@ -253,10 +253,10 @@ describe("IPC Contract & Decimal Safety Tests", () => {
     const tsSession: ReconciliationSession = {
       sessionId: "sess_ts_to_rust_roundtrip",
       scenarioName: "TS to Rust Round-trip",
-      primarySourceId: "src_inv_ts",
+      primarySourceId: "src_0_e_invoice",
       expectedPrimaryKind: "e_invoice",
-      requiredSourceIds: ["src_511_ts"],
-      optionalSourceIds: ["src_3331_ts", "src_131_ts"],
+      requiredSourceIds: ["src_1_ledger_511"],
+      optionalSourceIds: [],
       matchingToleranceVnd: "50000",
       dateToleranceDays: 5,
       enableAggregateMatch: true,
@@ -266,7 +266,7 @@ describe("IPC Contract & Decimal Safety Tests", () => {
         filePath: `C:/mock/${kind}.xlsx`,
         sheetName: "Sheet1",
         kind,
-        role: idx === 0 ? "PRIMARY" : "REQUIRED_SECONDARY",
+        role: idx === 0 ? "PRIMARY" : (idx === 1 ? "REQUIRED_SECONDARY" : "OPTIONAL_SECONDARY"),
         headerRow: 1,
         dataStartRow: 2,
         columnMapping: {
@@ -287,18 +287,109 @@ describe("IPC Contract & Decimal Safety Tests", () => {
           toleranceVnd: "0",
           dateToleranceDays: 3,
         },
+        {
+          id: "rule_ts_vat",
+          name: "VAT Rule",
+          semantic: "VAT",
+          primarySourceKind: "e_invoice",
+          primaryField: "vatAmount",
+          secondarySourceKind: "ledger_3331",
+          secondaryField: "creditAmount",
+          isRequired: false,
+          toleranceVnd: "0",
+          dateToleranceDays: 3,
+        },
+        {
+          id: "rule_ts_rec",
+          name: "Receivable Rule",
+          semantic: "RECEIVABLE",
+          primarySourceKind: "e_invoice",
+          primaryField: "totalAmount",
+          secondarySourceKind: "ledger_131",
+          secondaryField: "debitAmount",
+          isRequired: false,
+          toleranceVnd: "0",
+          dateToleranceDays: 3,
+        },
+        {
+          id: "rule_ts_vat_in",
+          name: "VAT In Rule",
+          semantic: "VAT",
+          primarySourceKind: "e_invoice",
+          primaryField: "vatAmount",
+          secondarySourceKind: "ledger_133",
+          secondaryField: "debitAmount",
+          isRequired: false,
+          toleranceVnd: "0",
+          dateToleranceDays: 3,
+        },
+        {
+          id: "rule_ts_bank",
+          name: "Bank Rule",
+          semantic: "BANK_PAYMENT",
+          primarySourceKind: "e_invoice",
+          primaryField: "totalAmount",
+          secondarySourceKind: "bank_statement",
+          secondaryField: "creditAmount",
+          isRequired: false,
+          toleranceVnd: "0",
+          dateToleranceDays: 3,
+        },
+        {
+          id: "rule_ts_cash",
+          name: "Cash Rule",
+          semantic: "OTHER",
+          primarySourceKind: "e_invoice",
+          primaryField: "totalAmount",
+          secondarySourceKind: "cash_book",
+          secondaryField: "creditAmount",
+          isRequired: false,
+          toleranceVnd: "0",
+          dateToleranceDays: 3,
+        },
+        {
+          id: "rule_ts_branch",
+          name: "Branch Rule",
+          semantic: "OTHER",
+          primarySourceKind: "e_invoice",
+          primaryField: "totalAmount",
+          secondarySourceKind: "branch_ledger",
+          secondaryField: "creditAmount",
+          isRequired: false,
+          toleranceVnd: "0",
+          dateToleranceDays: 3,
+        },
+        {
+          id: "rule_ts_custom",
+          name: "Custom Rule",
+          semantic: "OTHER",
+          primarySourceKind: "e_invoice",
+          primaryField: "totalAmount",
+          secondarySourceKind: "custom",
+          secondaryField: "totalAmount",
+          isRequired: false,
+          toleranceVnd: "0",
+          dateToleranceDays: 3,
+        },
       ],
     };
 
-    const outPath = path.resolve(
-      __dirname,
-      "../../crates/reconciliation-core/fixtures/artifacts/ts_generated_session.json"
-    );
-    const parentDir = path.dirname(outPath);
-    if (!fs.existsSync(parentDir)) {
-      fs.mkdirSync(parentDir, { recursive: true });
+    const outPaths = [
+      path.resolve(
+        __dirname,
+        "../../crates/reconciliation-core/fixtures/artifacts/ts_generated_session.json"
+      ),
+      path.resolve(__dirname, "../../audit-runtime/generated-ts-ipc.json"),
+      path.resolve(__dirname, "../../.audit-runtime/generated-ts-ipc.json"),
+    ];
+
+    for (const outPath of outPaths) {
+      const parentDir = path.dirname(outPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+      fs.writeFileSync(outPath, JSON.stringify(tsSession, null, 2), "utf-8");
+      expect(fs.existsSync(outPath)).toBe(true);
     }
-    fs.writeFileSync(outPath, JSON.stringify(tsSession, null, 2), "utf-8");
-    expect(fs.existsSync(outPath)).toBe(true);
   });
 });

@@ -5,6 +5,7 @@ import type {
   ComparisonSemantic,
   DataSource,
   DataSourceKind,
+  MoneyValue,
   SourceRole,
   ExcelFileMetadata,
   MatchGroup,
@@ -18,6 +19,7 @@ import {
   PRECONFIGURED_SCENARIOS,
   runReconciliation,
 } from "./services/api";
+import { normalizeMoneyInput } from "./utils/money";
 
 import { Header } from "./components/Header";
 import { ScenarioSelector } from "./components/ScenarioSelector";
@@ -42,7 +44,7 @@ export function App() {
   const [activeMappingItem, setActiveMappingItem] = useState<IngestedSourceItem | null>(null);
 
   // Settings
-  const [toleranceVnd, setToleranceVnd] = useState<number>(selectedScenario.defaultToleranceVnd);
+  const [toleranceVnd, setToleranceVnd] = useState<MoneyValue>(selectedScenario.defaultToleranceVnd);
   const [dateToleranceDays, setDateToleranceDays] = useState<number>(selectedScenario.defaultDateDays);
   const [enableAggregate, setEnableAggregate] = useState<boolean>(selectedScenario.enableAggregate);
 
@@ -455,13 +457,12 @@ export function App() {
             <label className="option-control">
               <span>Dung sai số tiền:</span>
               <input
-                type="number"
-                min="0"
-                step="1"
+                type="text"
                 className="input-control input-sm"
                 value={toleranceVnd}
-                onChange={(e) => setToleranceVnd(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setToleranceVnd(normalizeMoneyInput(e.target.value))}
                 disabled={isRunning}
+                placeholder="0"
               />
               <span className="unit-label">VND</span>
             </label>
