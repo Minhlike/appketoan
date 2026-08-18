@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/reconciliation-core",
+    "src-tauri",
+]
+resolver = "2"
