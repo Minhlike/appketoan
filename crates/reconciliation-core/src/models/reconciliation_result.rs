@@ -1,0 +1,127 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum MatchStatus {
+    MatchedExact,
+    MatchedWithTolerance,
+    MatchedAggregate,
+    MismatchAmount,
+    MismatchMetadata,
+    UnmatchedMissingInTarget,
+    UnmatchedMissingInSource,
+    DuplicateSuspect,
+    AmbiguousMatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldDiscrepancy {
+    pub field_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount_diff: Option<f64>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatchGroup {
+    pub id: String,
+    pub status: MatchStatus,
+    pub primary_source_record_ids: Vec<String>,
+    pub target_source_record_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub discrepancies: Vec<FieldDiscrepancy>,
+    pub total_source_amount: f64,
+    pub total_target_amount: f64,
+    pub amount_variance: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationSummary {
+    pub total_source_records: usize,
+    pub total_target_records: usize,
+    pub exact_matches_count: usize,
+    pub tolerance_matches_count: usize,
+    pub aggregate_matches_count: usize,
+    pub mismatches_count: usize,
+    pub missing_in_target_count: usize,
+    pub missing_in_source_count: usize,
+    pub duplicates_count: usize,
+    pub ambiguous_count: usize,
+    pub net_financial_variance: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationResult {
+    pub session_id: String,
+    pub executed_at: String,
+    pub profile_id: String,
+    pub summary: ReconciliationSummary,
+    pub groups: Vec<MatchGroup>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reconciliation_result_summary() {
+        let result = ReconciliationResult {
+            session_id: "sess_01".to_string(),
+            executed_at: "2026-08-18T22:30:00Z".to_string(),
+            profile_id: "prof_standard".to_string(),
+            summary: ReconciliationSummary {
+                total_source_records: 10,
+                total_target_records: 10,
+                exact_matches_count: 9,
+                mismatches_count: 1,
+                net_financial_variance: 50_000.0,
+                ..Default::default()
+            },
+            groups: vec![
+                MatchGroup {
+                    id: "grp_1".to_string(),
+                    status: MatchStatus::MatchedExact,
+                    primary_source_record_ids: vec!["rec_1".to_string()],
+                    target_source_record_ids: vec!["rec_2".to_string()],
+                    discrepancies: vec![],
+                    total_source_amount: 1_000_000.0,
+                    total_target_amount: 1_000_000.0,
+                    amount_variance: 0.0,
+                },
+                MatchGroup {
+                    id: "grp_2".to_string(),
+                    status: MatchStatus::MismatchAmount,
+                    primary_source_record_ids: vec!["rec_3".to_string()],
+                    target_source_record_ids: vec!["rec_4".to_string()],
+                    discrepancies: vec![FieldDiscrepancy {
+                        field_name: "totalAmount".to_string(),
+                        source_value: Some("1,050,000".to_string()),
+                        target_value: Some("1,000,000".to_string()),
+                        amount_diff: Some(50_000.0),
+                        message: "Lệch tiền thanh toán 50,000 VND".to_string(),
+                    }],
+                    total_source_amount: 1_050_000.0,
+                    total_target_amount: 1_000_000.0,
+                    amount_variance: 50_000.0,
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&result).expect("Serialization failed");
+        assert!(json.contains("MATCHED_EXACT"));
+        assert!(json.contains("MISMATCH_AMOUNT"));
+        assert!(json.contains("50000"));
+
+        let deserialized: ReconciliationResult =
+            serde_json::from_str(&json).expect("Deserialization failed");
+        assert_eq!(result, deserialized);
+    }
+}

@@ -1,0 +1,89 @@
+{
+  "sessionId": "mock_session_202601",
+  "executedAt": "2026-08-18T22:30:00Z",
+  "profileId": "profile_invoice_vs_511",
+  "summary": {
+    "totalSourceRecords": 3,
+    "totalTargetRecords": 3,
+    "exactMatchesCount": 1,
+    "toleranceMatchesCount": 0,
+    "aggregateMatchesCount": 0,
+    "mismatchesCount": 1,
+    "missingInTargetCount": 1,
+    "missingInSourceCount": 1,
+    "duplicatesCount": 0,
+    "ambiguousCount": 0,
+    "netFinancialVariance": 400000
+  },
+  "groups": [
+    {
+      "id": "grp_match_001",
+      "status": "MATCHED_EXACT",
+      "primarySourceRecordIds": ["inv_001"],
+      "targetSourceRecordIds": ["led_001"],
+      "discrepancies": [],
+      "totalSourceAmount": 11000000,
+      "totalTargetAmount": 11000000,
+      "amountVariance": 0
+    },
+    {
+      "id": "grp_mismatch_002",
+      "status": "MISMATCH_AMOUNT",
+      "primarySourceRecordIds": ["inv_002"],
+      "targetSourceRecordIds": ["led_002"],
+      "discrepancies": [
+        {
+          "fieldName": "vatAmount",
+          "sourceValue": "2,000,000",
+          "targetValue": "1,600,000",
+          "amountDiff": 400000,
+          "message": "Lệch tiền thuế GTGT: HĐĐT là 2,000,000 (10%), Sổ cái hạch toán 1,600,000 (8%)"
+        },
+        {
+          "fieldName": "totalAmount",
+          "sourceValue": "22,000,000",
+          "targetValue": "21,600,000",
+          "amountDiff": 400000,
+          "message": "Lệch tổng tiền thanh toán: chênh lệch 400,000 VND"
+        }
+      ],
+      "totalSourceAmount": 22000000,
+      "totalTargetAmount": 21600000,
+      "amountVariance": 400000
+    },
+    {
+      "id": "grp_missing_target_003",
+      "status": "UNMATCHED_MISSING_IN_TARGET",
+      "primarySourceRecordIds": ["inv_003"],
+      "targetSourceRecordIds": [],
+      "discrepancies": [
+        {
+          "fieldName": "docNo",
+          "sourceValue": "00000014",
+          "targetValue": null,
+          "message": "Hóa đơn #00000014 trên Cổng HĐĐT chưa được hạch toán vào Sổ cái TK 511"
+        }
+      ],
+      "totalSourceAmount": 5400000,
+      "totalTargetAmount": 0,
+      "amountVariance": 5400000
+    },
+    {
+      "id": "grp_missing_source_004",
+      "status": "UNMATCHED_MISSING_IN_SOURCE",
+      "primarySourceRecordIds": [],
+      "targetSourceRecordIds": ["led_003"],
+      "discrepancies": [
+        {
+          "fieldName": "voucherNo",
+          "sourceValue": null,
+          "targetValue": "PKT-00105",
+          "message": "Chứng từ PKT-00105 trong Sổ cái TK 511 không tìm thấy Hóa đơn điện tử tương ứng"
+        }
+      ],
+      "totalSourceAmount": 0,
+      "totalTargetAmount": 16500000,
+      "amountVariance": -16500000
+    }
+  ]
+}

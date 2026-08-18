@@ -1,0 +1,53 @@
+[
+  {
+    "id": "led_001",
+    "sourceId": "src_ledger_511",
+    "sourceRow": 10,
+    "date": "2026-01-10",
+    "docNo": "12",
+    "series": "1C26TAA",
+    "partnerTaxId": "0109999001",
+    "partnerName": "Công ty TNHH Hóa Chất Sao Mai (Synthetic)",
+    "pretaxAmount": 10000000,
+    "vatAmount": 1000000,
+    "totalAmount": 11000000,
+    "debitAccount": "131",
+    "creditAccount": "5111",
+    "voucherNo": "PKT-00101",
+    "description": "Xuất bán hóa chất theo HĐ 12"
+  },
+  {
+    "id": "led_002",
+    "sourceId": "src_ledger_511",
+    "sourceRow": 11,
+    "date": "2026-01-15",
+    "docNo": "13",
+    "series": "1C26TAA",
+    "partnerTaxId": "0109999002",
+    "partnerName": "Công ty CP Cơ Khí An Phát (Synthetic)",
+    "pretaxAmount": 20000000,
+    "vatAmount": 1600000,
+    "totalAmount": 21600000,
+    "debitAccount": "131",
+    "creditAccount": "5111",
+    "voucherNo": "PKT-00102",
+    "description": "Xuất bán linh kiện cơ khí theo HĐ 13 (Nhầm VAT 8% thay vì 10%)"
+  },
+  {
+    "id": "led_003",
+    "sourceId": "src_ledger_511",
+    "sourceRow": 12,
+    "date": "2026-01-25",
+    "docNo": "99",
+    "series": "1C26TAA",
+    "partnerTaxId": "0109999099",
+    "partnerName": "Doanh Nghiệp Tư Nhân Hải Hà (Synthetic)",
+    "pretaxAmount": 15000000,
+    "vatAmount": 1500000,
+    "totalAmount": 16500000,
+    "debitAccount": "1111",
+    "creditAccount": "5111",
+    "voucherNo": "PKT-00105",
+    "description": "Thu tiền mặt bán lẻ không có hóa đơn trên cổng"
+  }
+]

@@ -1,33 +1,33 @@
 # Agent Handoff
 
-## Session Summary (Prompt 0 — Bootstrap)
-- Initialized clean repository structure for `D:\appketoan`.
-- Setup Rust 1.97.1 toolchain with `stable-x86_64-pc-windows-gnu` and MinGW GCC / dlltool from `w64devkit` located at `D:\DevTools\w64devkit`.
-- Scaffolded minimal Tauri 2 + React + TypeScript + Vite project displaying "Accounting Reconciliation — Bootstrap Ready".
-- Established baseline tests (Vitest frontend suite, Rust `cargo check` and `cargo test`) all passing 100%.
-- Configured security `.gitignore` to prevent any committing of real accounting/business files or credentials.
-- Initialized long-term AI memory system (`.agent/`, `AGENTS.md`) and documentation foundation (`docs/`).
+## Session Summary (Prompt 1 — Requirements & Data Contract)
+- Formulated complete Functional Requirements for multi-source reconciliation in `docs/01-requirements/01-multi-source-reconciliation.md`.
+- Formulated Accounting Matching Rules, cardinalities ($1 \leftrightarrow 1, 1 \leftrightarrow N, N \leftrightarrow M$), and discrepancy taxonomy in `docs/02-accounting-rules/01-matching-scenarios.md`.
+- Formulated Vietnamese Accounting Standards (VAS, Circular 200/133, Decree 123) in `docs/02-accounting-rules/02-vietnamese-accounting-standards.md`.
+- Designed and documented Canonical Data Contract in `docs/03-data-contract/`.
+- Implemented pure Rust domain crate `crates/reconciliation-core` with serde serialization, normalization, and invariant validation.
+- Implemented synchronized TypeScript interface in `src/types/dataContract.ts`.
+- Created realistic synthetic fixtures in `fixtures/synthetic/` and golden output in `fixtures/expected/`.
+- Ran and verified 11 automated test suites across TypeScript and Rust (all passing 100%).
 
 ## Key Modified/Created Files
-- `AGENTS.md`
-- `README.md`
-- `.gitignore`
-- `.editorconfig`
-- `.agent/*.md`
-- `docs/**`
-- `src/App.tsx`, `src/App.css`, `src/App.test.tsx`
-- `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`
-- `vite.config.ts`, `package.json`
-- `scripts/*.ps1`
+- `docs/01-requirements/01-multi-source-reconciliation.md`
+- `docs/02-accounting-rules/01-matching-scenarios.md`
+- `docs/02-accounting-rules/02-vietnamese-accounting-standards.md`
+- `docs/03-data-contract/*.md`
+- `crates/reconciliation-core/**`
+- `src/types/dataContract.ts`
+- `src/types/dataContract.test.ts`
+- `fixtures/synthetic/**`
+- `fixtures/expected/**`
+- `scripts/check.ps1`, `scripts/test.ps1`
 
 ## Verification Commands & Status
-1. `npm test` -> PASS (Vitest unit test passed in < 1s).
-2. `npm run check` -> PASS (TypeScript compiler passed with 0 errors).
-3. `npm run build` -> PASS (Vite production bundle built successfully).
-4. `cargo check` -> PASS (Rust Tauri backend compiles with 0 errors).
-5. `cargo test` -> PASS (Rust unit tests passed with 0 errors).
-6. `git status` -> Clean working tree.
+1. `npm test` -> PASS (5 tests in 2 files passed).
+2. `npm run check` -> PASS (TypeScript 0 errors).
+3. `cargo test` in `crates/reconciliation-core` -> PASS (6 unit tests passed in 0.01s).
+4. `powershell -File scripts/check.ps1` -> PASS (All 3 check phases passed).
+5. `powershell -File scripts/test.ps1` -> PASS (All frontend and Rust test suites passed).
 
 ## Next Exact Task for Next Agent
-Proceed to **Prompt 1**: Multi-Source Requirements, Accounting Rules & Data Contract Definition.
-Do NOT start until Prompt 1 is requested by user.
+Proceed to **Prompt 2**: Excel File Ingestion & High-Speed Streaming Parser Engine using Calamine.

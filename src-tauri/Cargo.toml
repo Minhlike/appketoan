@@ -5,19 +5,16 @@ description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
 name = "tauri_app_lib"
 crate-type = ["staticlib", "rlib"]
-
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+reconciliation-core = { path = "../crates/reconciliation-core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-

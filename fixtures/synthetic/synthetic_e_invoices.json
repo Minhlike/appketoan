@@ -1,0 +1,47 @@
+[
+  {
+    "id": "inv_001",
+    "sourceId": "src_e_invoice",
+    "sourceRow": 2,
+    "date": "2026-01-10",
+    "docNo": "00000012",
+    "series": "1C26TAA",
+    "templateCode": "1",
+    "partnerTaxId": "0109999001",
+    "partnerName": "Công ty TNHH Hóa Chất Sao Mai (Synthetic)",
+    "pretaxAmount": 10000000,
+    "vatAmount": 1000000,
+    "totalAmount": 11000000,
+    "vatRate": "10%"
+  },
+  {
+    "id": "inv_002",
+    "sourceId": "src_e_invoice",
+    "sourceRow": 3,
+    "date": "2026-01-15",
+    "docNo": "00000013",
+    "series": "1C26TAA",
+    "templateCode": "1",
+    "partnerTaxId": "0109999002",
+    "partnerName": "Công ty CP Cơ Khí An Phát (Synthetic)",
+    "pretaxAmount": 20000000,
+    "vatAmount": 2000000,
+    "totalAmount": 22000000,
+    "vatRate": "10%"
+  },
+  {
+    "id": "inv_003",
+    "sourceId": "src_e_invoice",
+    "sourceRow": 4,
+    "date": "2026-01-20",
+    "docNo": "00000014",
+    "series": "1C26TAA",
+    "templateCode": "1",
+    "partnerTaxId": "0109999003",
+    "partnerName": "Công ty TNHH Dệt May Thăng Long (Synthetic)",
+    "pretaxAmount": 5000000,
+    "vatAmount": 400000,
+    "totalAmount": 5400000,
+    "vatRate": "8%"
+  }
+]
