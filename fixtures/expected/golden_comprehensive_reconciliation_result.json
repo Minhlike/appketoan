@@ -1,0 +1,134 @@
+{
+  "sessionId": "session_golden_comprehensive_202601",
+  "executedAt": "2026-08-18T22:50:00Z",
+  "profileId": "profile_revenue_vat_3way",
+  "summary": {
+    "totalSourceRecords": 7,
+    "totalTargetRecords": 6,
+    "exactMatchesCount": 1,
+    "toleranceMatchesCount": 1,
+    "aggregateMatchesCount": 1,
+    "mismatchesCount": 1,
+    "missingInTargetCount": 1,
+    "missingInSourceCount": 1,
+    "duplicatesCount": 2,
+    "ambiguousCount": 0,
+    "netFinancialVariance": 400005
+  },
+  "groups": [
+    {
+      "id": "grp_001_exact",
+      "status": "MATCHED_EXACT",
+      "primarySourceRecordIds": ["inv_001_exact"],
+      "targetSourceRecordIds": ["led511_001_exact"],
+      "discrepancies": [],
+      "totalSourceAmount": 11000000,
+      "totalTargetAmount": 11000000,
+      "amountVariance": 0
+    },
+    {
+      "id": "grp_002_vat_diff",
+      "status": "MISMATCH_AMOUNT",
+      "primarySourceRecordIds": ["inv_002_vat_diff"],
+      "targetSourceRecordIds": ["led511_002_vat_diff"],
+      "discrepancies": [
+        {
+          "fieldName": "vatAmount",
+          "sourceValue": "2,000,000",
+          "targetValue": "1,600,000",
+          "amountDiff": 400000,
+          "message": "Lệch tiền thuế GTGT: HĐĐT là 10% (2.000.000đ), Sổ cái hạch toán 8% (1.600.000đ)"
+        },
+        {
+          "fieldName": "totalAmount",
+          "sourceValue": "22,000,000",
+          "targetValue": "21,600,000",
+          "amountDiff": 400000,
+          "message": "Lệch tổng tiền thanh toán: chênh lệch 400,000 VND"
+        }
+      ],
+      "totalSourceAmount": 22000000,
+      "totalTargetAmount": 21600000,
+      "amountVariance": 400000
+    },
+    {
+      "id": "grp_003_1_to_n",
+      "status": "MATCHED_AGGREGATE",
+      "primarySourceRecordIds": ["inv_004_1_to_n"],
+      "targetSourceRecordIds": ["led511_004_1_to_n_part1", "led511_004_1_to_n_part2"],
+      "discrepancies": [],
+      "totalSourceAmount": 33000000,
+      "totalTargetAmount": 33000000,
+      "amountVariance": 0
+    },
+    {
+      "id": "grp_004_tolerance",
+      "status": "MATCHED_WITH_TOLERANCE",
+      "primarySourceRecordIds": ["inv_005_rounding_diff"],
+      "targetSourceRecordIds": ["led511_005_rounding_diff"],
+      "discrepancies": [
+        {
+          "fieldName": "totalAmount",
+          "sourceValue": "17,050,550",
+          "targetValue": "17,050,555",
+          "amountDiff": 5,
+          "message": "Chênh lệch làm tròn số tiền 5 VND (trong ngưỡng dung sai cho phép <= 10 VND)"
+        }
+      ],
+      "totalSourceAmount": 17050550,
+      "totalTargetAmount": 17050555,
+      "amountVariance": -5
+    },
+    {
+      "id": "grp_005_missing_target",
+      "status": "UNMATCHED_MISSING_IN_TARGET",
+      "primarySourceRecordIds": ["inv_003_missing_in_ledger"],
+      "targetSourceRecordIds": [],
+      "discrepancies": [
+        {
+          "fieldName": "docNo",
+          "sourceValue": "00000103",
+          "targetValue": null,
+          "message": "Hóa đơn #00000103 trên Cổng HĐĐT chưa được hạch toán vào Sổ cái TK 511"
+        }
+      ],
+      "totalSourceAmount": 5400000,
+      "totalTargetAmount": 0,
+      "amountVariance": 5400000
+    },
+    {
+      "id": "grp_006_missing_source",
+      "status": "UNMATCHED_MISSING_IN_SOURCE",
+      "primarySourceRecordIds": [],
+      "targetSourceRecordIds": ["led511_099_missing_in_invoice"],
+      "discrepancies": [
+        {
+          "fieldName": "voucherNo",
+          "sourceValue": null,
+          "targetValue": "PKT-00109",
+          "message": "Chứng từ PKT-00109 trong Sổ cái TK 511 không tìm thấy Hóa đơn điện tử tương ứng"
+        }
+      ],
+      "totalSourceAmount": 0,
+      "totalTargetAmount": 13200000,
+      "amountVariance": -13200000
+    },
+    {
+      "id": "grp_007_duplicate",
+      "status": "DUPLICATE_SUSPECT",
+      "primarySourceRecordIds": ["inv_006_duplicate_a", "inv_007_duplicate_b"],
+      "targetSourceRecordIds": [],
+      "discrepancies": [
+        {
+          "fieldName": "docNo",
+          "sourceValue": "00000106",
+          "targetValue": null,
+          "message": "Phát hiện 2 hóa đơn trùng số #00000106 cùng ký hiệu và mã số thuế trong nguồn HĐĐT"
+        }
+      ],
+      "totalSourceAmount": 17600000,
+      "totalTargetAmount": 0,
+      "amountVariance": 17600000
+    }
+  ]
+}

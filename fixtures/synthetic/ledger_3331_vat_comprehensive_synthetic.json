@@ -1,0 +1,53 @@
+[
+  {
+    "id": "vat3331_001_exact",
+    "sourceId": "src_ledger_3331",
+    "sourceRow": 5,
+    "date": "2026-01-05",
+    "docNo": "101",
+    "series": "1C26TAA",
+    "partnerTaxId": "0109990001",
+    "partnerName": "Công ty TNHH Sao Mai (Synthetic)",
+    "pretaxAmount": 10000000,
+    "vatAmount": 1000000,
+    "totalAmount": 1000000,
+    "debitAccount": "131",
+    "creditAccount": "33311",
+    "voucherNo": "PKT-00101",
+    "description": "Thuế GTGT đầu ra theo HĐ 101"
+  },
+  {
+    "id": "vat3331_002_vat_diff",
+    "sourceId": "src_ledger_3331",
+    "sourceRow": 6,
+    "date": "2026-01-08",
+    "docNo": "102",
+    "series": "1C26TAA",
+    "partnerTaxId": "0109990002",
+    "partnerName": "Công ty CP Cơ Khí An Phát (Synthetic)",
+    "pretaxAmount": 20000000,
+    "vatAmount": 1600000,
+    "totalAmount": 1600000,
+    "debitAccount": "131",
+    "creditAccount": "33311",
+    "voucherNo": "PKT-00102",
+    "description": "Thuế GTGT đầu ra theo HĐ 102 (Hạch toán nhầm 8%)"
+  },
+  {
+    "id": "vat3331_004_1_to_n",
+    "sourceId": "src_ledger_3331",
+    "sourceRow": 7,
+    "date": "2026-01-15",
+    "docNo": "104",
+    "series": "1C26TAA",
+    "partnerTaxId": "0109990004",
+    "partnerName": "Công ty CP Phân Phối Toàn Cầu (Synthetic)",
+    "pretaxAmount": 30000000,
+    "vatAmount": 3000000,
+    "totalAmount": 3000000,
+    "debitAccount": "131",
+    "creditAccount": "33311",
+    "voucherNo": "PKT-00104",
+    "description": "Thuế GTGT đầu ra tổng hợp HĐ 104"
+  }
+]

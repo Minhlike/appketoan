@@ -1,0 +1,38 @@
+[
+  {
+    "id": "bank_001_exact",
+    "sourceId": "src_bank_vcb",
+    "sourceRow": 3,
+    "date": "2026-01-06",
+    "docNo": "FT2600612345",
+    "partnerName": "CTY TNHH SAO MAI",
+    "partnerTaxId": "0109990001",
+    "totalAmount": 11000000,
+    "description": "THANH TOAN TIEN MUA HOA CHAT THEO HD 101",
+    "bankAccount": "0011001234567"
+  },
+  {
+    "id": "bank_002_date_variance",
+    "sourceId": "src_bank_vcb",
+    "sourceRow": 4,
+    "date": "2026-01-10",
+    "docNo": "FT2601054321",
+    "partnerName": "CTY CP CO KHI AN PHAT",
+    "partnerTaxId": "0109990002",
+    "totalAmount": 21600000,
+    "description": "AN PHAT CK TIEN LINH KIEN CO KHI",
+    "bankAccount": "0011001234567"
+  },
+  {
+    "id": "bank_003_unmatched_fee",
+    "sourceId": "src_bank_vcb",
+    "sourceRow": 5,
+    "date": "2026-01-31",
+    "docNo": "FEE260319999",
+    "partnerName": "NGAN HANG TMCP NGOAI THUONG VN",
+    "partnerTaxId": "0100112437",
+    "totalAmount": 33000,
+    "description": "THU PHI DICH VU VCB DIGIBIZ THANG 01/2026",
+    "bankAccount": "0011001234567"
+  }
+]
