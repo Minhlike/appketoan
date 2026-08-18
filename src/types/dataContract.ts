@@ -151,7 +151,9 @@ export type MatchStatus =
   | "UNMATCHED_MISSING_IN_TARGET"
   | "UNMATCHED_MISSING_IN_SOURCE"
   | "DUPLICATE_SUSPECT"
-  | "AMBIGUOUS_MATCH";
+  | "AMBIGUOUS_MATCH"
+  | "NEEDS_REVIEW"
+  | "INSUFFICIENT_MATCHING_EVIDENCE";
 
 export interface FieldDiscrepancy {
   fieldName: string;
@@ -220,6 +222,7 @@ export interface ReconciliationSummary {
   missingInSourceCount: number;
   duplicatesCount: number;
   ambiguousCount: number;
+  needsReviewCount?: number;
   revenueVariance?: number | string;
   vatVariance?: number | string;
   receivableVariance?: number | string;
@@ -271,7 +274,10 @@ export interface ScenarioRuleDefinition {
   title: string;
   description: string;
   primaryField: string;
+  secondarySourceKind?: DataSourceKind;
   secondaryField: string;
+  toleranceVnd?: number;
+  dateToleranceDays?: number;
 }
 
 export interface PreconfiguredScenario {

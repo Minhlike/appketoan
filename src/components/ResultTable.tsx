@@ -41,6 +41,9 @@ export const ResultTable: React.FC<ResultTableProps> = ({
         return <span className="status-badge badge-duplicate">⚇ Trùng lặp</span>;
       case "AMBIGUOUS_MATCH":
         return <span className="status-badge badge-ambiguous">? Cần kiểm tra</span>;
+      case "NEEDS_REVIEW":
+      case "INSUFFICIENT_MATCHING_EVIDENCE":
+        return <span className="status-badge badge-mismatch">🔍 Cần rà soát</span>;
       default:
         return <span className="status-badge">{status}</span>;
     }

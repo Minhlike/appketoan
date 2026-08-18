@@ -17,6 +17,11 @@ pub enum MatchStatus {
     UnmatchedMissingInSource,
     DuplicateSuspect,
     AmbiguousMatch,
+    #[serde(
+        alias = "INSUFFICIENT_MATCHING_EVIDENCE",
+        alias = "INSUFFICIENT_EVIDENCE"
+    )]
+    NeedsReview,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -136,6 +141,8 @@ pub struct ReconciliationSummary {
     pub missing_in_source_count: usize,
     pub duplicates_count: usize,
     pub ambiguous_count: usize,
+    #[serde(default)]
+    pub needs_review_count: usize,
     #[serde(default)]
     pub revenue_variance: Decimal,
     #[serde(default)]

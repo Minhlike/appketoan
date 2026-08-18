@@ -77,6 +77,17 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
       sub: "Trùng số HĐ hoặc nhiều tổ hợp gộp",
       badgeClass: "kpi-orange",
     },
+    ...(summary.needsReviewCount && summary.needsReviewCount > 0
+      ? [
+          {
+            id: "NEEDS_REVIEW",
+            label: "Cần rà soát (Thiếu dữ kiện)",
+            value: summary.needsReviewCount,
+            sub: "Thiếu số chứng từ hoặc MST",
+            badgeClass: "kpi-warning",
+          },
+        ]
+      : []),
   ];
 
   const hasSemanticBreakdowns =

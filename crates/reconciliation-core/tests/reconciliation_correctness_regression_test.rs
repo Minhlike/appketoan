@@ -1083,6 +1083,15 @@ fn test_14_decimal_rust_serialization_and_artifact_generation() {
                 total_amount: dec!(1250000.50),
                 ..Default::default()
             },
+            CanonicalRecord {
+                id: "rec_negative".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 6,
+                doc_no: Some("00000004".to_string()),
+                pretax_amount: Some(dec!(-500000)),
+                total_amount: dec!(-500000),
+                ..Default::default()
+            },
         ],
     );
     records_map.insert("src_511".to_string(), vec![]);
@@ -1094,13 +1103,28 @@ fn test_14_decimal_rust_serialization_and_artifact_generation() {
     assert!(json_str.contains("7328121057"));
     assert!(json_str.contains("105000000"));
     assert!(json_str.contains("1250000.50"));
+    assert!(json_str.contains("-500000"));
 
     // Write to fixture artifact directory for TS verification
     let artifact_path = Path::new("fixtures/artifacts/ipc_contract_output.json");
     if let Some(parent) = artifact_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(artifact_path, json_str);
+    let _ = std::fs::write(artifact_path, &json_str);
+
+    // Also write to audit/generated-ipc-contract.json at root and current dir
+    for audit_rel in &[
+        "audit/generated-ipc-contract.json",
+        "../../audit/generated-ipc-contract.json",
+    ] {
+        let p = Path::new(audit_rel);
+        if let Some(parent) = p.parent() {
+            if parent.exists() || audit_rel.starts_with("audit") {
+                let _ = std::fs::create_dir_all(parent);
+                let _ = std::fs::write(p, &json_str);
+            }
+        }
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -1569,5 +1593,618 @@ fn test_21_property_invariants() {
                 assert_eq!(comp.variance, dec!(0));
             }
         }
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// 22. PRIMARY RECORD CONSERVATION (NO RECORD DISAPPEARS EVEN WITH NO DOC & NO MST)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_22_primary_record_never_disappears_even_without_doc_and_tax_id() {
+    let src1 = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        Some("Số HĐ"),
+        Some("Tiền"),
+    );
+    let src2 = create_source(
+        "src_511",
+        "Sổ 511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        Some("Số CT"),
+        Some("Tiền"),
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_prim_conserv_22".to_string(),
+        scenario_name: "Primary Conservation".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: dec!(0),
+        date_tolerance_days: 3,
+        enable_aggregate_match: false,
+    };
+
+    let mut map = HashMap::new();
+    map.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "inv_no_doc_no_mst".to_string(),
+            source_id: "src_inv".to_string(),
+            source_row: 2,
+            doc_no: None,
+            partner_tax_id: None,
+            date: Some("2026-01-15".to_string()),
+            pretax_amount: Some(dec!(50000000)),
+            total_amount: dec!(55000000),
+            ..Default::default()
+        }],
+    );
+    map.insert("src_511".to_string(), vec![]);
+
+    let res = execute_reconciliation(&session, &map).expect("Should succeed");
+    assert_eq!(res.groups.len(), 1);
+    let grp = &res.groups[0];
+    assert_eq!(grp.status, MatchStatus::NeedsReview);
+    assert_ne!(grp.status, MatchStatus::MatchedExact);
+    assert_eq!(
+        grp.primary_source_record_ids,
+        vec!["inv_no_doc_no_mst".to_string()]
+    );
+    assert_eq!(res.summary.needs_review_count, 1);
+    assert_eq!(res.summary.total_source_records, 1);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 23. CANDIDATE CONSUMPTION SAFETY (AMBIGUOUS DOES NOT THEFT CANDIDATES FROM EXACT)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_23_candidate_not_consumed_by_ambiguous_or_mismatch() {
+    let src1 = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        Some("Số HĐ"),
+        Some("Tiền"),
+    );
+    let src2 = create_source(
+        "src_511",
+        "Sổ 511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        Some("Số CT"),
+        Some("Tiền"),
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_consumption_safety_23".to_string(),
+        scenario_name: "Candidate Consumption Safety".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: dec!(0),
+        date_tolerance_days: 3,
+        enable_aggregate_match: true,
+    };
+
+    let mut map = HashMap::new();
+    // Primary A: doc 100, series None, amount 50M -> In ledger there are [30M, 20M, 50M] => multiple combos -> Ambiguous
+    // Primary B: doc 200, series "1C26TAA", amount 30M -> Matches exactly TK_200
+    map.insert(
+        "src_inv".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "inv_ambiguous".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 2,
+                doc_no: Some("00000100".to_string()),
+                series: None,
+                date: Some("2026-01-10".to_string()),
+                pretax_amount: Some(dec!(50000000)),
+                total_amount: dec!(50000000),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "inv_exact".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 3,
+                doc_no: Some("00000200".to_string()),
+                series: Some("1C26TAA".to_string()),
+                date: Some("2026-01-10".to_string()),
+                pretax_amount: Some(dec!(30000000)),
+                total_amount: dec!(30000000),
+                ..Default::default()
+            },
+        ],
+    );
+
+    map.insert(
+        "src_511".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "tk_100_a".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 2,
+                doc_no: Some("00000100".to_string()),
+                date: Some("2026-01-10".to_string()),
+                credit_amount: Some(dec!(50000000)),
+                total_amount: dec!(50000000),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "tk_100_b".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 3,
+                doc_no: Some("00000100".to_string()),
+                date: Some("2026-01-10".to_string()),
+                credit_amount: Some(dec!(50000000)),
+                total_amount: dec!(50000000),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "tk_200".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 4,
+                doc_no: Some("00000200".to_string()),
+                series: Some("1C26TAA".to_string()),
+                date: Some("2026-01-10".to_string()),
+                credit_amount: Some(dec!(30000000)),
+                total_amount: dec!(30000000),
+                ..Default::default()
+            },
+        ],
+    );
+
+    let res = execute_reconciliation(&session, &map).expect("Should succeed");
+    let grp_amb = res
+        .groups
+        .iter()
+        .find(|g| g.id.contains("inv_ambiguous"))
+        .unwrap();
+    assert_eq!(grp_amb.status, MatchStatus::AmbiguousMatch);
+
+    let grp_exact = res
+        .groups
+        .iter()
+        .find(|g| g.id.contains("inv_exact"))
+        .unwrap();
+    assert_eq!(grp_exact.status, MatchStatus::MatchedExact);
+    assert_eq!(
+        grp_exact.target_source_record_ids,
+        vec!["tk_200".to_string()]
+    );
+}
+
+// -------------------------------------------------------------------------------------------------
+// 24. AGGREGATE CROSS-COUNTERPARTY TAX ID REJECTED
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_24_aggregate_cross_counterparty_tax_id_rejected() {
+    let src1 = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        Some("Số HĐ"),
+        Some("Tiền"),
+    );
+    let src2 = create_source(
+        "src_511",
+        "Sổ 511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        Some("Số CT"),
+        Some("Tiền"),
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_cross_mst_24".to_string(),
+        scenario_name: "Aggregate Cross MST".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: dec!(0),
+        date_tolerance_days: 3,
+        enable_aggregate_match: true,
+    };
+
+    let mut map = HashMap::new();
+    // Primary: Invoice #500, MST A = 100M
+    map.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "inv_500".to_string(),
+            source_id: "src_inv".to_string(),
+            source_row: 2,
+            doc_no: Some("00000500".to_string()),
+            partner_tax_id: Some("0101112222".to_string()),
+            date: Some("2026-01-10".to_string()),
+            pretax_amount: Some(dec!(100000000)),
+            total_amount: dec!(100000000),
+            ..Default::default()
+        }],
+    );
+
+    // Ledger has: #500 MST A = 40M, and #500 MST B = 60M
+    // 40M + 60M = 100M, but MST B is different counterparty! Must NOT aggregate!
+    map.insert(
+        "src_511".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "tk_500_mst_a".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 2,
+                doc_no: Some("00000500".to_string()),
+                partner_tax_id: Some("0101112222".to_string()),
+                date: Some("2026-01-10".to_string()),
+                credit_amount: Some(dec!(40000000)),
+                total_amount: dec!(40000000),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "tk_500_mst_b".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 3,
+                doc_no: Some("00000500".to_string()),
+                partner_tax_id: Some("0309998888".to_string()),
+                date: Some("2026-01-10".to_string()),
+                credit_amount: Some(dec!(60000000)),
+                total_amount: dec!(60000000),
+                ..Default::default()
+            },
+        ],
+    );
+
+    let res = execute_reconciliation(&session, &map).expect("Should succeed");
+    let grp = &res.groups[0];
+    assert_eq!(grp.status, MatchStatus::MismatchAmount);
+    assert_ne!(grp.status, MatchStatus::MatchedAggregate);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 25. RULE-SPECIFIC TOLERANCE PRECEDENCE
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_25_rule_specific_tolerance_precedence() {
+    let src1 = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        Some("Số HĐ"),
+        Some("Tiền"),
+    );
+    let src2 = create_source(
+        "src_511",
+        "Sổ 511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        Some("Số CT"),
+        Some("Tiền"),
+    );
+
+    let custom_rule = ComparisonRule {
+        id: "rule_high_tol".to_string(),
+        name: "Doanh thu dung sai 50k".to_string(),
+        semantic: ComparisonSemantic::Revenue,
+        primary_source_kind: DataSourceKind::EInvoice,
+        primary_field: "pretaxAmount".to_string(),
+        secondary_source_kind: DataSourceKind::Ledger511,
+        secondary_field: "creditAmount".to_string(),
+        is_required: true,
+        tolerance_vnd: dec!(50000), // Rule-specific tolerance
+        date_tolerance_days: 5,
+    };
+
+    let session = ReconciliationSession {
+        session_id: "sess_rule_tol_25".to_string(),
+        scenario_name: "Rule Tolerance Precedence".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2],
+        comparison_rules: vec![custom_rule],
+        matching_tolerance_vnd: dec!(0), // Session tolerance is 0!
+        date_tolerance_days: 1,
+        enable_aggregate_match: false,
+    };
+
+    let mut map = HashMap::new();
+    map.insert(
+        "src_inv".to_string(),
+        vec![CanonicalRecord {
+            id: "inv_tol".to_string(),
+            source_id: "src_inv".to_string(),
+            source_row: 2,
+            doc_no: Some("00000100".to_string()),
+            date: Some("2026-01-10".to_string()),
+            pretax_amount: Some(dec!(10000000)),
+            total_amount: dec!(10000000),
+            ..Default::default()
+        }],
+    );
+    map.insert(
+        "src_511".to_string(),
+        vec![CanonicalRecord {
+            id: "tk_tol".to_string(),
+            source_id: "src_511".to_string(),
+            source_row: 2,
+            doc_no: Some("00000100".to_string()),
+            date: Some("2026-01-14".to_string()), // 4 days diff (<= 5 from rule)
+            credit_amount: Some(dec!(10040000)),  // 40k diff (<= 50k from rule)
+            total_amount: dec!(10040000),
+            ..Default::default()
+        }],
+    );
+
+    let res = execute_reconciliation(&session, &map).expect("Should succeed");
+    let grp = &res.groups[0];
+    assert_eq!(grp.status, MatchStatus::MatchedWithTolerance);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 26. TABLE-DRIVEN ALL BUILTIN SCENARIOS
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_26_table_driven_all_builtin_scenarios() {
+    let test_cases = vec![
+        (
+            DataSourceKind::EInvoice,
+            DataSourceKind::Ledger511,
+            ComparisonSemantic::Revenue,
+        ),
+        (
+            DataSourceKind::EInvoice,
+            DataSourceKind::Ledger3331,
+            ComparisonSemantic::Vat,
+        ),
+        (
+            DataSourceKind::EInvoice,
+            DataSourceKind::Ledger131,
+            ComparisonSemantic::Receivable,
+        ),
+        (
+            DataSourceKind::EInvoice,
+            DataSourceKind::Ledger133,
+            ComparisonSemantic::Vat,
+        ),
+        (
+            DataSourceKind::EInvoice,
+            DataSourceKind::BankStatement,
+            ComparisonSemantic::BankPayment,
+        ),
+        (
+            DataSourceKind::Ledger131,
+            DataSourceKind::BankStatement,
+            ComparisonSemantic::BankPayment,
+        ),
+    ];
+
+    for (pri_k, sec_k, expected_sem) in test_cases {
+        let src1 = create_source(
+            "src_pri",
+            "Pri",
+            pri_k.clone(),
+            SourceRole::Primary,
+            Some("Số"),
+            Some("Tiền"),
+        );
+        let src2 = create_source(
+            "src_sec",
+            "Sec",
+            sec_k.clone(),
+            SourceRole::RequiredSecondary,
+            Some("Số"),
+            Some("Tiền"),
+        );
+
+        let session = ReconciliationSession {
+            session_id: format!("sess_tbl_{:?}_{:?}", pri_k, sec_k),
+            scenario_name: "Table Scenario".to_string(),
+            primary_source_id: Some("src_pri".to_string()),
+            expected_primary_kind: None,
+            required_source_ids: None,
+            optional_source_ids: None,
+            data_sources: vec![src1, src2],
+            comparison_rules: vec![],
+            matching_tolerance_vnd: dec!(0),
+            date_tolerance_days: 3,
+            enable_aggregate_match: false,
+        };
+
+        let mut map = HashMap::new();
+        map.insert(
+            "src_pri".to_string(),
+            vec![CanonicalRecord {
+                id: "p1".to_string(),
+                source_id: "src_pri".to_string(),
+                source_row: 2,
+                doc_no: Some("00000001".to_string()),
+                date: Some("2026-01-01".to_string()),
+                pretax_amount: Some(dec!(10000000)),
+                vat_amount: Some(dec!(1000000)),
+                total_amount: dec!(11000000),
+                credit_amount: Some(dec!(11000000)),
+                ..Default::default()
+            }],
+        );
+        map.insert(
+            "src_sec".to_string(),
+            vec![CanonicalRecord {
+                id: "s1".to_string(),
+                source_id: "src_sec".to_string(),
+                source_row: 2,
+                doc_no: Some("00000001".to_string()),
+                date: Some("2026-01-01".to_string()),
+                pretax_amount: Some(dec!(10000000)),
+                credit_amount: match expected_sem {
+                    ComparisonSemantic::Revenue => Some(dec!(10000000)),
+                    ComparisonSemantic::Vat => Some(dec!(1000000)),
+                    _ => Some(dec!(11000000)),
+                },
+                debit_amount: match expected_sem {
+                    ComparisonSemantic::Vat => Some(dec!(1000000)),
+                    _ => Some(dec!(11000000)),
+                },
+                total_amount: dec!(11000000),
+                ..Default::default()
+            }],
+        );
+
+        let res = execute_reconciliation(&session, &map).expect("Should succeed");
+        assert_eq!(res.groups.len(), 1);
+        assert_eq!(res.groups[0].status, MatchStatus::MatchedExact);
+        assert_eq!(res.groups[0].semantic_comparisons[0].semantic, expected_sem);
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// 27. RECORD CONSERVATION PROPERTY INVARIANT ACROSS ARBITRARY DATASETS
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_27_record_conservation_property_invariant() {
+    let src1 = create_source(
+        "src_inv",
+        "HĐ",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        Some("Số HĐ"),
+        Some("Tiền"),
+    );
+    let src2 = create_source(
+        "src_511",
+        "TK511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        Some("Số CT"),
+        Some("Tiền"),
+    );
+    let src3 = create_source(
+        "src_3331",
+        "TK3331",
+        DataSourceKind::Ledger3331,
+        SourceRole::RequiredSecondary,
+        Some("Số CT"),
+        Some("Tiền"),
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_conserv_27".to_string(),
+        scenario_name: "Record Conservation Property".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2, src3],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: dec!(10),
+        date_tolerance_days: 3,
+        enable_aggregate_match: true,
+    };
+
+    let mut primary_records = Vec::new();
+    for i in 1..=20 {
+        primary_records.push(CanonicalRecord {
+            id: format!("inv_{}", i),
+            source_id: "src_inv".to_string(),
+            source_row: i + 1,
+            doc_no: if i == 19 || i == 20 {
+                None // Records without doc_no
+            } else if i == 18 {
+                Some("00000018".to_string()) // Duplicate doc
+            } else {
+                Some(format!("{:08}", i))
+            },
+            series: Some("1C26TAA".to_string()),
+            partner_tax_id: if i == 20 {
+                None // Record with neither doc_no nor tax_id
+            } else {
+                Some("0109998888".to_string())
+            },
+            date: Some("2026-01-10".to_string()),
+            pretax_amount: Some(Decimal::from(i * 1_000_000)),
+            vat_amount: Some(Decimal::from(i * 100_000)),
+            total_amount: Decimal::from(i * 1_100_000),
+            ..Default::default()
+        });
+    }
+
+    let mut tk511_records = Vec::new();
+    for i in 1..=15 {
+        tk511_records.push(CanonicalRecord {
+            id: format!("tk511_{}", i),
+            source_id: "src_511".to_string(),
+            source_row: i + 1,
+            doc_no: Some(format!("{:08}", i)),
+            series: Some("1C26TAA".to_string()),
+            date: Some("2026-01-10".to_string()),
+            partner_tax_id: Some("0109998888".to_string()),
+            credit_amount: Some(Decimal::from(i * 1_000_000)),
+            total_amount: Decimal::from(i * 1_000_000),
+            ..Default::default()
+        });
+    }
+    // Extra secondary record
+    tk511_records.push(CanonicalRecord {
+        id: "tk511_extra".to_string(),
+        source_id: "src_511".to_string(),
+        source_row: 17,
+        doc_no: Some("00000999".to_string()),
+        credit_amount: Some(dec!(99000000)),
+        total_amount: dec!(99000000),
+        ..Default::default()
+    });
+
+    let mut map = HashMap::new();
+    map.insert("src_inv".to_string(), primary_records.clone());
+    map.insert("src_511".to_string(), tk511_records.clone());
+    map.insert("src_3331".to_string(), vec![]);
+
+    let res = execute_reconciliation(&session, &map).expect("Should succeed");
+
+    // INVARIANT 1: Every single primary record ID must appear in groups EXACTLY ONCE
+    let mut represented_primary_ids = Vec::new();
+    for g in &res.groups {
+        for pid in &g.primary_source_record_ids {
+            represented_primary_ids.push(pid.clone());
+        }
+    }
+    assert_eq!(represented_primary_ids.len(), primary_records.len());
+    for p in &primary_records {
+        assert!(
+            represented_primary_ids.contains(&p.id),
+            "Primary record {} is missing from result groups!",
+            p.id
+        );
+    }
+
+    // INVARIANT 2: Every unconsumed secondary record must appear in residual groups
+    let mut represented_secondary_ids = Vec::new();
+    for g in &res.groups {
+        for sid in &g.target_source_record_ids {
+            represented_secondary_ids.push(sid.clone());
+        }
+    }
+    for s in &tk511_records {
+        assert!(
+            represented_secondary_ids.contains(&s.id),
+            "Secondary record {} missing from groups!",
+            s.id
+        );
     }
 }

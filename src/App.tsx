@@ -327,10 +327,17 @@ export function App() {
       )?.kind;
 
       const comparisonRules = selectedScenario.rules.map((r, idx) => {
-        let secKind: DataSourceKind = "ledger_511";
-        if (r.semantic === "VAT") secKind = "ledger_3331";
-        if (r.semantic === "RECEIVABLE") secKind = "ledger_131";
-        if (r.semantic === "BANK_PAYMENT") secKind = "bank_statement";
+        const secKind: DataSourceKind =
+          r.secondarySourceKind ||
+          (r.semantic === "VAT"
+            ? selectedScenario.id === "scenario_input_vat"
+              ? "ledger_133"
+              : "ledger_3331"
+            : r.semantic === "RECEIVABLE"
+            ? "ledger_131"
+            : r.semantic === "BANK_PAYMENT"
+            ? "bank_statement"
+            : "ledger_511");
 
         return {
           id: `rule_${idx}_${r.semantic.toLowerCase()}`,
@@ -341,8 +348,8 @@ export function App() {
           secondarySourceKind: secKind,
           secondaryField: r.secondaryField,
           isRequired: true,
-          toleranceVnd: toleranceVnd,
-          dateToleranceDays: dateToleranceDays,
+          toleranceVnd: r.toleranceVnd !== undefined ? r.toleranceVnd : toleranceVnd,
+          dateToleranceDays: r.dateToleranceDays !== undefined ? r.dateToleranceDays : dateToleranceDays,
         };
       });
 

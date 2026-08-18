@@ -46,6 +46,7 @@ pub fn export_reconciliation_to_excel<P: AsRef<Path>>(
             MatchStatus::UnmatchedMissingInSource => "Thiếu bên nguồn chính",
             MatchStatus::DuplicateSuspect => "Nghi ngờ trùng lặp",
             MatchStatus::AmbiguousMatch => "Cần kiểm tra lại",
+            MatchStatus::NeedsReview => "Cần kiểm tra thủ công (thiếu định danh)",
         }
     };
 
