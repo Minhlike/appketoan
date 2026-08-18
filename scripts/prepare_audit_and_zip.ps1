@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 $repoRoot = "D:\appketoan"
 $auditDir = Join-Path $repoRoot "audit"
