@@ -116,8 +116,55 @@ export function isZeroMoney(val: string | number | undefined | null): boolean {
 
 /**
  * Normalizes user input for monetary settings/tolerance without floating-point conversion
+ * Supports Vietnamese conventions: "." as thousand separator, "," as decimal separator
+ * Example: "0" -> "0", "500" -> "500", "10.000" -> "10000", "1.000.000" -> "1000000", "10.000,50" -> "10000.50"
+ * Rejects negative numbers and invalid formatting
  */
 export function normalizeMoneyInput(val: string): MoneyValue {
-  const clean = val.replace(/[^0-9.-]/g, "");
-  return clean === "" ? "0" : clean;
+  if (!val) return "0";
+  const trimmed = val.trim().replace(/[₫đĐ\s\u00a0VNDvndVNĐ]/g, "");
+  if (trimmed === "" || trimmed === "0") return "0";
+
+  // Reject negative numbers for tolerance
+  if (trimmed.startsWith("-")) {
+    return "0";
+  }
+
+  // Check invalid characters
+  if (!/^[0-9.,]+$/.test(trimmed)) {
+    return "0";
+  }
+
+  // Check multiple consecutive dots/commas
+  if (/\.{2,}|,{2,}/.test(trimmed)) {
+    return "0";
+  }
+
+  // Check multiple commas
+  const commaCount = (trimmed.match(/,/g) || []).length;
+  if (commaCount > 1) {
+    return "0";
+  }
+
+  // If there is a comma, it separates integer and fraction
+  if (commaCount === 1) {
+    const [intPart, fracPart] = trimmed.split(",");
+    const rawInt = intPart.replace(/\./g, "").replace(/^0+/, "") || "0";
+    if (!/^[0-9]+$/.test(rawInt) || (fracPart && !/^[0-9]+$/.test(fracPart))) {
+      return "0";
+    }
+    const cleanFrac = fracPart ? fracPart.slice(0, 4) : "";
+    return cleanFrac === "" || /^0+$/.test(cleanFrac)
+      ? rawInt
+      : `${rawInt}.${cleanFrac}`;
+  }
+
+  // No comma: dots are thousand separators
+  const rawDigits = trimmed.replace(/\./g, "");
+  if (!/^[0-9]+$/.test(rawDigits)) {
+    return "0";
+  }
+  const withoutLeadingZeros = rawDigits.replace(/^0+/, "");
+  return withoutLeadingZeros === "" ? "0" : withoutLeadingZeros;
 }
+

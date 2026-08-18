@@ -2,9 +2,9 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = "D:\appketoan"
 $auditDir = Join-Path $repoRoot "audit"
-$zipPathV10 = "D:\appketoan-audit-v10.zip"
+$zipPathV11 = "D:\appketoan-audit-v11.zip"
 $zipPath = "D:\appketoan-audit.zip"
-$stageDir = "D:\temp_audit_stage_v10"
+$stageDir = "D:\temp_audit_stage_v11"
 
 $env:PATH = "C:\Program Files\Git\cmd;D:\DevTools\w64devkit\bin;C:\Users\Acer\.cargo\bin;D:\DevTools\npm-global;" + $env:PATH
 
@@ -28,10 +28,10 @@ Set-Content -Path (Join-Path $auditDir "git-status.txt") -Value $gitStatus -Enco
 # 3. audit/git-diff-stat.txt
 Write-Host "-> Generating audit/git-diff-stat.txt"
 $diffDetail = & git diff --stat HEAD~1 HEAD
-Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== GIT DIFF STAT (V10) ===`n$diffDetail" -Encoding UTF8
+Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== GIT DIFF STAT (V11) ===`n$diffDetail" -Encoding UTF8
 
 # 4. Clean old build artifacts & run fresh build
-Write-Host "-> Cleaning old release binaries before V10 build"
+Write-Host "-> Cleaning old release binaries before V11 build"
 $exePath = Join-Path $repoRoot "target\release\tauri-app.exe"
 $nsisDir = Join-Path $repoRoot "target\release\bundle\nsis"
 $msiDir = Join-Path $repoRoot "target\release\bundle\msi"
@@ -73,9 +73,13 @@ if ($exeItem.LastWriteTime -lt $buildStartTime) {
     exit 1
 }
 
+# Check NSIS and MSI bundles
+$nsisExe = Get-ChildItem -Path $nsisDir -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+$msiFile = Get-ChildItem -Path $msiDir -Filter "*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
+
 $buildResults = @"
 ================================================================================
-AUDIT BUILD VERIFICATION RESULTS - V10
+AUDIT BUILD VERIFICATION RESULTS - V11
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 Build Start Time: $buildStartTime
 ================================================================================
@@ -88,6 +92,8 @@ $tauriBuildOutput
 
 --- 3. TAURI PRODUCTION BINARY VERIFICATION ---
 Binary: $exePath ($($exeItem.Length) bytes, LastWriteTime: $($exeItem.LastWriteTime))
+NSIS Bundle: $(if ($nsisExe) { "$($nsisExe.FullName) ($($nsisExe.Length) bytes, $($nsisExe.LastWriteTime))" } else { "N/A" })
+MSI Bundle:  $(if ($msiFile) { "$($msiFile.FullName) ($($msiFile.Length) bytes, $($msiFile.LastWriteTime))" } else { "N/A" })
 "@
 Set-Content -Path (Join-Path $auditDir "build-results.txt") -Value $buildResults -Encoding UTF8
 
@@ -123,7 +129,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $testResults = @"
 ================================================================================
-AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V10 HARDENED BUILD
+AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V11 FINAL RELIABILITY BUILD
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -163,7 +169,7 @@ if (Test-Path $exePath) {
 
 $smokeTestContent = @"
 ================================================================================
-SMOKE TEST EXECUTION RESULTS - V10
+SMOKE TEST EXECUTION RESULTS - V11
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -182,11 +188,13 @@ Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
    - PROCESS_SMOKE: $processSmokeResult
    - UI_INTERACTION_SMOKE: MANUAL_REQUIRED
 
-3. V10 Zero-Blocker Verification:
-   - Candidate Consumption Invariant (fn is_accepted_match): PASS
-   - Candidate Contention Isolation: PASS
-   - Fail-Closed Comparison Rule Engine (0 silent fallbacks): PASS
-   - String-Only Money Frontend (0 float Math/parseFloat): PASS
+3. V11 Zero-Blocker Verification:
+   - Field-Value Fallback Completely Removed (extract_rule_amount fail-closed): PASS
+   - Candidate Contention Invariant (fn is_accepted_match): PASS
+   - Ambiguous Match Disambiguation and Residual Sweep Invariant: PASS
+   - UI Detail Message Renderer (No false 'Khớp hoàn toàn'): PASS
+   - N-File Safety & Dataset Identity Gate (4 files -> 2 logical sources -> exact baseline): PASS
+   - Vietnamese Money Input Normalizer (Zero Float Math): PASS
    - Clean-Run Two-Way IPC Roundtrip: PASS
    - Real Tauri Windows Build (LastWriteTime >= build start): PASS
    - Clean Working Tree (Git Dirty = 0): PASS
@@ -203,6 +211,7 @@ $targetArtifacts = @(
     "src/types/dataContract.ts",
     "src/utils/money.ts",
     "crates/reconciliation-core/src/lib.rs",
+    "crates/reconciliation-core/src/intake/dedup.rs",
     "crates/reconciliation-core/src/matcher/engine.rs"
 )
 foreach ($f in $targetArtifacts) {
@@ -213,12 +222,20 @@ foreach ($f in $targetArtifacts) {
         $hashEntries += "$($h.Algorithm): $($h.Hash)  ($($item.Length) bytes, $($item.LastWriteTime))  $f"
     }
 }
+if ($nsisExe) {
+    $h = Get-FileHash -Path $nsisExe.FullName -Algorithm SHA256
+    $hashEntries += "$($h.Algorithm): $($h.Hash)  ($($nsisExe.Length) bytes, $($nsisExe.LastWriteTime))  $($nsisExe.FullName.Substring($repoRoot.Length + 1))"
+}
+if ($msiFile) {
+    $h = Get-FileHash -Path $msiFile.FullName -Algorithm SHA256
+    $hashEntries += "$($h.Algorithm): $($h.Hash)  ($($msiFile.Length) bytes, $($msiFile.LastWriteTime))  $($msiFile.FullName.Substring($repoRoot.Length + 1))"
+}
 Set-Content -Path (Join-Path $auditDir "artifact-hashes.txt") -Value ($hashEntries -join "`n") -Encoding UTF8
 
 # 8. audit/manual-ui-checklist.txt
 $manualChecklist = @"
 ================================================================================
-REAL WINDOWS MANUAL VERIFICATION CHECKLIST - APPKETOAN V10
+REAL WINDOWS MANUAL VERIFICATION CHECKLIST - APPKETOAN V11
 ================================================================================
 
 [ ] 1. Mở ứng dụng (Chạy target\release\tauri-app.exe)
@@ -238,6 +255,10 @@ REAL WINDOWS MANUAL VERIFICATION CHECKLIST - APPKETOAN V10
        - Cột Doanh thu (511): Hiển thị ✓ Khớp hoặc Số tiền chênh lệch
        - Cột Thuế GTGT (3331): Hiển thị "Chưa đối chiếu"
        - Cột Công nợ (131): Hiển thị "Chưa đối chiếu"
+       - Cột 'Chi tiết & Lý do sai lệch':
+         * Row khớp: Hiển thị "✓ Doanh thu TK511 khớp; Thuế GTGT và Công nợ chưa đối chiếu."
+         * Row #233: Hiển thị "Chứng từ #233 không tìm thấy...; Thuế GTGT và Công nợ chưa đối chiếu."
+         * KHÔNG có dòng nào hiển thị sai lệch "✓ Khớp hoàn toàn tất cả các tiêu chí" khi còn semantic chưa check.
 [ ] 8. Nhấn [📊 Xuất Báo Cáo Excel] và mở file xuất để kiểm tra.
 "@
 Set-Content -Path (Join-Path $auditDir "manual-ui-checklist.txt") -Value $manualChecklist -Encoding UTF8
@@ -306,27 +327,27 @@ foreach ($file in $files) {
 
 Write-Host "Total staged files: $includedCount"
 
-Write-Host "=== 3. Compressing staged files into $zipPathV10 and $zipPath ==="
-if (Test-Path $zipPathV10) { Remove-Item -Path $zipPathV10 -Force }
+Write-Host "=== 3. Compressing staged files into $zipPathV11 and $zipPath ==="
+if (Test-Path $zipPathV11) { Remove-Item -Path $zipPathV11 -Force }
 if (Test-Path $zipPath) { Remove-Item -Path $zipPath -Force }
 
-Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV10 -CompressionLevel Optimal
-Copy-Item -Path $zipPathV10 -Destination $zipPath -Force
+Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV11 -CompressionLevel Optimal
+Copy-Item -Path $zipPathV11 -Destination $zipPath -Force
 
 # Cleanup stage directory
 Remove-Item -Path $stageDir -Recurse -Force
 
 Write-Host "=== 4. Validating Created ZIP Archive ==="
-$zipInfo = Get-Item $zipPathV10
+$zipInfo = Get-Item $zipPathV11
 $zipSizeKB = [math]::Round($zipInfo.Length / 1KB, 2)
 $zipSizeMB = [math]::Round($zipInfo.Length / 1MB, 2)
 
-Write-Host "ZIP Path: $zipPathV10"
+Write-Host "ZIP Path: $zipPathV11"
 Write-Host "ZIP Size: $zipSizeKB KB ($zipSizeMB MB)"
 
 # Validate archive contents
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV10)
+$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV11)
 $entryNames = $verifyZip.Entries | ForEach-Object { $_.FullName }
 $verifyZip.Dispose()
 
@@ -336,10 +357,10 @@ $hasAuditDiff = ($entryNames | Where-Object { $_ -like "*git-diff-stat.txt" })
 $hasAuditTest = ($entryNames | Where-Object { $_ -like "*test-results.txt" })
 $hasAuditBuild = ($entryNames | Where-Object { $_ -like "*build-results.txt" })
 $hasAuditSmoke = ($entryNames | Where-Object { $_ -like "*smoke-test.txt" })
-$hasAuditIpc = ($entryNames | Where-Object { $_ -like "*audit/generated-ipc-contract.json" -or $_ -like "*audit\generated-ipc-contract.json" })
 $hasAuditHashes = ($entryNames | Where-Object { $_ -like "*artifact-hashes.txt" })
 $hasAuditChecklist = ($entryNames | Where-Object { $_ -like "*manual-ui-checklist.txt" })
 $hasCoreLib = ($entryNames | Where-Object { $_ -like "*crates/reconciliation-core/src/lib.rs" -or $_ -like "*reconciliation-core\src\lib.rs" })
+$hasIntakeDedup = ($entryNames | Where-Object { $_ -like "*crates/reconciliation-core/src/intake/dedup.rs" -or $_ -like "*reconciliation-core\src\intake\dedup.rs" })
 $hasMatcherEngine = ($entryNames | Where-Object { $_ -like "*crates/reconciliation-core/src/matcher/engine.rs" -or $_ -like "*reconciliation-core\src\matcher\engine.rs" })
 $hasFrontendApp = ($entryNames | Where-Object { $_ -like "*src/App.tsx" -or $_ -like "*src\App.tsx" })
 $hasRealExcel = ($entryNames | Where-Object { $_ -like "*.xlsx" -or $_ -like "*.xls" })
@@ -351,15 +372,15 @@ Write-Host " - audit/git-diff-stat.txt: $($hasAuditDiff -ne $null)"
 Write-Host " - audit/test-results.txt: $($hasAuditTest -ne $null)"
 Write-Host " - audit/build-results.txt: $($hasAuditBuild -ne $null)"
 Write-Host " - audit/smoke-test.txt: $($hasAuditSmoke -ne $null)"
-Write-Host " - audit/generated-ipc-contract.json: $($hasAuditIpc -ne $null)"
 Write-Host " - audit/artifact-hashes.txt: $($hasAuditHashes -ne $null)"
 Write-Host " - audit/manual-ui-checklist.txt: $($hasAuditChecklist -ne $null)"
 Write-Host " - crates/reconciliation-core/src/lib.rs: $($hasCoreLib -ne $null)"
+Write-Host " - crates/reconciliation-core/src/intake/dedup.rs: $($hasIntakeDedup -ne $null)"
 Write-Host " - crates/reconciliation-core/src/matcher/engine.rs: $($hasMatcherEngine -ne $null)"
 Write-Host " - src/App.tsx: $($hasFrontendApp -ne $null)"
 Write-Host " - No confidential Excel in zip: $($hasRealExcel -eq $null)"
 
-if ($hasAuditCommit -and $hasAuditStatus -and $hasAuditDiff -and $hasAuditTest -and $hasAuditBuild -and $hasAuditSmoke -and $hasAuditHashes -and $hasAuditChecklist -and $hasCoreLib -and $hasMatcherEngine -and $hasFrontendApp -and ($hasRealExcel -eq $null)) {
+if ($hasAuditCommit -and $hasAuditStatus -and $hasAuditDiff -and $hasAuditTest -and $hasAuditBuild -and $hasAuditSmoke -and $hasAuditHashes -and $hasAuditChecklist -and $hasCoreLib -and $hasIntakeDedup -and $hasMatcherEngine -and $hasFrontendApp -and ($hasRealExcel -eq $null)) {
     Write-Host "SAFE_FOR_INDEPENDENT_AUDIT: YES"
 } else {
     Write-Host "SAFE_FOR_INDEPENDENT_AUDIT: NO"

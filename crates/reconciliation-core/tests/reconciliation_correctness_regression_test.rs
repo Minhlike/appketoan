@@ -1,3 +1,4 @@
+use sha2::Digest;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -1081,7 +1082,10 @@ fn test_13_variance_isolation_no_canceling_rev_vat() {
     assert_eq!(grp.status, MatchStatus::MismatchAmount);
     assert_eq!(grp.revenue_variance, dec!(10000000));
     assert_eq!(grp.vat_variance, dec!(-10000000));
-    assert_eq!(grp.revenue_variance.abs() + grp.vat_variance.abs(), dec!(20000000));
+    assert_eq!(
+        grp.revenue_variance.abs() + grp.vat_variance.abs(),
+        dec!(20000000)
+    );
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -3778,17 +3782,18 @@ fn test_32_fail_closed_empty_comparison_rules() {
     records_map.insert("src_inv".to_string(), vec![primary]);
     records_map.insert("src_511".to_string(), vec![secondary]);
 
-    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation should succeed");
+    let res =
+        execute_reconciliation(&session, &records_map).expect("Reconciliation should succeed");
 
     assert_eq!(res.groups.len(), 2);
     let grp = &res.groups[0];
     assert_eq!(grp.status, MatchStatus::NeedsReview);
     assert_eq!(res.summary.exact_matches_count, 0);
 
-    let has_unsupported_rule_disc = grp.discrepancies.iter().any(|d| {
-        d.field_name == "rule"
-            || d.message.contains("UNSUPPORTED_RECONCILIATION_RULE")
-    });
+    let has_unsupported_rule_disc = grp
+        .discrepancies
+        .iter()
+        .any(|d| d.field_name == "rule" || d.message.contains("UNSUPPORTED_RECONCILIATION_RULE"));
     assert!(
         has_unsupported_rule_disc,
         "Group must contain unsupported rule discrepancy when comparison_rules is empty"
@@ -3873,7 +3878,8 @@ fn test_33_fail_closed_invalid_field_in_comparison_rules() {
     records_map.insert("src_inv".to_string(), vec![primary]);
     records_map.insert("src_511".to_string(), vec![secondary]);
 
-    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation should succeed");
+    let res =
+        execute_reconciliation(&session, &records_map).expect("Reconciliation should succeed");
 
     assert_eq!(res.groups.len(), 2);
     let grp = &res.groups[0];
@@ -3881,3 +3887,891 @@ fn test_33_fail_closed_invalid_field_in_comparison_rules() {
     assert_eq!(res.summary.exact_matches_count, 0);
 }
 
+// -------------------------------------------------------------------------------------------------
+// 34. V11 STRICT FIELD EXTRACTION FAIL-CLOSED TESTS (Cases A, B, C, D, E)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_34_field_fail_closed_cases_a_b_c_d_e() {
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        Some("docNo"),
+        Some("pretaxAmount"),
+    );
+    let src_511 = create_source(
+        "src_511",
+        "Sổ cái 511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        Some("docNo"),
+        Some("creditAmount"),
+    );
+    let src_131 = create_source(
+        "src_131",
+        "Sổ cái 131",
+        DataSourceKind::Ledger131,
+        SourceRole::RequiredSecondary,
+        Some("docNo"),
+        Some("debitAmount"),
+    );
+
+    // Case A: Primary pretaxAmount is None, totalAmount is 110M
+    {
+        let session = ReconciliationSession {
+            session_id: "sess_v11_case_a".to_string(),
+            scenario_name: "Test Case A Pretax Missing".to_string(),
+            primary_source_id: Some("src_inv".to_string()),
+            expected_primary_kind: None,
+            required_source_ids: Some(vec!["src_511".to_string()]),
+            optional_source_ids: None,
+            data_sources: vec![src_inv.clone(), src_511.clone()],
+            comparison_rules: vec![ComparisonRule {
+                id: "rule_revenue".to_string(),
+                name: "Revenue Rule".to_string(),
+                semantic: ComparisonSemantic::Revenue,
+                primary_source_kind: DataSourceKind::EInvoice,
+                primary_field: "pretaxAmount".to_string(),
+                secondary_source_kind: DataSourceKind::Ledger511,
+                secondary_field: "creditAmount".to_string(),
+                is_required: true,
+                tolerance_vnd: Decimal::ZERO,
+                date_tolerance_days: 5,
+            }],
+            matching_tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+            enable_aggregate_match: false,
+        };
+        let mut map = HashMap::new();
+        map.insert(
+            "src_inv".to_string(),
+            vec![CanonicalRecord {
+                id: "inv_a".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 2,
+                doc_no: Some("001".to_string()),
+                date: Some("2026-07-01".to_string()),
+                pretax_amount: None,
+                total_amount: dec!(110_000_000),
+                ..Default::default()
+            }],
+        );
+        map.insert(
+            "src_511".to_string(),
+            vec![CanonicalRecord {
+                id: "tk_a".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 2,
+                doc_no: Some("001".to_string()),
+                date: Some("2026-07-01".to_string()),
+                credit_amount: Some(dec!(100_000_000)),
+                total_amount: dec!(100_000_000),
+                ..Default::default()
+            }],
+        );
+        let res = execute_reconciliation(&session, &map).unwrap();
+        assert_eq!(res.summary.exact_matches_count, 0);
+        let grp = res.groups.iter().find(|g| g.id.contains("inv_a")).unwrap();
+        assert_eq!(grp.status, MatchStatus::NeedsReview);
+        assert!(grp
+            .discrepancies
+            .iter()
+            .any(|d| d.field_name == "FIELD_VALUE_MISSING"));
+    }
+
+    // Case B: Primary vatAmount is None
+    {
+        let session = ReconciliationSession {
+            session_id: "sess_v11_case_b".to_string(),
+            scenario_name: "Test Case B VAT Missing".to_string(),
+            primary_source_id: Some("src_inv".to_string()),
+            expected_primary_kind: None,
+            required_source_ids: Some(vec!["src_511".to_string()]),
+            optional_source_ids: None,
+            data_sources: vec![src_inv.clone(), src_511.clone()],
+            comparison_rules: vec![ComparisonRule {
+                id: "rule_vat".to_string(),
+                name: "VAT Rule".to_string(),
+                semantic: ComparisonSemantic::Vat,
+                primary_source_kind: DataSourceKind::EInvoice,
+                primary_field: "vatAmount".to_string(),
+                secondary_source_kind: DataSourceKind::Ledger511,
+                secondary_field: "creditAmount".to_string(),
+                is_required: true,
+                tolerance_vnd: Decimal::ZERO,
+                date_tolerance_days: 5,
+            }],
+            matching_tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+            enable_aggregate_match: false,
+        };
+        let mut map = HashMap::new();
+        map.insert(
+            "src_inv".to_string(),
+            vec![CanonicalRecord {
+                id: "inv_b".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 2,
+                doc_no: Some("002".to_string()),
+                date: Some("2026-07-01".to_string()),
+                vat_amount: None,
+                total_amount: dec!(10_000_000),
+                ..Default::default()
+            }],
+        );
+        map.insert(
+            "src_511".to_string(),
+            vec![CanonicalRecord {
+                id: "tk_b".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 2,
+                doc_no: Some("002".to_string()),
+                date: Some("2026-07-01".to_string()),
+                credit_amount: Some(dec!(10_000_000)),
+                total_amount: dec!(10_000_000),
+                ..Default::default()
+            }],
+        );
+        let res = execute_reconciliation(&session, &map).unwrap();
+        assert_eq!(res.summary.exact_matches_count, 0);
+        let grp = res.groups.iter().find(|g| g.id.contains("inv_b")).unwrap();
+        assert_eq!(grp.status, MatchStatus::NeedsReview);
+        assert!(grp
+            .discrepancies
+            .iter()
+            .any(|d| d.field_name == "FIELD_VALUE_MISSING"));
+    }
+
+    // Case C: Secondary creditAmount is None, totalAmount is 100M
+    {
+        let session = ReconciliationSession {
+            session_id: "sess_v11_case_c".to_string(),
+            scenario_name: "Test Case C Credit Missing".to_string(),
+            primary_source_id: Some("src_inv".to_string()),
+            expected_primary_kind: None,
+            required_source_ids: Some(vec!["src_511".to_string()]),
+            optional_source_ids: None,
+            data_sources: vec![src_inv.clone(), src_511.clone()],
+            comparison_rules: vec![ComparisonRule {
+                id: "rule_revenue".to_string(),
+                name: "Revenue Rule".to_string(),
+                semantic: ComparisonSemantic::Revenue,
+                primary_source_kind: DataSourceKind::EInvoice,
+                primary_field: "pretaxAmount".to_string(),
+                secondary_source_kind: DataSourceKind::Ledger511,
+                secondary_field: "creditAmount".to_string(),
+                is_required: true,
+                tolerance_vnd: Decimal::ZERO,
+                date_tolerance_days: 5,
+            }],
+            matching_tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+            enable_aggregate_match: false,
+        };
+        let mut map = HashMap::new();
+        map.insert(
+            "src_inv".to_string(),
+            vec![CanonicalRecord {
+                id: "inv_c".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 2,
+                doc_no: Some("003".to_string()),
+                date: Some("2026-07-01".to_string()),
+                pretax_amount: Some(dec!(100_000_000)),
+                total_amount: dec!(110_000_000),
+                ..Default::default()
+            }],
+        );
+        map.insert(
+            "src_511".to_string(),
+            vec![CanonicalRecord {
+                id: "tk_c".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 2,
+                doc_no: Some("003".to_string()),
+                date: Some("2026-07-01".to_string()),
+                credit_amount: None,
+                total_amount: dec!(100_000_000),
+                ..Default::default()
+            }],
+        );
+        let res = execute_reconciliation(&session, &map).unwrap();
+        assert_eq!(res.summary.exact_matches_count, 0);
+        let grp = res.groups.iter().find(|g| g.id.contains("inv_c")).unwrap();
+        assert_eq!(grp.status, MatchStatus::NeedsReview);
+        assert!(grp
+            .discrepancies
+            .iter()
+            .any(|d| d.field_name == "FIELD_VALUE_MISSING"));
+    }
+
+    // Case D: Secondary debitAmount is None
+    {
+        let session = ReconciliationSession {
+            session_id: "sess_v11_case_d".to_string(),
+            scenario_name: "Test Case D Debit Missing".to_string(),
+            primary_source_id: Some("src_inv".to_string()),
+            expected_primary_kind: None,
+            required_source_ids: Some(vec!["src_131".to_string()]),
+            optional_source_ids: None,
+            data_sources: vec![src_inv.clone(), src_131.clone()],
+            comparison_rules: vec![ComparisonRule {
+                id: "rule_receivable".to_string(),
+                name: "Receivable Rule".to_string(),
+                semantic: ComparisonSemantic::Receivable,
+                primary_source_kind: DataSourceKind::EInvoice,
+                primary_field: "totalAmount".to_string(),
+                secondary_source_kind: DataSourceKind::Ledger131,
+                secondary_field: "debitAmount".to_string(),
+                is_required: true,
+                tolerance_vnd: Decimal::ZERO,
+                date_tolerance_days: 5,
+            }],
+            matching_tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+            enable_aggregate_match: false,
+        };
+        let mut map = HashMap::new();
+        map.insert(
+            "src_inv".to_string(),
+            vec![CanonicalRecord {
+                id: "inv_d".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 2,
+                doc_no: Some("004".to_string()),
+                date: Some("2026-07-01".to_string()),
+                total_amount: dec!(110_000_000),
+                ..Default::default()
+            }],
+        );
+        map.insert(
+            "src_131".to_string(),
+            vec![CanonicalRecord {
+                id: "tk_d".to_string(),
+                source_id: "src_131".to_string(),
+                source_row: 2,
+                doc_no: Some("004".to_string()),
+                date: Some("2026-07-01".to_string()),
+                debit_amount: None,
+                total_amount: dec!(110_000_000),
+                ..Default::default()
+            }],
+        );
+        let res = execute_reconciliation(&session, &map).unwrap();
+        assert_eq!(res.summary.exact_matches_count, 0);
+        let grp = res.groups.iter().find(|g| g.id.contains("inv_d")).unwrap();
+        assert_eq!(grp.status, MatchStatus::NeedsReview);
+        assert!(grp
+            .discrepancies
+            .iter()
+            .any(|d| d.field_name == "FIELD_VALUE_MISSING"));
+    }
+
+    // Case E: Rule requests unknown field
+    {
+        let session = ReconciliationSession {
+            session_id: "sess_v11_case_e".to_string(),
+            scenario_name: "Test Case E Unsupported Field".to_string(),
+            primary_source_id: Some("src_inv".to_string()),
+            expected_primary_kind: None,
+            required_source_ids: Some(vec!["src_511".to_string()]),
+            optional_source_ids: None,
+            data_sources: vec![src_inv, src_511],
+            comparison_rules: vec![ComparisonRule {
+                id: "rule_bad".to_string(),
+                name: "Bad Field Rule".to_string(),
+                semantic: ComparisonSemantic::Revenue,
+                primary_source_kind: DataSourceKind::EInvoice,
+                primary_field: "randomUnknownField".to_string(),
+                secondary_source_kind: DataSourceKind::Ledger511,
+                secondary_field: "creditAmount".to_string(),
+                is_required: true,
+                tolerance_vnd: Decimal::ZERO,
+                date_tolerance_days: 5,
+            }],
+            matching_tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+            enable_aggregate_match: false,
+        };
+        let mut map = HashMap::new();
+        map.insert(
+            "src_inv".to_string(),
+            vec![CanonicalRecord {
+                id: "inv_e".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 2,
+                doc_no: Some("005".to_string()),
+                date: Some("2026-07-01".to_string()),
+                total_amount: dec!(100_000_000),
+                ..Default::default()
+            }],
+        );
+        map.insert(
+            "src_511".to_string(),
+            vec![CanonicalRecord {
+                id: "tk_e".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 2,
+                doc_no: Some("005".to_string()),
+                date: Some("2026-07-01".to_string()),
+                credit_amount: Some(dec!(100_000_000)),
+                total_amount: dec!(100_000_000),
+                ..Default::default()
+            }],
+        );
+        let res = execute_reconciliation(&session, &map).unwrap();
+        assert_eq!(res.summary.exact_matches_count, 0);
+        let grp = res.groups.iter().find(|g| g.id.contains("inv_e")).unwrap();
+        assert_eq!(grp.status, MatchStatus::NeedsReview);
+        assert!(grp
+            .discrepancies
+            .iter()
+            .any(|d| d.field_name == "UNSUPPORTED_RULE_FIELD"));
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// 35. EXACT SAME CANDIDATE CONTENTION TEST (User Section 4)
+// Secondary X (100) vs Primary A (90) and Primary B (100)
+// Expected: A evaluates MismatchAmount (does NOT consume X); B evaluates MatchedExact with X (consumes X)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_35_same_candidate_contention_unconsumed_mismatch_then_exact() {
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        Some("docNo"),
+        Some("pretaxAmount"),
+    );
+    let src_511 = create_source(
+        "src_511",
+        "Sổ cái 511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        Some("docNo"),
+        Some("creditAmount"),
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_v11_contention".to_string(),
+        scenario_name: "Contention Test".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_511".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_511],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_revenue".to_string(),
+            name: "Revenue Rule".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let mut map = HashMap::new();
+    map.insert(
+        "src_inv".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "pA".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 2,
+                doc_no: Some("001".to_string()),
+                date: Some("2026-07-01".to_string()),
+                partner_tax_id: Some("0101".to_string()),
+                pretax_amount: Some(dec!(90)),
+                total_amount: dec!(90),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "pB".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 3,
+                doc_no: Some("001".to_string()),
+                date: Some("2026-07-01".to_string()),
+                partner_tax_id: Some("0101".to_string()),
+                pretax_amount: Some(dec!(100)),
+                total_amount: dec!(100),
+                ..Default::default()
+            },
+        ],
+    );
+    map.insert(
+        "src_511".to_string(),
+        vec![CanonicalRecord {
+            id: "sX".to_string(),
+            source_id: "src_511".to_string(),
+            source_row: 2,
+            doc_no: Some("001".to_string()),
+            date: Some("2026-07-01".to_string()),
+            partner_tax_id: Some("0101".to_string()),
+            credit_amount: Some(dec!(100)),
+            total_amount: dec!(100),
+            ..Default::default()
+        }],
+    );
+
+    let res = execute_reconciliation(&session, &map).unwrap();
+
+    let grp_a = res
+        .groups
+        .iter()
+        .find(|g| g.primary_source_record_ids.contains(&"pA".to_string()))
+        .unwrap();
+    assert_eq!(grp_a.status, MatchStatus::MismatchAmount);
+
+    let grp_b = res
+        .groups
+        .iter()
+        .find(|g| g.primary_source_record_ids.contains(&"pB".to_string()))
+        .unwrap();
+    assert_eq!(grp_b.status, MatchStatus::MatchedExact);
+    assert_eq!(grp_b.target_source_record_ids, vec!["sX".to_string()]);
+
+    assert_eq!(res.summary.exact_matches_count, 1);
+    assert_eq!(res.summary.mismatches_count, 1);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 36. AMBIGUOUS CONTENTION AND RESIDUAL SWEEP ASSERTIONS (User Section 5)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_36_ambiguous_contention_and_residual_sweep() {
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        Some("docNo"),
+        Some("pretaxAmount"),
+    );
+    let src_511 = create_source(
+        "src_511",
+        "Sổ cái 511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        Some("docNo"),
+        Some("creditAmount"),
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_v11_ambiguous".to_string(),
+        scenario_name: "Ambiguous Contention".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_511".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_511],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_revenue".to_string(),
+            name: "Revenue Rule".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let mut map = HashMap::new();
+    map.insert(
+        "src_inv".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "pA".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 2,
+                doc_no: Some("002".to_string()),
+                series: None,
+                pretax_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "pB".to_string(),
+                source_id: "src_inv".to_string(),
+                source_row: 3,
+                doc_no: Some("002".to_string()),
+                series: Some("SER_B".to_string()),
+                pretax_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+        ],
+    );
+    map.insert(
+        "src_511".to_string(),
+        vec![
+            CanonicalRecord {
+                id: "sX".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 2,
+                doc_no: Some("002".to_string()),
+                series: Some("SER_B".to_string()),
+                credit_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+            CanonicalRecord {
+                id: "sY".to_string(),
+                source_id: "src_511".to_string(),
+                source_row: 3,
+                doc_no: Some("002".to_string()),
+                series: Some("SER_C".to_string()),
+                credit_amount: Some(dec!(50)),
+                total_amount: dec!(50),
+                ..Default::default()
+            },
+        ],
+    );
+
+    let res = execute_reconciliation(&session, &map).unwrap();
+
+    let grp_b = res
+        .groups
+        .iter()
+        .find(|g| g.primary_source_record_ids.contains(&"pB".to_string()))
+        .unwrap();
+    assert_eq!(grp_b.status, MatchStatus::MatchedExact);
+    assert_eq!(grp_b.target_source_record_ids, vec!["sX".to_string()]);
+
+    let residual_y = res.groups.iter().find(|g| {
+        g.target_source_record_ids.contains(&"sY".to_string())
+            && g.primary_source_record_ids.is_empty()
+    });
+    assert!(residual_y.is_some());
+    assert_eq!(
+        residual_y.unwrap().status,
+        MatchStatus::UnmatchedMissingInSource
+    );
+
+    // sX must NOT appear in residual groups
+    let residual_x = res.groups.iter().find(|g| {
+        g.target_source_record_ids.contains(&"sX".to_string())
+            && g.primary_source_record_ids.is_empty()
+    });
+    assert!(residual_x.is_none());
+}
+
+// -------------------------------------------------------------------------------------------------
+// 37. N-FILE INTAKE DEDUPLICATION (4 Physical Files: A, B, Copy A, Copy B -> Exact Baseline)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_37_n_file_intake_deduplication_4_files_exact_baseline() {
+    use reconciliation_core::intake::{
+        analyze_intake_data_sources, filter_reconciliation_session_and_records, DatasetRelation,
+    };
+
+    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
+    let tk511_path = "D:\\appketoan\\T7.2026.xlsx";
+
+    let meta_inv = inspect_excel_file(inv_path).expect("Failed to inspect invoice file");
+    let sheet_inv = &meta_inv.sheets[0];
+    let raw_inv = read_sheet_rows(inv_path, &sheet_inv.name).expect("Failed to read invoices");
+    let ds_inv = DataSource {
+        id: "src_inv_1".to_string(),
+        name: "Hóa đơn gốc".to_string(),
+        file_path: inv_path.to_string(),
+        sheet_name: sheet_inv.name.clone(),
+        kind: DataSourceKind::EInvoice,
+        role: SourceRole::Primary,
+        header_row: sheet_inv.detected_header_row,
+        data_start_row: sheet_inv.detected_data_start_row,
+        column_mapping: sheet_inv.suggested_mapping.clone(),
+    };
+    let mut ds_inv_copy = ds_inv.clone();
+    ds_inv_copy.id = "src_inv_copy".to_string();
+    ds_inv_copy.name = "Hóa đơn copy".to_string();
+    let inv_recs = normalize_data_source_rows(&ds_inv, &sheet_inv.columns, &raw_inv);
+
+    let meta_tk = inspect_excel_file(tk511_path).expect("Failed to inspect TK511 file");
+    let sheet_tk = &meta_tk.sheets[0];
+    let raw_tk = read_sheet_rows(tk511_path, &sheet_tk.name).expect("Failed to read TK511");
+    let ds_tk = DataSource {
+        id: "src_511_1".to_string(),
+        name: "Sổ cái TK511 gốc".to_string(),
+        file_path: tk511_path.to_string(),
+        sheet_name: sheet_tk.name.clone(),
+        kind: DataSourceKind::Ledger511,
+        role: SourceRole::RequiredSecondary,
+        header_row: sheet_tk.detected_header_row,
+        data_start_row: sheet_tk.detected_data_start_row,
+        column_mapping: sheet_tk.suggested_mapping.clone(),
+    };
+    let mut ds_tk_copy = ds_tk.clone();
+    ds_tk_copy.id = "src_511_copy".to_string();
+    ds_tk_copy.name = "Sổ cái TK511 copy".to_string();
+    let tk_recs = normalize_data_source_rows(&ds_tk, &sheet_tk.columns, &raw_tk);
+
+    let session = ReconciliationSession {
+        session_id: "sess_4_files_baseline".to_string(),
+        scenario_name: "4-Files Dedup Baseline".to_string(),
+        primary_source_id: Some("src_inv_1".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_511_1".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![ds_inv, ds_tk, ds_inv_copy, ds_tk_copy],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_revenue".to_string(),
+            name: "Doanh thu (Pretax ↔ TK511 Phát sinh Có)".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let inv_bytes = std::fs::read(inv_path).unwrap();
+    let tk_bytes = std::fs::read(tk511_path).unwrap();
+
+    let mut raw_hashes_map = HashMap::new();
+
+    let inv_hash = format!("{:x}", sha2::Sha256::digest(&inv_bytes));
+    let tk_hash = format!("{:x}", sha2::Sha256::digest(&tk_bytes));
+
+    raw_hashes_map.insert("src_inv_1".to_string(), inv_hash.clone());
+    raw_hashes_map.insert("src_inv_copy".to_string(), inv_hash);
+    raw_hashes_map.insert("src_511_1".to_string(), tk_hash.clone());
+    raw_hashes_map.insert("src_511_copy".to_string(), tk_hash);
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv_1".to_string(), inv_recs.clone());
+    records_map.insert("src_inv_copy".to_string(), inv_recs);
+    records_map.insert("src_511_1".to_string(), tk_recs.clone());
+    records_map.insert("src_511_copy".to_string(), tk_recs);
+
+    // Intake analysis
+    let analysis = analyze_intake_data_sources(&session, &records_map, &raw_hashes_map);
+    assert_eq!(analysis.total_physical_sources, 4);
+    assert_eq!(analysis.unique_datasets_count, 2);
+    assert_eq!(analysis.exact_duplicates_count, 2);
+
+    let copy_inv_diag = analysis
+        .source_analyses
+        .iter()
+        .find(|d| d.source_id == "src_inv_copy")
+        .unwrap();
+    assert!(matches!(
+        copy_inv_diag.relation,
+        DatasetRelation::ExactDuplicate { .. }
+    ));
+
+    let copy_tk_diag = analysis
+        .source_analyses
+        .iter()
+        .find(|d| d.source_id == "src_511_copy")
+        .unwrap();
+    assert!(matches!(
+        copy_tk_diag.relation,
+        DatasetRelation::ExactDuplicate { .. }
+    ));
+
+    // Filter session & records
+    let (clean_session, clean_map, _) =
+        filter_reconciliation_session_and_records(&session, &records_map, &raw_hashes_map).unwrap();
+    assert_eq!(clean_session.data_sources.len(), 2);
+
+    // Execute reconciliation on clean session
+    let res = execute_reconciliation(&clean_session, &clean_map).unwrap();
+
+    assert_eq!(res.summary.total_source_records, 46);
+    assert_eq!(res.summary.total_target_records, 45);
+    assert_eq!(res.summary.exact_matches_count, 45);
+    assert_eq!(res.summary.mismatches_count, 0);
+    assert_eq!(res.summary.missing_in_target_count, 1);
+    assert_eq!(res.summary.revenue_variance, dec!(105_000_000));
+
+    let missing_233 = res
+        .groups
+        .iter()
+        .find(|g| g.doc_no.as_deref() == Some("233"))
+        .unwrap();
+    assert_eq!(missing_233.status, MatchStatus::UnmatchedMissingInTarget);
+    assert_eq!(missing_233.amount_variance, dec!(105_000_000));
+}
+
+// -------------------------------------------------------------------------------------------------
+// 38. CONTENT DUPLICATE WITH DIFFERENT RAW HASH (Reformatted Excel)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_38_content_duplicate_reformatted_excel() {
+    use reconciliation_core::intake::{analyze_intake_data_sources, DatasetRelation};
+
+    let src1 = create_source(
+        "src1",
+        "File 1",
+        DataSourceKind::Ledger511,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let src2 = create_source(
+        "src2",
+        "File 2 Reformatted",
+        DataSourceKind::Ledger511,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_content_dup".to_string(),
+        scenario_name: "Content Dup Test".to_string(),
+        primary_source_id: Some("src1".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+
+    let recs = vec![CanonicalRecord {
+        id: "r1".to_string(),
+        source_id: "src1".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        credit_amount: Some(dec!(100)),
+        total_amount: dec!(100),
+        ..Default::default()
+    }];
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src1".to_string(), recs.clone());
+    records_map.insert("src2".to_string(), recs);
+
+    // Different raw hashes, but same canonical content
+    let mut raw_hashes_map = HashMap::new();
+    raw_hashes_map.insert("src1".to_string(), "hash_abc".to_string());
+    raw_hashes_map.insert("src2".to_string(), "hash_xyz".to_string());
+
+    let analysis = analyze_intake_data_sources(&session, &records_map, &raw_hashes_map);
+    assert_eq!(analysis.unique_datasets_count, 1);
+    assert_eq!(analysis.content_duplicates_count, 1);
+
+    let diag2 = analysis
+        .source_analyses
+        .iter()
+        .find(|d| d.source_id == "src2")
+        .unwrap();
+    assert!(matches!(
+        diag2.relation,
+        DatasetRelation::ContentDuplicate { .. }
+    ));
+}
+
+// -------------------------------------------------------------------------------------------------
+// 39. PARTIAL OVERLAP DETECTION FAIL-CLOSED
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_39_partial_overlap_detection_fail_closed() {
+    use reconciliation_core::intake::{analyze_intake_data_sources, DatasetRelation};
+
+    let src1 = create_source(
+        "src1",
+        "Ledger Part 1",
+        DataSourceKind::Ledger511,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let src2 = create_source(
+        "src2",
+        "Ledger Part 2 Overlapping",
+        DataSourceKind::Ledger511,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_partial_overlap".to_string(),
+        scenario_name: "Partial Overlap Test".to_string(),
+        primary_source_id: Some("src1".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+
+    let rec1 = CanonicalRecord {
+        id: "r1".to_string(),
+        source_id: "src1".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        credit_amount: Some(dec!(100)),
+        total_amount: dec!(100),
+        ..Default::default()
+    };
+    let rec2 = CanonicalRecord {
+        id: "r2".to_string(),
+        source_id: "src1".to_string(),
+        source_row: 3,
+        doc_no: Some("002".to_string()),
+        credit_amount: Some(dec!(200)),
+        total_amount: dec!(200),
+        ..Default::default()
+    };
+    let rec3 = CanonicalRecord {
+        id: "r3".to_string(),
+        source_id: "src2".to_string(),
+        source_row: 3,
+        doc_no: Some("003".to_string()),
+        credit_amount: Some(dec!(300)),
+        total_amount: dec!(300),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src1".to_string(), vec![rec1.clone(), rec2.clone()]);
+    records_map.insert("src2".to_string(), vec![rec2, rec3]);
+
+    let mut raw_hashes_map = HashMap::new();
+    raw_hashes_map.insert("src1".to_string(), "hash_part1".to_string());
+    raw_hashes_map.insert("src2".to_string(), "hash_part2".to_string());
+
+    let analysis = analyze_intake_data_sources(&session, &records_map, &raw_hashes_map);
+    assert!(analysis.requires_user_confirmation);
+    assert_eq!(analysis.partial_overlaps_count, 1);
+
+    let diag2 = analysis
+        .source_analyses
+        .iter()
+        .find(|d| d.source_id == "src2")
+        .unwrap();
+    assert!(matches!(
+        diag2.relation,
+        DatasetRelation::PartialOverlap { .. }
+    ));
+}

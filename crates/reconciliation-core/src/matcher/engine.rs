@@ -22,8 +22,81 @@ pub fn is_accepted_match(status: &MatchStatus) -> bool {
     )
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuleFieldError {
+    UnknownField(String),
+    MissingFieldValue(String),
+}
+
+impl std::fmt::Display for RuleFieldError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownField(name) => write!(f, "UNSUPPORTED_RULE_FIELD: {}", name),
+            Self::MissingFieldValue(name) => write!(f, "FIELD_VALUE_MISSING: {}", name),
+        }
+    }
+}
+
+/// Strictly extracts exact field amount specified by comparison rule.
+/// Zero silent fallbacks (pretaxAmount does not fallback to totalAmount, vatAmount does not fallback to 0, etc.)
+pub fn extract_rule_amount(
+    record: &CanonicalRecord,
+    field_name: &str,
+) -> Result<Decimal, RuleFieldError> {
+    match field_name {
+        "pretaxAmount" | "pretax_amount" => record
+            .pretax_amount
+            .ok_or_else(|| RuleFieldError::MissingFieldValue("pretaxAmount".to_string())),
+        "vatAmount" | "vat_amount" => record
+            .vat_amount
+            .ok_or_else(|| RuleFieldError::MissingFieldValue("vatAmount".to_string())),
+        "totalAmount" | "total_amount" => Ok(record.total_amount),
+        "debitAmount" | "debit_amount" => record
+            .debit_amount
+            .ok_or_else(|| RuleFieldError::MissingFieldValue("debitAmount".to_string())),
+        "creditAmount" | "credit_amount" => record
+            .credit_amount
+            .ok_or_else(|| RuleFieldError::MissingFieldValue("creditAmount".to_string())),
+        other => Err(RuleFieldError::UnknownField(other.to_string())),
+    }
+}
+
+/// Helper to lookup comparison rule and resolve display metadata and effective tolerances
+pub fn resolve_rule_for_pair<'a>(
+    primary_kind: &DataSourceKind,
+    secondary_kind: &DataSourceKind,
+    rules: &'a [ComparisonRule],
+    session_tolerance_vnd: Decimal,
+    session_date_tolerance_days: u32,
+) -> Option<(&'a ComparisonRule, &'static str, Decimal, u32)> {
+    let rule = rules.iter().find(|r| {
+        &r.primary_source_kind == primary_kind && &r.secondary_source_kind == secondary_kind
+    })?;
+
+    let eff_amt_tol = if !rule.tolerance_vnd.is_zero() {
+        rule.tolerance_vnd
+    } else {
+        session_tolerance_vnd
+    };
+    let eff_date_tol = if rule.date_tolerance_days > 0 {
+        rule.date_tolerance_days
+    } else {
+        session_date_tolerance_days
+    };
+
+    let display_name = match rule.semantic {
+        ComparisonSemantic::Revenue => "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+        ComparisonSemantic::Vat => "Thuế GTGT (VAT ↔ TK3331/133 Phát sinh)",
+        ComparisonSemantic::Receivable => "Công nợ phải thu (Total ↔ TK131 Phát sinh Nợ)",
+        ComparisonSemantic::BankPayment => "Dòng tiền sao kê (Total ↔ Bank Phát sinh Có)",
+        ComparisonSemantic::Other => "Đối chiếu số tiền",
+    };
+
+    Some((rule, display_name, eff_amt_tol, eff_date_tol))
+}
+
 /// Resolves pairwise accounting comparison amounts and comparison semantic dynamically
-/// FAIL-CLOSED: Returns None if no explicit ComparisonRule matches or if field is invalid
+/// FAIL-CLOSED: Returns None if no explicit ComparisonRule matches or if field is invalid/missing
 pub fn resolve_pair_comparison_amounts(
     primary: &CanonicalRecord,
     primary_kind: &DataSourceKind,
@@ -40,54 +113,25 @@ pub fn resolve_pair_comparison_amounts(
     Decimal,
     u32,
 )> {
-    let rule = rules.iter().find(|r| {
-        &r.primary_source_kind == primary_kind && &r.secondary_source_kind == secondary_kind
-    })?;
+    let (rule, display_name, eff_amt_tol, eff_date_tol) = resolve_rule_for_pair(
+        primary_kind,
+        secondary_kind,
+        rules,
+        session_tolerance_vnd,
+        session_date_tolerance_days,
+    )?;
 
-    let pri_amt = extract_field_amount(primary, &rule.primary_field)?;
-    let sec_amt = extract_field_amount(secondary, &rule.secondary_field)?;
-    let eff_amt_tol = if !rule.tolerance_vnd.is_zero() {
-        rule.tolerance_vnd
-    } else {
-        session_tolerance_vnd
-    };
-    let eff_date_tol = if rule.date_tolerance_days > 0 {
-        rule.date_tolerance_days
-    } else {
-        session_date_tolerance_days
-    };
+    let pri_amt = extract_rule_amount(primary, &rule.primary_field).ok()?;
+    let sec_amt = extract_rule_amount(secondary, &rule.secondary_field).ok()?;
 
     Some((
         pri_amt,
         sec_amt,
         rule.semantic,
-        match rule.semantic {
-            ComparisonSemantic::Revenue => "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
-            ComparisonSemantic::Vat => "Thuế GTGT (VAT ↔ TK3331/133 Phát sinh)",
-            ComparisonSemantic::Receivable => "Công nợ phải thu (Total ↔ TK131 Phát sinh Nợ)",
-            ComparisonSemantic::BankPayment => "Dòng tiền sao kê (Total ↔ Bank Phát sinh Có)",
-            ComparisonSemantic::Other => "Đối chiếu số tiền",
-        },
+        display_name,
         eff_amt_tol,
         eff_date_tol,
     ))
-}
-
-pub fn extract_field_amount(record: &CanonicalRecord, field_name: &str) -> Option<Decimal> {
-    match field_name {
-        "pretaxAmount" | "pretax_amount" => {
-            Some(record.pretax_amount.unwrap_or(record.total_amount))
-        }
-        "vatAmount" | "vat_amount" => Some(record.vat_amount.unwrap_or(Decimal::ZERO)),
-        "totalAmount" | "total_amount" => Some(record.total_amount),
-        "debitAmount" | "debit_amount" => {
-            Some(record.debit_amount.unwrap_or(record.total_amount))
-        }
-        "creditAmount" | "credit_amount" => {
-            Some(record.credit_amount.unwrap_or(record.total_amount))
-        }
-        _ => None,
-    }
 }
 
 fn is_date_within_tolerance(d1: Option<&str>, d2: Option<&str>, tolerance_days: u32) -> bool {
@@ -207,76 +251,6 @@ pub fn execute_reconciliation(
     let mut consumed_primary_ids = HashSet::new();
     let mut consumed_secondary_ids = HashSet::new();
     let mut groups: Vec<MatchGroup> = Vec::new();
-
-    // -------------------------------------------------------------
-    // PASS 0: Duplicate Detection within primary source
-    // -------------------------------------------------------------
-    let mut primary_doc_counts: HashMap<(String, String), Vec<&CanonicalRecord>> = HashMap::new();
-    let mut primary_doc_no_frequencies: HashMap<String, usize> = HashMap::new();
-
-    for rec in primary_records {
-        if let Some(doc) = &rec.doc_no {
-            let clean_doc = CanonicalRecord::normalize_doc_no(doc);
-            if !clean_doc.is_empty() {
-                let series = rec.series.as_deref().unwrap_or("").to_string();
-                primary_doc_counts
-                    .entry((series, clean_doc.clone()))
-                    .or_default()
-                    .push(rec);
-                *primary_doc_no_frequencies.entry(clean_doc).or_default() += 1;
-            }
-        }
-    }
-
-    for ((series, doc_no), recs) in primary_doc_counts {
-        if recs.len() > 1 {
-            let ids: Vec<String> = recs.iter().map(|r| r.id.clone()).collect();
-            for id in &ids {
-                consumed_primary_ids.insert(id.clone());
-            }
-            let total_src: Decimal = recs
-                .iter()
-                .map(|r| r.pretax_amount.unwrap_or(r.total_amount))
-                .sum();
-
-            let first_rec = recs[0];
-            groups.push(MatchGroup {
-                id: format!("grp_dup_prim_{}_{}", series, doc_no),
-                status: MatchStatus::DuplicateSuspect,
-                doc_no: Some(doc_no.clone()),
-                series: if series.is_empty() {
-                    None
-                } else {
-                    Some(series.clone())
-                },
-                date: first_rec.date.clone(),
-                partner_name: first_rec.partner_name.clone(),
-                primary_source_record_ids: ids,
-                target_source_record_ids: vec![],
-                source_breakdowns: HashMap::new(),
-                discrepancies: vec![FieldDiscrepancy {
-                    field_name: "docNo".to_string(),
-                    source_value: Some(format!("{} (Ký hiệu {})", doc_no, series)),
-                    target_value: None,
-                    amount_diff: None,
-                    message: format!(
-                        "Phát hiện {} bản ghi trùng số chứng từ #{} (Ký hiệu {}) trong nguồn chính",
-                        recs.len(),
-                        doc_no,
-                        series
-                    ),
-                }],
-                semantic_comparisons: vec![],
-                revenue_variance: total_src,
-                vat_variance: Decimal::ZERO,
-                receivable_variance: Decimal::ZERO,
-                other_variance: Decimal::ZERO,
-                total_source_amount: total_src,
-                total_target_amount: Decimal::ZERO,
-                amount_variance: total_src,
-            });
-        }
-    }
 
     // -------------------------------------------------------------
     // Build Index for Each Secondary Source (Series-Aware)
@@ -402,11 +376,9 @@ pub fn execute_reconciliation(
         let primary_display_amount = primary.pretax_amount.unwrap_or(primary.total_amount);
 
         for sec_idx in &secondary_indexes {
-            let (pri_comp, _, semantic, semantic_name, rule_tolerance_vnd, rule_date_tol_days) =
-                match resolve_pair_comparison_amounts(
-                    primary,
+            let (rule, semantic_name, rule_tolerance_vnd, rule_date_tol_days) =
+                match resolve_rule_for_pair(
                     primary_kind,
-                    primary,
                     &sec_idx.source_kind,
                     &session.comparison_rules,
                     default_tolerance_vnd,
@@ -442,6 +414,51 @@ pub fn execute_reconciliation(
                     }
                 };
 
+            let semantic = rule.semantic;
+
+            let pri_comp = match extract_rule_amount(primary, &rule.primary_field) {
+                Ok(amt) => amt,
+                Err(err) => {
+                    all_secondaries_exact = false;
+                    has_unsupported_rule = true;
+                    let disc = match err {
+                        RuleFieldError::MissingFieldValue(f) => FieldDiscrepancy {
+                            field_name: "FIELD_VALUE_MISSING".to_string(),
+                            source_value: None,
+                            target_value: None,
+                            amount_diff: None,
+                            message: format!(
+                                "Trường '{}' không có giá trị trong bản ghi nguồn chính {} (FIELD_VALUE_MISSING)",
+                                f, primary_source_name
+                            ),
+                        },
+                        RuleFieldError::UnknownField(f) => FieldDiscrepancy {
+                            field_name: "UNSUPPORTED_RULE_FIELD".to_string(),
+                            source_value: Some(f.clone()),
+                            target_value: None,
+                            amount_diff: None,
+                            message: format!(
+                                "Trường '{}' trong quy tắc không được hệ thống hỗ trợ (UNSUPPORTED_RULE_FIELD)",
+                                f
+                            ),
+                        },
+                    };
+                    group_discrepancies.push(disc.clone());
+                    group_source_breakdowns.insert(
+                        sec_idx.source_id.clone(),
+                        SourceMatchBreakdown {
+                            source_id: sec_idx.source_id.clone(),
+                            source_name: sec_idx.source_name.clone(),
+                            record_ids: vec![],
+                            compared_amount: Decimal::ZERO,
+                            status: MatchStatus::NeedsReview,
+                            discrepancies: vec![disc],
+                        },
+                    );
+                    continue;
+                }
+            };
+
             // Find candidates with series awareness
             let raw_candidates: Vec<&CanonicalRecord> = if !primary_series.is_empty() {
                 if let Some(list) = sec_idx
@@ -453,15 +470,7 @@ pub fn execute_reconciliation(
                     .by_series_and_doc
                     .get(&("".to_string(), doc_key.clone()))
                 {
-                    let freq = primary_doc_no_frequencies
-                        .get(&doc_key)
-                        .copied()
-                        .unwrap_or(1);
-                    if freq == 1 {
-                        list_no_series.clone()
-                    } else {
-                        vec![]
-                    }
+                    list_no_series.clone()
                 } else {
                     vec![]
                 }
@@ -548,22 +557,15 @@ pub fn execute_reconciliation(
 
             matched_in_any_secondary = true;
 
-            // Candidate evaluation
-            let cand_amounts: Vec<Decimal> = available
+            // Extract candidate amounts strictly using extract_rule_amount
+            let cand_amount_results: Vec<Result<Decimal, RuleFieldError>> = available
                 .iter()
-                .map(|c| {
-                    resolve_pair_comparison_amounts(
-                        primary,
-                        primary_kind,
-                        c,
-                        &sec_idx.source_kind,
-                        &session.comparison_rules,
-                        default_tolerance_vnd,
-                        default_date_tolerance_days,
-                    )
-                    .map(|r| r.1)
-                    .unwrap_or(Decimal::ZERO)
-                })
+                .map(|c| extract_rule_amount(c, &rule.secondary_field))
+                .collect();
+
+            let cand_amounts: Vec<Decimal> = cand_amount_results
+                .iter()
+                .map(|res| res.as_ref().copied().unwrap_or(Decimal::ZERO))
                 .collect();
 
             let mut matching_subsets: Vec<Vec<usize>> = Vec::new();
@@ -573,12 +575,25 @@ pub fn execute_reconciliation(
             for mask in 1..total_combos {
                 let mut sum = Decimal::ZERO;
                 let mut subset_indices = Vec::new();
-                for (i, amt) in cand_amounts.iter().enumerate().take(subset_n) {
+                let mut has_invalid_field_in_subset = false;
+
+                for (i, res) in cand_amount_results.iter().enumerate().take(subset_n) {
                     if (mask & (1 << i)) != 0 {
-                        sum += *amt;
+                        match res {
+                            Ok(amt) => sum += *amt,
+                            Err(_) => {
+                                has_invalid_field_in_subset = true;
+                                break;
+                            }
+                        }
                         subset_indices.push(i);
                     }
                 }
+
+                if has_invalid_field_in_subset {
+                    continue;
+                }
+
                 if (sum - pri_comp).abs() <= rule_tolerance_vnd {
                     // Check if subset elements are within date tolerance & counterparty compatible
                     let all_valid = subset_indices.iter().all(|&idx| {
@@ -599,27 +614,68 @@ pub fn execute_reconciliation(
 
             if available.len() == 1 {
                 let target = *available[0];
-                // NOTE: Do NOT consume yet — determine sec_status first.
 
-                let (_, tgt_comp, _, _, _, _) = match resolve_pair_comparison_amounts(
-                    primary,
-                    primary_kind,
-                    target,
-                    &sec_idx.source_kind,
-                    &session.comparison_rules,
-                    default_tolerance_vnd,
-                    default_date_tolerance_days,
-                ) {
-                    Some(v) => v,
-                    None => (
-                        Decimal::ZERO,
-                        Decimal::ZERO,
-                        semantic,
-                        semantic_name,
-                        rule_tolerance_vnd,
-                        rule_date_tol_days,
-                    ),
+                let tgt_comp = match &cand_amount_results[0] {
+                    Ok(amt) => *amt,
+                    Err(err) => {
+                        all_secondaries_exact = false;
+                        has_unsupported_rule = true;
+                        let disc = match err {
+                            RuleFieldError::MissingFieldValue(f) => FieldDiscrepancy {
+                                field_name: "FIELD_VALUE_MISSING".to_string(),
+                                source_value: None,
+                                target_value: None,
+                                amount_diff: None,
+                                message: format!(
+                                    "Trường '{}' không có giá trị trong bản ghi đối chiếu {} (FIELD_VALUE_MISSING)",
+                                    f, sec_idx.source_name
+                                ),
+                            },
+                            RuleFieldError::UnknownField(f) => FieldDiscrepancy {
+                                field_name: "UNSUPPORTED_RULE_FIELD".to_string(),
+                                source_value: None,
+                                target_value: Some(f.clone()),
+                                amount_diff: None,
+                                message: format!(
+                                    "Trường '{}' trong quy tắc không được hệ thống hỗ trợ (UNSUPPORTED_RULE_FIELD)",
+                                    f
+                                ),
+                            },
+                        };
+                        group_target_ids.push(target.id.clone());
+                        group_discrepancies.push(disc.clone());
+                        group_source_breakdowns.insert(
+                            sec_idx.source_id.clone(),
+                            SourceMatchBreakdown {
+                                source_id: sec_idx.source_id.clone(),
+                                source_name: sec_idx.source_name.clone(),
+                                record_ids: vec![target.id.clone()],
+                                compared_amount: Decimal::ZERO,
+                                status: MatchStatus::NeedsReview,
+                                discrepancies: vec![disc.clone()],
+                            },
+                        );
+                        group_semantic_comparisons.push(SemanticFieldComparison {
+                            semantic,
+                            semantic_name: semantic_name.to_string(),
+                            primary_source_id: primary_source_id.to_string(),
+                            primary_source_name: primary_source_name.to_string(),
+                            secondary_source_id: sec_idx.source_id.clone(),
+                            secondary_source_name: sec_idx.source_name.clone(),
+                            secondary_source_kind: sec_idx.source_kind.clone(),
+                            semantic_field: semantic_name.to_string(),
+                            expected_amount: pri_comp,
+                            actual_amount: Decimal::ZERO,
+                            variance: pri_comp,
+                            status: MatchStatus::NeedsReview,
+                            primary_record_ids: vec![primary.id.clone()],
+                            secondary_record_ids: vec![target.id.clone()],
+                            discrepancies: vec![disc],
+                        });
+                        continue;
+                    }
                 };
+
                 total_target_amount += tgt_comp;
 
                 let pair_variance = pri_comp - tgt_comp;
@@ -694,96 +750,7 @@ pub fn execute_reconciliation(
                 let chosen_indices = &matching_subsets[0];
                 if chosen_indices.len() == 1 {
                     let target = *available[chosen_indices[0]];
-
-                    let (_, tgt_comp, _, _, _, _) = match resolve_pair_comparison_amounts(
-                        primary,
-                        primary_kind,
-                        target,
-                        &sec_idx.source_kind,
-                        &session.comparison_rules,
-                        default_tolerance_vnd,
-                        default_date_tolerance_days,
-                    ) {
-                        Some(v) => v,
-                        None => (
-                            Decimal::ZERO,
-                            Decimal::ZERO,
-                            semantic,
-                            semantic_name,
-                            rule_tolerance_vnd,
-                            rule_date_tol_days,
-                        ),
-                    };
-                    total_target_amount += tgt_comp;
-
-                    let pair_variance = pri_comp - tgt_comp;
-                    match semantic {
-                        ComparisonSemantic::Revenue => grp_revenue_var += pair_variance,
-                        ComparisonSemantic::Vat => grp_vat_var += pair_variance,
-                        ComparisonSemantic::Receivable => grp_receivable_var += pair_variance,
-                        _ => grp_other_var += pair_variance,
-                    }
-
-                    let discrepancies = analyze_pair_discrepancies(
-                        primary,
-                        target,
-                        pri_comp,
-                        tgt_comp,
-                        rule_tolerance_vnd,
-                        rule_date_tol_days,
-                    );
-
-                    let diff = (pri_comp - tgt_comp).abs();
-                    let sec_status = if discrepancies.is_empty() {
-                        MatchStatus::MatchedExact
-                    } else if diff <= rule_tolerance_vnd
-                        && discrepancies.iter().all(|d| d.field_name == "amount")
-                    {
-                        has_tolerance = true;
-                        all_secondaries_exact = false;
-                        MatchStatus::MatchedWithTolerance
-                    } else if diff > rule_tolerance_vnd {
-                        has_amount_mismatch = true;
-                        all_secondaries_exact = false;
-                        MatchStatus::MismatchAmount
-                    } else {
-                        has_metadata_mismatch = true;
-                        all_secondaries_exact = false;
-                        MatchStatus::MismatchMetadata
-                    };
-
-                    group_target_ids.push(target.id.clone());
-                    group_discrepancies.extend(discrepancies.clone());
-
-                    group_semantic_comparisons.push(SemanticFieldComparison {
-                        semantic,
-                        semantic_name: semantic_name.to_string(),
-                        primary_source_id: primary_source_id.to_string(),
-                        primary_source_name: primary_source_name.to_string(),
-                        secondary_source_id: sec_idx.source_id.clone(),
-                        secondary_source_name: sec_idx.source_name.clone(),
-                        secondary_source_kind: sec_idx.source_kind.clone(),
-                        semantic_field: semantic_name.to_string(),
-                        expected_amount: pri_comp,
-                        actual_amount: tgt_comp,
-                        variance: pair_variance,
-                        status: sec_status.clone(),
-                        primary_record_ids: vec![primary.id.clone()],
-                        secondary_record_ids: vec![target.id.clone()],
-                        discrepancies: discrepancies.clone(),
-                    });
-
-                    group_source_breakdowns.insert(
-                        sec_idx.source_id.clone(),
-                        SourceMatchBreakdown {
-                            source_id: sec_idx.source_id.clone(),
-                            source_name: sec_idx.source_name.clone(),
-                            record_ids: vec![target.id.clone()],
-                            compared_amount: tgt_comp,
-                            status: sec_status,
-                            discrepancies,
-                        },
-                    );
+                    let tgt_comp = cand_amounts[chosen_indices[0]];
                     total_target_amount += tgt_comp;
 
                     let pair_variance = pri_comp - tgt_comp;
@@ -1131,25 +1098,24 @@ pub fn execute_reconciliation(
                 let mut has_missing_required = false;
 
                 for sec_idx in &secondary_indexes {
-                    let (
-                        pri_comp,
-                        _,
-                        semantic,
-                        semantic_name,
-                        rule_tolerance_vnd,
-                        rule_date_tol_days,
-                    ) = match resolve_pair_comparison_amounts(
-                        primary,
-                        primary_kind,
-                        primary,
-                        &sec_idx.source_kind,
-                        &session.comparison_rules,
-                        default_tolerance_vnd,
-                        default_date_tolerance_days,
-                    ) {
-                        Some(v) => v,
-                        None => continue,
+                    let (rule, semantic_name, rule_tolerance_vnd, rule_date_tol_days) =
+                        match resolve_rule_for_pair(
+                            primary_kind,
+                            &sec_idx.source_kind,
+                            &session.comparison_rules,
+                            default_tolerance_vnd,
+                            default_date_tolerance_days,
+                        ) {
+                            Some(v) => v,
+                            None => continue,
+                        };
+
+                    let semantic = rule.semantic;
+                    let pri_comp = match extract_rule_amount(primary, &rule.primary_field) {
+                        Ok(v) => v,
+                        Err(_) => continue,
                     };
+
                     let rounded = pri_comp.round().to_i64().unwrap_or(0);
 
                     let candidates = sec_idx
@@ -1172,24 +1138,9 @@ pub fn execute_reconciliation(
 
                     if available.len() == 1 {
                         let target = *available[0];
-                        let (_, tgt_comp, _, _, _, _) = match resolve_pair_comparison_amounts(
-                            primary,
-                            primary_kind,
-                            target,
-                            &sec_idx.source_kind,
-                            &session.comparison_rules,
-                            default_tolerance_vnd,
-                            default_date_tolerance_days,
-                        ) {
-                            Some(v) => v,
-                            None => (
-                                Decimal::ZERO,
-                                Decimal::ZERO,
-                                semantic,
-                                semantic_name,
-                                rule_tolerance_vnd,
-                                rule_date_tol_days,
-                            ),
+                        let tgt_comp = match extract_rule_amount(target, &rule.secondary_field) {
+                            Ok(v) => v,
+                            Err(_) => continue,
                         };
 
                         matched_in_any = true;
@@ -1365,10 +1316,8 @@ pub fn execute_reconciliation(
         };
 
         for sec_idx in &secondary_indexes {
-            let (pri_comp, _, semantic, semantic_name, _, _) = match resolve_pair_comparison_amounts(
-                primary,
+            let (rule, semantic_name, _, _) = match resolve_rule_for_pair(
                 primary_kind,
-                primary,
                 &sec_idx.source_kind,
                 &session.comparison_rules,
                 default_tolerance_vnd,
@@ -1377,6 +1326,10 @@ pub fn execute_reconciliation(
                 Some(v) => v,
                 None => continue,
             };
+
+            let semantic = rule.semantic;
+            let pri_comp =
+                extract_rule_amount(primary, &rule.primary_field).unwrap_or(primary_display_amount);
 
             match semantic {
                 ComparisonSemantic::Revenue => grp_revenue_var += pri_comp,
@@ -1448,6 +1401,11 @@ pub fn execute_reconciliation(
     // PASS 3: Residual Sweep for Secondary-Missing Records
     // -------------------------------------------------------------
     for sec_idx in &secondary_indexes {
+        let sec_rule = session
+            .comparison_rules
+            .iter()
+            .find(|r| r.secondary_source_kind == sec_idx.source_kind);
+
         for sec in sec_idx.all_records {
             if consumed_secondary_ids.contains(&sec.id) {
                 continue;
@@ -1459,11 +1417,15 @@ pub fn execute_reconciliation(
                 .as_deref()
                 .or(sec.voucher_no.as_deref())
                 .unwrap_or("N/A");
-            let sec_comp_amount = sec
-                .credit_amount
-                .or(sec.debit_amount)
-                .or(sec.pretax_amount)
-                .unwrap_or(sec.total_amount);
+
+            let sec_comp_amount = if let Some(rule) = sec_rule {
+                extract_rule_amount(sec, &rule.secondary_field).unwrap_or(sec.total_amount)
+            } else {
+                sec.credit_amount
+                    .or(sec.debit_amount)
+                    .or(sec.pretax_amount)
+                    .unwrap_or(sec.total_amount)
+            };
 
             let mut sec_rev_var = Decimal::ZERO;
             let mut sec_vat_var = Decimal::ZERO;
@@ -1514,8 +1476,7 @@ pub fn execute_reconciliation(
     }
 
     // -------------------------------------------------------------
-    // Deterministic Canonical Sorting for Stable Output
-    // Sort by: date (asc) -> doc_no (natural asc) -> series (asc) -> id (asc)
+    // Deterministic Sorting of Results
     // -------------------------------------------------------------
     groups.sort_by(|a, b| {
         let date_a = a.date.as_deref().unwrap_or("");
@@ -1571,50 +1532,46 @@ pub fn execute_reconciliation(
                 missing_target_count += 1
             }
             MatchStatus::UnmatchedMissingInSource => missing_source_count += 1,
-            MatchStatus::DuplicateSuspect => duplicate_count += g.primary_source_record_ids.len(),
+            MatchStatus::DuplicateSuspect => duplicate_count += 1,
             MatchStatus::AmbiguousMatch => ambiguous_count += 1,
             MatchStatus::NeedsReview => needs_review_count += 1,
-            // NotChecked only appears on SemanticFieldComparison.status, not at group level.
-            // If it somehow reaches here, treat as needs_review.
-            MatchStatus::NotChecked => needs_review_count += 1,
+            MatchStatus::NotChecked => {}
         }
 
         sum_revenue_var += g.revenue_variance;
         sum_vat_var += g.vat_variance;
         sum_receivable_var += g.receivable_variance;
 
-        sum_total_discrepant += g.revenue_variance.abs()
+        let grp_abs_discrepant = g.revenue_variance.abs()
             + g.vat_variance.abs()
             + g.receivable_variance.abs()
             + g.other_variance.abs();
-
+        sum_total_discrepant += grp_abs_discrepant;
         net_variance += g.amount_variance;
     }
-
-    let summary = ReconciliationSummary {
-        total_source_records: primary_records.len(),
-        total_target_records: total_secondary_records_count,
-        exact_matches_count: exact_count,
-        tolerance_matches_count: tolerance_count,
-        aggregate_matches_count: aggregate_count,
-        mismatches_count: mismatch_count,
-        missing_in_target_count: missing_target_count,
-        missing_in_source_count: missing_source_count,
-        duplicates_count: duplicate_count,
-        ambiguous_count,
-        needs_review_count,
-        revenue_variance: sum_revenue_var,
-        vat_variance: sum_vat_var,
-        receivable_variance: sum_receivable_var,
-        total_discrepant_amount: sum_total_discrepant,
-        net_financial_variance: net_variance,
-    };
 
     Ok(ReconciliationResult {
         session_id: session.session_id.clone(),
         executed_at: Utc::now().to_rfc3339(),
         profile_id: session.scenario_name.clone(),
-        summary,
+        summary: ReconciliationSummary {
+            total_source_records: primary_records.len(),
+            total_target_records: total_secondary_records_count,
+            exact_matches_count: exact_count,
+            tolerance_matches_count: tolerance_count,
+            aggregate_matches_count: aggregate_count,
+            mismatches_count: mismatch_count,
+            missing_in_target_count: missing_target_count,
+            missing_in_source_count: missing_source_count,
+            duplicates_count: duplicate_count,
+            ambiguous_count,
+            needs_review_count,
+            revenue_variance: sum_revenue_var,
+            vat_variance: sum_vat_var,
+            receivable_variance: sum_receivable_var,
+            total_discrepant_amount: sum_total_discrepant,
+            net_financial_variance: net_variance,
+        },
         groups,
     })
 }

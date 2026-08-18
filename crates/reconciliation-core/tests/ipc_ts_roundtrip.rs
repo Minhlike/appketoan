@@ -15,10 +15,7 @@ fn test_ipc_ts_roundtrip_file_exists_and_deserializes() {
         "../../fixtures/artifacts/ts_generated_session.json",
     ];
 
-    let found_path = candidate_paths
-        .iter()
-        .map(Path::new)
-        .find(|p| p.exists());
+    let found_path = candidate_paths.iter().map(Path::new).find(|p| p.exists());
 
     assert!(
         found_path.is_some(),
@@ -28,8 +25,8 @@ fn test_ipc_ts_roundtrip_file_exists_and_deserializes() {
 
     let file_path = found_path.unwrap();
     let content = std::fs::read_to_string(file_path).expect("Failed to read TS generated IPC JSON");
-    let session: ReconciliationSession =
-        serde_json::from_str(&content).expect("Failed to deserialize TS generated session into Rust struct");
+    let session: ReconciliationSession = serde_json::from_str(&content)
+        .expect("Failed to deserialize TS generated session into Rust struct");
 
     assert_eq!(session.session_id, "sess_ts_to_rust_roundtrip");
     assert_eq!(session.matching_tolerance_vnd, dec!(50000));
@@ -66,7 +63,8 @@ fn test_ipc_ts_roundtrip_file_exists_and_deserializes() {
             source_row: 2,
             doc_no: Some("INV-001".to_string()),
             pretax_amount: Some(dec!(1000000)),
-            total_amount: dec!(1000000),
+            vat_amount: Some(dec!(100000)),
+            total_amount: dec!(1100000),
             ..Default::default()
         }],
     );
@@ -83,10 +81,14 @@ fn test_ipc_ts_roundtrip_file_exists_and_deserializes() {
         }],
     );
 
-    let res = execute_reconciliation(&session, &records_map).expect("Reconciliation execution should succeed");
+    let res = execute_reconciliation(&session, &records_map)
+        .expect("Reconciliation execution should succeed");
     assert_eq!(res.groups.len(), 1);
     assert_eq!(res.groups[0].status, MatchStatus::MatchedWithMissingSource);
-    assert_eq!(res.groups[0].target_source_record_ids, vec!["rec_ts_2".to_string()]);
+    assert_eq!(
+        res.groups[0].target_source_record_ids,
+        vec!["rec_ts_2".to_string()]
+    );
     assert_eq!(res.groups[0].total_source_amount, dec!(1000000));
     assert_eq!(res.summary.missing_in_target_count, 1);
 }

@@ -88,3 +88,260 @@ describe("Data Contract & Comprehensive Fixtures", () => {
     expect(profile.rules[0].enableAggregateMatch).toBe(true);
   });
 });
+
+import { normalizeMoneyInput } from "../utils/money";
+import { formatDetailReason } from "../components/ResultTable";
+import type { MatchGroup } from "./dataContract";
+
+describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
+  it("normalizes Vietnamese money input formats exactly without float loss", () => {
+    expect(normalizeMoneyInput("0")).toBe("0");
+    expect(normalizeMoneyInput("500")).toBe("500");
+    expect(normalizeMoneyInput("10.000")).toBe("10000");
+    expect(normalizeMoneyInput("1.000.000")).toBe("1000000");
+    expect(normalizeMoneyInput("10.000,50")).toBe("10000.50");
+    expect(normalizeMoneyInput("10.000,5000")).toBe("10000.5000");
+
+    // Invalid & negative inputs rejected safely
+    expect(normalizeMoneyInput("-500")).toBe("0");
+    expect(normalizeMoneyInput("1..000")).toBe("0");
+    expect(normalizeMoneyInput("10,2,3")).toBe("0");
+    expect(normalizeMoneyInput("abc")).toBe("0");
+  });
+
+  it("renders detail explanation for Case 1: Revenue MATCHED, VAT & 131 NOT_CHECKED", () => {
+    const group: MatchGroup = {
+      id: "grp_inv_228",
+      status: "MATCHED_EXACT",
+      docNo: "228",
+      primarySourceRecordIds: ["rec_1"],
+      targetSourceRecordIds: ["rec_2"],
+      sourceBreakdowns: {},
+      discrepancies: [],
+      semanticComparisons: [
+        {
+          semantic: "REVENUE",
+          semanticName: "Doanh thu",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_511",
+          secondarySourceName: "Sổ cái TK 511",
+          secondarySourceKind: "ledger_511",
+          semanticField: "Doanh thu",
+          expectedAmount: "10000000",
+          actualAmount: "10000000",
+          variance: "0",
+          status: "MATCHED_EXACT",
+          primaryRecordIds: ["rec_1"],
+          secondaryRecordIds: ["rec_2"],
+          discrepancies: [],
+        },
+        {
+          semantic: "VAT",
+          semanticName: "Thuế GTGT",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_3331",
+          secondarySourceName: "Sổ cái TK 3331",
+          secondarySourceKind: "ledger_3331",
+          semanticField: "Thuế GTGT",
+          expectedAmount: "0",
+          actualAmount: "0",
+          variance: "0",
+          status: "NOT_CHECKED",
+          primaryRecordIds: [],
+          secondaryRecordIds: [],
+          discrepancies: [],
+        },
+        {
+          semantic: "RECEIVABLE",
+          semanticName: "Công nợ",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_131",
+          secondarySourceName: "Sổ cái TK 131",
+          secondarySourceKind: "ledger_131",
+          semanticField: "Công nợ",
+          expectedAmount: "0",
+          actualAmount: "0",
+          variance: "0",
+          status: "NOT_CHECKED",
+          primaryRecordIds: [],
+          secondaryRecordIds: [],
+          discrepancies: [],
+        },
+      ],
+      revenueVariance: "0",
+      vatVariance: "0",
+      receivableVariance: "0",
+      otherVariance: "0",
+      totalSourceAmount: "10000000",
+      totalTargetAmount: "10000000",
+      amountVariance: "0",
+    };
+
+    const detail = formatDetailReason(group);
+    expect(detail).toContain("Doanh thu TK511 khớp");
+    expect(detail).toContain("Thuế GTGT và Công nợ chưa đối chiếu");
+    expect(detail).not.toContain("Khớp hoàn toàn tất cả");
+  });
+
+  it("renders detail explanation for Case 2: Invoice #233 missing in TK511", () => {
+    const group: MatchGroup = {
+      id: "grp_inv_233",
+      status: "UNMATCHED_MISSING_IN_TARGET",
+      docNo: "233",
+      primarySourceRecordIds: ["rec_233"],
+      targetSourceRecordIds: [],
+      sourceBreakdowns: {},
+      discrepancies: [
+        {
+          fieldName: "docNo",
+          message: "Chứng từ #233 không tìm thấy trong nguồn Sổ cái TK 511",
+          amountDiff: "105000000",
+        },
+      ],
+      semanticComparisons: [
+        {
+          semantic: "REVENUE",
+          semanticName: "Doanh thu",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_511",
+          secondarySourceName: "Sổ cái TK 511",
+          secondarySourceKind: "ledger_511",
+          semanticField: "Doanh thu",
+          expectedAmount: "105000000",
+          actualAmount: "0",
+          variance: "105000000",
+          status: "UNMATCHED_MISSING_IN_TARGET",
+          primaryRecordIds: ["rec_233"],
+          secondaryRecordIds: [],
+          discrepancies: [],
+        },
+        {
+          semantic: "VAT",
+          semanticName: "Thuế GTGT",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_3331",
+          secondarySourceName: "Sổ cái TK 3331",
+          secondarySourceKind: "ledger_3331",
+          semanticField: "Thuế GTGT",
+          expectedAmount: "0",
+          actualAmount: "0",
+          variance: "0",
+          status: "NOT_CHECKED",
+          primaryRecordIds: [],
+          secondaryRecordIds: [],
+          discrepancies: [],
+        },
+        {
+          semantic: "RECEIVABLE",
+          semanticName: "Công nợ",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_131",
+          secondarySourceName: "Sổ cái TK 131",
+          secondarySourceKind: "ledger_131",
+          semanticField: "Công nợ",
+          expectedAmount: "0",
+          actualAmount: "0",
+          variance: "0",
+          status: "NOT_CHECKED",
+          primaryRecordIds: [],
+          secondaryRecordIds: [],
+          discrepancies: [],
+        },
+      ],
+      revenueVariance: "105000000",
+      vatVariance: "0",
+      receivableVariance: "0",
+      otherVariance: "0",
+      totalSourceAmount: "105000000",
+      totalTargetAmount: "0",
+      amountVariance: "105000000",
+    };
+
+    const detail = formatDetailReason(group);
+    expect(detail).toContain("Chứng từ #233 không tìm thấy");
+    expect(detail).toContain("Thuế GTGT và Công nợ chưa đối chiếu");
+    expect(detail).not.toContain("Khớp hoàn toàn");
+  });
+
+  it("renders detail explanation for Case 3: All checked semantics matched", () => {
+    const group: MatchGroup = {
+      id: "grp_all_matched",
+      status: "MATCHED_EXACT",
+      docNo: "300",
+      primarySourceRecordIds: ["rec_1"],
+      targetSourceRecordIds: ["rec_2", "rec_3", "rec_4"],
+      sourceBreakdowns: {},
+      discrepancies: [],
+      semanticComparisons: [
+        {
+          semantic: "REVENUE",
+          semanticName: "Doanh thu",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_511",
+          secondarySourceName: "Sổ cái TK 511",
+          secondarySourceKind: "ledger_511",
+          semanticField: "Doanh thu",
+          expectedAmount: "10000000",
+          actualAmount: "10000000",
+          variance: "0",
+          status: "MATCHED_EXACT",
+          primaryRecordIds: ["rec_1"],
+          secondaryRecordIds: ["rec_2"],
+          discrepancies: [],
+        },
+        {
+          semantic: "VAT",
+          semanticName: "Thuế GTGT",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_3331",
+          secondarySourceName: "Sổ cái TK 3331",
+          secondarySourceKind: "ledger_3331",
+          semanticField: "Thuế GTGT",
+          expectedAmount: "1000000",
+          actualAmount: "1000000",
+          variance: "0",
+          status: "MATCHED_EXACT",
+          primaryRecordIds: ["rec_1"],
+          secondaryRecordIds: ["rec_3"],
+          discrepancies: [],
+        },
+        {
+          semantic: "RECEIVABLE",
+          semanticName: "Công nợ",
+          primarySourceId: "src_inv",
+          primarySourceName: "Hóa đơn",
+          secondarySourceId: "src_131",
+          secondarySourceName: "Sổ cái TK 131",
+          secondarySourceKind: "ledger_131",
+          semanticField: "Công nợ",
+          expectedAmount: "11000000",
+          actualAmount: "11000000",
+          variance: "0",
+          status: "MATCHED_EXACT",
+          primaryRecordIds: ["rec_1"],
+          secondaryRecordIds: ["rec_4"],
+          discrepancies: [],
+        },
+      ],
+      revenueVariance: "0",
+      vatVariance: "0",
+      receivableVariance: "0",
+      otherVariance: "0",
+      totalSourceAmount: "11000000",
+      totalTargetAmount: "11000000",
+      amountVariance: "0",
+    };
+
+    const detail = formatDetailReason(group);
+    expect(detail).toBe("✓ Khớp hoàn toàn tất cả các tiêu chí đã đối chiếu");
+  });
+});
+

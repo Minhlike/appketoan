@@ -9,6 +9,110 @@ interface ResultTableProps {
   onOpenDetail: (group: MatchGroup) => void;
 }
 
+export function formatDetailReason(group: MatchGroup): string {
+  const discrepancies = group.discrepancies || [];
+  const comparisons = group.semanticComparisons || [];
+
+  const checkedComparisons = comparisons.filter(
+    (c) => c.status !== "NOT_CHECKED"
+  );
+  const uncheckedComparisons = comparisons.filter(
+    (c) => c.status === "NOT_CHECKED"
+  );
+
+  const uncheckedLabels: string[] = [];
+  uncheckedComparisons.forEach((c) => {
+    if (c.semantic === "VAT" && !uncheckedLabels.includes("Thuế GTGT")) {
+      uncheckedLabels.push("Thuế GTGT");
+    } else if (c.semantic === "RECEIVABLE" && !uncheckedLabels.includes("Công nợ")) {
+      uncheckedLabels.push("Công nợ");
+    } else if (c.semantic === "BANK_PAYMENT" && !uncheckedLabels.includes("Dòng tiền")) {
+      uncheckedLabels.push("Dòng tiền");
+    } else if (c.semantic === "OTHER" && !uncheckedLabels.includes(c.semanticName)) {
+      uncheckedLabels.push(c.semanticName);
+    }
+  });
+
+  const uncheckedSuffix =
+    uncheckedLabels.length > 0
+      ? `${uncheckedLabels.join(" và ")} chưa đối chiếu`
+      : "";
+
+  // 1. If there are explicit discrepancies
+  if (discrepancies.length > 0) {
+    const discMessages = discrepancies.map((d) => d.message).join(" • ");
+    if (uncheckedSuffix) {
+      return `${discMessages}; ${uncheckedSuffix}.`;
+    }
+    return discMessages;
+  }
+
+  // 2. Unmatched Missing in Target
+  if (group.status === "UNMATCHED_MISSING_IN_TARGET") {
+    const missingAmount = group.amountVariance || group.totalSourceAmount;
+    const msg = `Thiếu chứng từ trong bên đối chiếu (Lệch: ${formatVND(missingAmount)})`;
+    return uncheckedSuffix ? `${msg}; ${uncheckedSuffix}.` : `${msg}.`;
+  }
+
+  // 3. Unmatched Missing in Source
+  if (group.status === "UNMATCHED_MISSING_IN_SOURCE") {
+    return `Chứng từ phát sinh bên đối chiếu nhưng thiếu bên nguồn chính (${formatVND(group.totalTargetAmount)}).`;
+  }
+
+  // 4. Duplicate
+  if (group.status === "DUPLICATE_SUSPECT") {
+    return "Nghi ngờ trùng lặp chứng từ trong nguồn dữ liệu.";
+  }
+
+  // 5. Ambiguous
+  if (group.status === "AMBIGUOUS_MATCH") {
+    return "Nhiều chứng từ tiềm năng thỏa mãn điều kiện đối chiếu, cần kiểm tra thủ công.";
+  }
+
+  // 6. Needs Review
+  if (group.status === "NEEDS_REVIEW" || group.status === "INSUFFICIENT_MATCHING_EVIDENCE") {
+    return uncheckedSuffix
+      ? `Cần rà soát chứng từ; ${uncheckedSuffix}.`
+      : "Cần rà soát chứng từ.";
+  }
+
+  // 7. Matched cases
+  if (
+    group.status === "MATCHED_EXACT" ||
+    group.status === "MATCHED_WITH_TOLERANCE" ||
+    group.status === "MATCHED_AGGREGATE" ||
+    group.status === "MATCHED_WITH_MISSING_SOURCE"
+  ) {
+    // If NO unchecked semantics and at least one checked semantic
+    if (uncheckedComparisons.length === 0 && checkedComparisons.length > 0) {
+      return "✓ Khớp hoàn toàn tất cả các tiêu chí đã đối chiếu";
+    }
+
+    const checkedSummary: string[] = [];
+    checkedComparisons.forEach((c) => {
+      if (c.semantic === "REVENUE") {
+        checkedSummary.push("Doanh thu TK511 khớp");
+      } else if (c.semantic === "VAT") {
+        checkedSummary.push("Thuế GTGT khớp");
+      } else if (c.semantic === "RECEIVABLE") {
+        checkedSummary.push("Công nợ khớp");
+      } else if (c.semantic === "BANK_PAYMENT") {
+        checkedSummary.push("Dòng tiền khớp");
+      } else {
+        checkedSummary.push(`${c.semanticName} khớp`);
+      }
+    });
+
+    const prefix = checkedSummary.length > 0 ? `✓ ${checkedSummary.join(", ")}` : "✓ Khớp";
+    if (uncheckedSuffix) {
+      return `${prefix}; ${uncheckedSuffix}.`;
+    }
+    return `${prefix}.`;
+  }
+
+  return uncheckedSuffix ? `Đã xử lý; ${uncheckedSuffix}.` : "Đã xử lý.";
+}
+
 export const ResultTable: React.FC<ResultTableProps> = ({
   groups,
   activeStatusFilter,
@@ -199,10 +303,7 @@ export const ResultTable: React.FC<ResultTableProps> = ({
             {paginatedGroups.length > 0 ? (
               paginatedGroups.map((g, idx) => {
                 const rowIndex = (validPage - 1) * pageSize + idx + 1;
-                const reasonText =
-                  g.discrepancies && g.discrepancies.length > 0
-                    ? g.discrepancies.map((d) => d.message).join(" • ")
-                    : "✓ Khớp hoàn toàn tất cả các tiêu chí";
+                const reasonText = formatDetailReason(g);
 
                 return (
                   <tr
