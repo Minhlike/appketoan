@@ -3,6 +3,8 @@
  * Synchronized with Rust models in `crates/reconciliation-core/src/models/`
  */
 
+export type SourceRole = "PRIMARY" | "REQUIRED_SECONDARY" | "OPTIONAL_SECONDARY";
+
 export type DataSourceKind =
   | "e_invoice"
   | "ledger_511"
@@ -13,6 +15,28 @@ export type DataSourceKind =
   | "cash_book"
   | "branch_ledger"
   | "custom";
+
+export type ComparisonSemantic =
+  | "REVENUE"
+  | "VAT"
+  | "RECEIVABLE"
+  | "BANK_PAYMENT"
+  | "OTHER";
+
+export type MoneyValue = string;
+
+export interface ComparisonRule {
+  id: string;
+  name: string;
+  semantic: ComparisonSemantic;
+  primarySourceKind: DataSourceKind;
+  primaryField: string;
+  secondarySourceKind: DataSourceKind;
+  secondaryField: string;
+  isRequired: boolean;
+  toleranceVnd: number | string;
+  dateToleranceDays: number;
+}
 
 export interface ColumnMapping {
   dateColumn?: string;
@@ -45,6 +69,7 @@ export interface DataSource {
   filePath: string;
   sheetName: string;
   kind: DataSourceKind;
+  role?: SourceRole;
   headerRow: number;
   dataStartRow: number;
   columnMapping: ColumnMapping;
@@ -74,10 +99,12 @@ export interface ReconciliationSession {
   sessionId: string;
   scenarioName: string;
   primarySourceId?: string;
+  expectedPrimaryKind?: DataSourceKind;
   requiredSourceIds?: string[];
   optionalSourceIds?: string[];
   dataSources: DataSource[];
-  matchingToleranceVnd: number;
+  comparisonRules?: ComparisonRule[];
+  matchingToleranceVnd: number | string;
   dateToleranceDays: number;
   enableAggregateMatch: boolean;
 }
@@ -97,14 +124,14 @@ export interface CanonicalRecord {
   buyerTaxId?: string;
   sellerTaxId?: string;
   partnerName?: string;
-  pretaxAmount?: number;
-  vatAmount?: number;
-  discountAmount?: number;
-  feeAmount?: number;
-  totalAmount: number;
+  pretaxAmount?: number | string;
+  vatAmount?: number | string;
+  discountAmount?: number | string;
+  feeAmount?: number | string;
+  totalAmount: number | string;
   totalAmountOrigin?: ValueOrigin;
-  debitAmount?: number;
-  creditAmount?: number;
+  debitAmount?: number | string;
+  creditAmount?: number | string;
   vatRate?: string;
   debitAccount?: string;
   creditAccount?: string;
@@ -112,6 +139,92 @@ export interface CanonicalRecord {
   description?: string;
   bankAccount?: string;
   rawFields?: Record<string, string>;
+}
+
+export type MatchStatus =
+  | "MATCHED_EXACT"
+  | "MATCHED_WITH_TOLERANCE"
+  | "MATCHED_AGGREGATE"
+  | "MATCHED_WITH_MISSING_SOURCE"
+  | "MISMATCH_AMOUNT"
+  | "MISMATCH_METADATA"
+  | "UNMATCHED_MISSING_IN_TARGET"
+  | "UNMATCHED_MISSING_IN_SOURCE"
+  | "DUPLICATE_SUSPECT"
+  | "AMBIGUOUS_MATCH";
+
+export interface FieldDiscrepancy {
+  fieldName: string;
+  sourceValue?: string;
+  targetValue?: string;
+  amountDiff?: number | string;
+  message: string;
+}
+
+export interface SourceMatchBreakdown {
+  sourceId: string;
+  sourceName: string;
+  recordIds: string[];
+  comparedAmount: number | string;
+  status: MatchStatus;
+  discrepancies?: FieldDiscrepancy[];
+}
+
+export interface SemanticFieldComparison {
+  semantic: ComparisonSemantic;
+  semanticName: string;
+  primarySourceId: string;
+  primarySourceName: string;
+  secondarySourceId: string;
+  secondarySourceName: string;
+  secondarySourceKind: DataSourceKind;
+  semanticField: string;
+  expectedAmount: number | string;
+  actualAmount: number | string;
+  variance: number | string;
+  status: MatchStatus;
+  primaryRecordIds?: string[];
+  secondaryRecordIds?: string[];
+  discrepancies?: FieldDiscrepancy[];
+}
+
+export interface MatchGroup {
+  id: string;
+  status: MatchStatus;
+  docNo?: string;
+  series?: string;
+  date?: string;
+  partnerName?: string;
+  primarySourceRecordIds: string[];
+  targetSourceRecordIds: string[];
+  sourceBreakdowns?: Record<string, SourceMatchBreakdown>;
+  discrepancies?: FieldDiscrepancy[];
+  semanticComparisons?: SemanticFieldComparison[];
+  revenueVariance?: number | string;
+  vatVariance?: number | string;
+  receivableVariance?: number | string;
+  otherVariance?: number | string;
+  totalSourceAmount: number | string;
+  totalTargetAmount: number | string;
+  amountVariance: number | string;
+}
+
+export interface ReconciliationSummary {
+  totalSourceRecords: number;
+  totalTargetRecords: number;
+  exactMatchesCount: number;
+  toleranceMatchesCount: number;
+  aggregateMatchesCount: number;
+  mismatchesCount: number;
+  missingInTargetCount: number;
+  missingInSourceCount: number;
+  duplicatesCount: number;
+  ambiguousCount: number;
+  revenueVariance?: number | string;
+  vatVariance?: number | string;
+  receivableVariance?: number | string;
+  totalDiscrepantAmount?: number | string;
+  netFinancialVariance: number | string;
 }
 
 export type MatchKeyType =
@@ -138,80 +251,6 @@ export interface ReconciliationProfile {
   rules: MatchingRule[];
 }
 
-export type MatchStatus =
-  | "MATCHED_EXACT"
-  | "MATCHED_WITH_TOLERANCE"
-  | "MATCHED_AGGREGATE"
-  | "MATCHED_WITH_MISSING_SOURCE"
-  | "MISMATCH_AMOUNT"
-  | "MISMATCH_METADATA"
-  | "UNMATCHED_MISSING_IN_TARGET"
-  | "UNMATCHED_MISSING_IN_SOURCE"
-  | "DUPLICATE_SUSPECT"
-  | "AMBIGUOUS_MATCH";
-
-export interface FieldDiscrepancy {
-  fieldName: string;
-  sourceValue?: string;
-  targetValue?: string;
-  amountDiff?: number;
-  message: string;
-}
-
-export interface SourceMatchBreakdown {
-  sourceId: string;
-  sourceName: string;
-  recordIds: string[];
-  comparedAmount: number;
-  status: MatchStatus;
-  discrepancies?: FieldDiscrepancy[];
-}
-
-export interface SemanticFieldComparison {
-  primarySourceId: string;
-  secondarySourceId: string;
-  secondarySourceKind: DataSourceKind;
-  semanticField: string;
-  expectedAmount: number;
-  actualAmount: number;
-  variance: number;
-  status: MatchStatus;
-}
-
-export interface MatchGroup {
-  id: string;
-  status: MatchStatus;
-  primarySourceRecordIds: string[];
-  targetSourceRecordIds: string[];
-  sourceBreakdowns?: Record<string, SourceMatchBreakdown>;
-  discrepancies?: FieldDiscrepancy[];
-  semanticComparisons?: SemanticFieldComparison[];
-  revenueVariance?: number;
-  vatVariance?: number;
-  receivableVariance?: number;
-  otherVariance?: number;
-  totalSourceAmount: number;
-  totalTargetAmount: number;
-  amountVariance: number;
-}
-
-export interface ReconciliationSummary {
-  totalSourceRecords: number;
-  totalTargetRecords: number;
-  exactMatchesCount: number;
-  toleranceMatchesCount: number;
-  aggregateMatchesCount: number;
-  mismatchesCount: number;
-  missingInTargetCount: number;
-  missingInSourceCount: number;
-  duplicatesCount: number;
-  ambiguousCount: number;
-  revenueVariance?: number;
-  vatVariance?: number;
-  receivableVariance?: number;
-  netFinancialVariance: number;
-}
-
 export interface ReconciliationResult {
   sessionId: string;
   executedAt: string;
@@ -227,16 +266,26 @@ export interface ExportSummary {
   createdAt: string;
 }
 
+export interface ScenarioRuleDefinition {
+  semantic: ComparisonSemantic;
+  title: string;
+  description: string;
+  primaryField: string;
+  secondaryField: string;
+}
+
 export interface PreconfiguredScenario {
   id: string;
   name: string;
   description: string;
   recommendedSources: {
     kind: DataSourceKind;
+    role: SourceRole;
     title: string;
     description: string;
     required: boolean;
   }[];
+  rules: ScenarioRuleDefinition[];
   defaultToleranceVnd: number;
   defaultDateDays: number;
   enableAggregate: boolean;

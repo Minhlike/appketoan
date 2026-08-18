@@ -1,6 +1,6 @@
+use crate::models::{CanonicalRecord, FieldDiscrepancy};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use crate::models::{CanonicalRecord, FieldDiscrepancy};
 
 /// Formats a Decimal VND amount to Vietnamese thousand separated string (e.g. 10,000,000)
 pub fn format_vnd(amount: Decimal) -> String {
@@ -91,7 +91,10 @@ pub fn analyze_pair_discrepancies(
                 source_value: Some(tax_a.clone()),
                 target_value: Some(tax_b.clone()),
                 amount_diff: None,
-                message: format!("Khác mã số thuế: Nguồn A [{}] vs Nguồn B [{}]", tax_a, tax_b),
+                message: format!(
+                    "Khác mã số thuế: Nguồn A [{}] vs Nguồn B [{}]",
+                    tax_a, tax_b
+                ),
             });
         }
     }

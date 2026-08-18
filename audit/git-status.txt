@@ -1,9 +1,40 @@
 ﻿On branch main
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   audit/build-results.txt
+	modified:   audit/commit.txt
+	modified:   audit/git-diff-stat.txt
+	modified:   audit/git-status.txt
+	modified:   audit/test-results.txt
+	modified:   crates/reconciliation-core/src/analyzer/discrepancy_analyzer.rs
+	modified:   crates/reconciliation-core/src/exporter/excel_exporter.rs
+	modified:   crates/reconciliation-core/src/matcher/engine.rs
+	modified:   crates/reconciliation-core/src/models/canonical_record.rs
+	modified:   crates/reconciliation-core/src/models/data_source.rs
+	modified:   crates/reconciliation-core/src/models/reconciliation_result.rs
+	modified:   crates/reconciliation-core/src/models/reconciliation_rule.rs
+	modified:   crates/reconciliation-core/src/normalizer/row_normalizer.rs
+	modified:   crates/reconciliation-core/src/reader/excel_reader.rs
+	modified:   crates/reconciliation-core/src/reader/header_detector.rs
+	modified:   crates/reconciliation-core/tests/end_to_end_reconciliation_test.rs
+	modified:   crates/reconciliation-core/tests/golden_dataset_test.rs
+	modified:   crates/reconciliation-core/tests/performance_benchmark_test.rs
+	modified:   crates/reconciliation-core/tests/reconciliation_correctness_regression_test.rs
+	modified:   scripts/prepare_audit_and_zip.ps1
+	modified:   src-tauri/src/commands.rs
+	modified:   src/App.test.tsx
+	modified:   src/App.tsx
+	modified:   src/components/DashboardKPIs.tsx
+	modified:   src/components/DetailInspectorModal.tsx
+	modified:   src/components/FileIngestionDropzone.tsx
+	modified:   src/components/ResultTable.tsx
+	modified:   src/services/api.ts
+	modified:   src/types/dataContract.ts
+
 Untracked files:
   (use "git add <file>..." to include in what will be committed)
-	audit/
-	scripts/generate_audit_package.ps1
-	scripts/prepare_audit_and_zip.ps1
-	scripts/verify_audit_zip.ps1
+	src/types/ipcContract.test.ts
+	src/utils/
 
-nothing added to commit but untracked files present (use "git add" to track)
+no changes added to commit (use "git add" and/or "git commit -a")

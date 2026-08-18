@@ -19,6 +19,28 @@ pub enum MatchStatus {
     AmbiguousMatch,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ComparisonSemantic {
+    Revenue,
+    Vat,
+    Receivable,
+    BankPayment,
+    Other,
+}
+
+impl ComparisonSemantic {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Revenue => "DOANH THU",
+            Self::Vat => "THUẾ GTGT",
+            Self::Receivable => "CÔNG NỢ (PHẢI THU)",
+            Self::BankPayment => "DÒNG TIỀN / SAO KÊ",
+            Self::Other => "ĐỐI CHIẾU KHÁC",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldDiscrepancy {
@@ -47,14 +69,24 @@ pub struct SourceMatchBreakdown {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SemanticFieldComparison {
+    pub semantic: ComparisonSemantic,
+    pub semantic_name: String,
     pub primary_source_id: String,
+    pub primary_source_name: String,
     pub secondary_source_id: String,
+    pub secondary_source_name: String,
     pub secondary_source_kind: DataSourceKind,
     pub semantic_field: String,
     pub expected_amount: Decimal,
     pub actual_amount: Decimal,
     pub variance: Decimal,
     pub status: MatchStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub primary_record_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secondary_record_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub discrepancies: Vec<FieldDiscrepancy>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +94,14 @@ pub struct SemanticFieldComparison {
 pub struct MatchGroup {
     pub id: String,
     pub status: MatchStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_no: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub series: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partner_name: Option<String>,
     pub primary_source_record_ids: Vec<String>,
     pub target_source_record_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -102,6 +142,8 @@ pub struct ReconciliationSummary {
     pub vat_variance: Decimal,
     #[serde(default)]
     pub receivable_variance: Decimal,
+    #[serde(default)]
+    pub total_discrepant_amount: Decimal,
     pub net_financial_variance: Decimal,
 }
 
@@ -134,6 +176,7 @@ mod tests {
                 revenue_variance: dec!(0),
                 vat_variance: dec!(0),
                 receivable_variance: dec!(0),
+                total_discrepant_amount: dec!(50000),
                 net_financial_variance: dec!(50000),
                 ..Default::default()
             },
@@ -141,6 +184,10 @@ mod tests {
                 MatchGroup {
                     id: "grp_1".to_string(),
                     status: MatchStatus::MatchedExact,
+                    doc_no: Some("001".to_string()),
+                    series: Some("1C26TAA".to_string()),
+                    date: Some("2026-01-05".to_string()),
+                    partner_name: Some("Công ty A".to_string()),
                     primary_source_record_ids: vec!["rec_1".to_string()],
                     target_source_record_ids: vec!["rec_2".to_string()],
                     source_breakdowns: HashMap::new(),
@@ -157,6 +204,10 @@ mod tests {
                 MatchGroup {
                     id: "grp_2".to_string(),
                     status: MatchStatus::MismatchAmount,
+                    doc_no: Some("002".to_string()),
+                    series: Some("1C26TAA".to_string()),
+                    date: Some("2026-01-06".to_string()),
+                    partner_name: Some("Công ty B".to_string()),
                     primary_source_record_ids: vec!["rec_3".to_string()],
                     target_source_record_ids: vec!["rec_4".to_string()],
                     source_breakdowns: HashMap::new(),

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import type { DataSource, ExcelFileMetadata, DataSourceKind } from "../types/dataContract";
+import type { DataSource, ExcelFileMetadata, DataSourceKind, SourceRole } from "../types/dataContract";
 import { inspectExcelBytes } from "../services/api";
 
 interface IngestedSourceItem {
@@ -15,6 +15,7 @@ interface FileIngestionDropzoneProps {
   onRemoveSource: (id: string) => void;
   onUpdateSheet: (id: string, newSheetName: string) => void;
   onUpdateKind?: (id: string, newKind: DataSourceKind) => void;
+  onUpdateRole?: (id: string, newRole: SourceRole) => void;
   onOpenMapping: (item: IngestedSourceItem) => void;
   disabled?: boolean;
 }
@@ -25,6 +26,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
   onRemoveSource,
   onUpdateSheet,
   onUpdateKind,
+  onUpdateRole,
   onOpenMapping,
   disabled = false,
 }) => {
@@ -48,12 +50,16 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
       const defaultSheet = metadata.sheets[0];
       const sourceId = `src_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
+      // Default role: first source is Primary, subsequent are RequiredSecondary
+      const defaultRole: SourceRole = sources.length === 0 ? "PRIMARY" : "REQUIRED_SECONDARY";
+
       const dataSource: DataSource = {
         id: sourceId,
         name: file.name.replace(/\.[^/.]+$/, ""),
         filePath: file.name,
         sheetName: defaultSheet.name,
         kind: defaultSheet.suggestedKind,
+        role: defaultRole,
         headerRow: defaultSheet.detectedHeaderRow,
         dataStartRow: defaultSheet.detectedDataStartRow,
         columnMapping: defaultSheet.suggestedMapping,
@@ -174,11 +180,14 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
               item.fileMetadata.sheets.find((s) => s.name === item.source.sheetName) ||
               item.fileMetadata.sheets[0];
             const confidencePercent = Math.round((currentSheetMeta?.confidenceScore || 0) * 100);
+            const role = item.source.role || (index === 0 ? "PRIMARY" : "REQUIRED_SECONDARY");
 
             return (
               <div key={item.id} className="source-card">
                 <div className="source-card-header">
-                  <div className="source-index-badge">Nguồn #{index + 1}</div>
+                  <div className="source-index-badge">
+                    Nguồn #{index + 1}
+                  </div>
                   <div className="source-meta-info">
                     <span className="source-filename" title={item.fileMetadata.fileName}>
                       📄 {item.fileMetadata.fileName}
@@ -213,7 +222,28 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                   </div>
 
                   <div className="source-field-row">
-                    <label className="field-label">Loại nguồn dữ liệu:</label>
+                    <label className="field-label">Vai trò trong kịch bản:</label>
+                    <select
+                      className="select-control"
+                      value={role}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const newRole = e.target.value as SourceRole;
+                        if (onUpdateRole) {
+                          onUpdateRole(item.id, newRole);
+                        } else {
+                          item.source.role = newRole;
+                        }
+                      }}
+                    >
+                      <option value="PRIMARY">🔵 Nguồn chính (PRIMARY)</option>
+                      <option value="REQUIRED_SECONDARY">🟠 Nguồn bắt buộc (REQUIRED)</option>
+                      <option value="OPTIONAL_SECONDARY">⚪ Nguồn bổ trợ (OPTIONAL)</option>
+                    </select>
+                  </div>
+
+                  <div className="source-field-row">
+                    <label className="field-label">Loại dữ liệu:</label>
                     <select
                       className="select-control"
                       value={item.source.kind}

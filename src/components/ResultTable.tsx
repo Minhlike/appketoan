@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import type { MatchGroup, MatchStatus } from "../types/dataContract";
+import { formatVND, isZeroMoney } from "../utils/money";
 
 interface ResultTableProps {
   groups: MatchGroup[];
@@ -18,10 +19,6 @@ export const ResultTable: React.FC<ResultTableProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const formatMoney = (val: number) => {
-    return Math.round(val).toLocaleString("vi-VN") + " đ";
-  };
-
   const getStatusBadge = (status: MatchStatus) => {
     switch (status) {
       case "MATCHED_EXACT":
@@ -31,7 +28,7 @@ export const ResultTable: React.FC<ResultTableProps> = ({
       case "MATCHED_AGGREGATE":
         return <span className="status-badge badge-aggregate">∑ Khớp gộp</span>;
       case "MATCHED_WITH_MISSING_SOURCE":
-        return <span className="status-badge badge-missing-target">⚠️ Thiếu nguồn thứ cấp</span>;
+        return <span className="status-badge badge-missing-target">⚠️ Thiếu nguồn bổ trợ</span>;
       case "MISMATCH_AMOUNT":
         return <span className="status-badge badge-mismatch">⚠️ Lệch tiền</span>;
       case "MISMATCH_METADATA":
@@ -43,7 +40,7 @@ export const ResultTable: React.FC<ResultTableProps> = ({
       case "DUPLICATE_SUSPECT":
         return <span className="status-badge badge-duplicate">⚇ Trùng lặp</span>;
       case "AMBIGUOUS_MATCH":
-        return <span className="status-badge badge-ambiguous">? Kiểm tra</span>;
+        return <span className="status-badge badge-ambiguous">? Cần kiểm tra</span>;
       default:
         return <span className="status-badge">{status}</span>;
     }
@@ -60,6 +57,10 @@ export const ResultTable: React.FC<ResultTableProps> = ({
       if (searchQuery.trim().length > 0) {
         const query = searchQuery.toLowerCase().trim();
         const idMatch = g.id.toLowerCase().includes(query);
+        const docMatch = g.docNo?.toLowerCase().includes(query) || false;
+        const seriesMatch = g.series?.toLowerCase().includes(query) || false;
+        const dateMatch = g.date?.toLowerCase().includes(query) || false;
+        const partnerMatch = g.partnerName?.toLowerCase().includes(query) || false;
         const refMatch =
           g.primarySourceRecordIds.some((id) => id.toLowerCase().includes(query)) ||
           g.targetSourceRecordIds.some((id) => id.toLowerCase().includes(query));
@@ -70,7 +71,7 @@ export const ResultTable: React.FC<ResultTableProps> = ({
             (d.targetValue && d.targetValue.toLowerCase().includes(query))
         );
 
-        if (!idMatch && !refMatch && !discMatch) {
+        if (!idMatch && !docMatch && !seriesMatch && !dateMatch && !partnerMatch && !refMatch && !discMatch) {
           return false;
         }
       }
@@ -87,6 +88,32 @@ export const ResultTable: React.FC<ResultTableProps> = ({
     return filteredGroups.slice(start, start + pageSize);
   }, [filteredGroups, validPage, pageSize]);
 
+  const renderSemanticStatus = (
+    variance: string | number | undefined,
+    status: MatchStatus,
+    missingLabel: string
+  ) => {
+    if (variance === undefined || isZeroMoney(variance)) {
+      if (status === "MATCHED_EXACT") {
+        return <span style={{ color: "#16a34a", fontSize: "0.85rem" }}>✓ Khớp</span>;
+      }
+      return <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>-</span>;
+    }
+    if (status === "UNMATCHED_MISSING_IN_TARGET") {
+      return (
+        <span style={{ color: "#dc2626", fontWeight: 600, fontSize: "0.85rem" }}>
+          ✕ {missingLabel}: {formatVND(variance)}
+        </span>
+      );
+    }
+    const isNeg = String(variance).startsWith("-");
+    return (
+      <span style={{ color: isNeg ? "#dc2626" : "#d97706", fontWeight: 600, fontSize: "0.85rem" }}>
+        {formatVND(variance)}
+      </span>
+    );
+  };
+
   return (
     <section className="results-table-section">
       <div className="table-controls-bar">
@@ -95,7 +122,7 @@ export const ResultTable: React.FC<ResultTableProps> = ({
           <input
             type="text"
             className="search-input"
-            placeholder="Tìm theo số HĐ, MST, tên khách hàng, mã nhóm..."
+            placeholder="Tìm theo số HĐ, ký hiệu, ngày, MST, tên khách hàng..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -124,6 +151,7 @@ export const ResultTable: React.FC<ResultTableProps> = ({
             { id: "UNMATCHED_MISSING_IN_TARGET", label: "Thiếu bên đối chiếu" },
             { id: "UNMATCHED_MISSING_IN_SOURCE", label: "Thiếu bên nguồn chính" },
             { id: "MATCHED_AGGREGATE", label: "Khớp gộp" },
+            { id: "AMBIGUOUS_MATCH", label: "Cần kiểm tra" },
             { id: "DUPLICATE_SUSPECT", label: "Trùng lặp" },
           ].map((tab) => (
             <button
@@ -145,14 +173,15 @@ export const ResultTable: React.FC<ResultTableProps> = ({
         <table className="reconciliation-table">
           <thead>
             <tr>
-              <th style={{ width: "60px" }}>STT</th>
-              <th style={{ width: "150px" }}>Trạng thái</th>
-              <th style={{ width: "160px" }}>Mã nhóm</th>
-              <th style={{ width: "140px", textAlign: "right" }}>Tiền Nguồn A</th>
-              <th style={{ width: "140px", textAlign: "right" }}>Tiền Nguồn B</th>
-              <th style={{ width: "140px", textAlign: "right" }}>Chênh lệch</th>
+              <th style={{ width: "45px" }}>STT</th>
+              <th style={{ width: "135px" }}>Trạng thái</th>
+              <th style={{ width: "150px" }}>Số CT / Ký hiệu</th>
+              <th style={{ width: "100px" }}>Ngày</th>
+              <th style={{ width: "130px", textAlign: "right" }}>Doanh thu (511)</th>
+              <th style={{ width: "130px", textAlign: "right" }}>Thuế GTGT (3331)</th>
+              <th style={{ width: "130px", textAlign: "right" }}>Công nợ (131)</th>
               <th>Chi tiết & Lý do sai lệch</th>
-              <th style={{ width: "90px", textAlign: "center" }}>Xem</th>
+              <th style={{ width: "70px", textAlign: "center" }}>Xem</th>
             </tr>
           </thead>
           <tbody>
@@ -174,21 +203,19 @@ export const ResultTable: React.FC<ResultTableProps> = ({
                   >
                     <td>{rowIndex}</td>
                     <td>{getStatusBadge(g.status)}</td>
-                    <td className="cell-id" title={g.id}>
-                      {g.id}
+                    <td className="cell-id">
+                      <div><strong>#{g.docNo || g.id}</strong></div>
+                      {g.series && <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Ký hiệu: {g.series}</div>}
                     </td>
-                    <td className="cell-num">{formatMoney(g.totalSourceAmount)}</td>
-                    <td className="cell-num">{formatMoney(g.totalTargetAmount)}</td>
-                    <td
-                      className={`cell-num ${
-                        g.amountVariance === 0
-                          ? "var-zero"
-                          : g.amountVariance > 0
-                          ? "var-pos"
-                          : "var-neg"
-                      }`}
-                    >
-                      {formatMoney(g.amountVariance)}
+                    <td>{g.date || "-"}</td>
+                    <td className="cell-num" style={{ textAlign: "right" }}>
+                      {renderSemanticStatus(g.revenueVariance, g.status, "Thiếu TK511")}
+                    </td>
+                    <td className="cell-num" style={{ textAlign: "right" }}>
+                      {renderSemanticStatus(g.vatVariance, g.status, "Thiếu TK3331")}
+                    </td>
+                    <td className="cell-num" style={{ textAlign: "right" }}>
+                      {renderSemanticStatus(g.receivableVariance, g.status, "Thiếu TK131")}
                     </td>
                     <td className="cell-reason" title={reasonText}>
                       {reasonText}
@@ -210,7 +237,7 @@ export const ResultTable: React.FC<ResultTableProps> = ({
               })
             ) : (
               <tr>
-                <td colSpan={8} className="empty-table-cell">
+                <td colSpan={9} className="empty-table-cell">
                   Không tìm thấy chứng từ nào phù hợp với bộ lọc hiện tại.
                 </td>
               </tr>

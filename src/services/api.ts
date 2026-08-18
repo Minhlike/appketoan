@@ -4,6 +4,7 @@ import type {
   ReconciliationResult,
   ReconciliationSession,
   ExportSummary,
+  PreconfiguredScenario,
 } from "../types/dataContract";
 
 import eInvoicesSynthetic from "../../fixtures/synthetic/einvoices_comprehensive_synthetic.json";
@@ -121,31 +122,36 @@ export async function exportReport(
 }
 
 /**
- * Pre-configured standard scenarios
+ * Pre-configured standard scenarios with explicit roles and semantic comparison rules
  */
-export const PRECONFIGURED_SCENARIOS: Array<import("../types/dataContract").PreconfiguredScenario> = [
+export const PRECONFIGURED_SCENARIOS: PreconfiguredScenario[] = [
   {
-    id: "scenario_revenue_vat",
-    name: "Đối chiếu Doanh thu & Thuế đầu ra (3 nguồn)",
-    description: "Khớp Hóa đơn điện tử với Sổ chi tiết TK 511 và Bảng kê thuế GTGT TK 3331",
+    id: "scenario_revenue_standard",
+    name: "Đối chiếu Doanh thu (Hóa đơn ↔ Sổ cái TK 511)",
+    description: "So khớp Doanh thu tiền hàng chưa thuế giữa Hóa đơn điện tử và Sổ cái TK 511",
     recommendedSources: [
       {
         kind: "e_invoice",
+        role: "PRIMARY",
         title: "Bảng kê Hóa đơn điện tử bán ra",
         description: "File xuất từ Cổng Thuế hoặc Nhà cung cấp HĐĐT (VNPT, Viettel, MISA, BKAV)",
         required: true,
       },
       {
         kind: "ledger_511",
+        role: "REQUIRED_SECONDARY",
         title: "Sổ cái TK 511 (Doanh thu bán hàng)",
-        description: "Sổ chi tiết doanh thu từ phần mềm kế toán",
+        description: "Sổ chi tiết doanh thu từ phần mềm kế toán (Phát sinh Có)",
         required: true,
       },
+    ],
+    rules: [
       {
-        kind: "ledger_3331",
-        title: "Sổ cái TK 3331 (Thuế GTGT phải nộp)",
-        description: "Sổ thuế GTGT đầu ra",
-        required: false,
+        semantic: "REVENUE",
+        title: "Đối chiếu Doanh thu bán hàng",
+        description: "Khớp Tiền chưa thuế (HĐĐT) với Phát sinh Có (TK 511)",
+        primaryField: "pretaxAmount",
+        secondaryField: "creditAmount",
       },
     ],
     defaultToleranceVnd: 10,
@@ -153,14 +159,94 @@ export const PRECONFIGURED_SCENARIOS: Array<import("../types/dataContract").Prec
     enableAggregate: true,
   },
   {
-    id: "scenario_revenue_receivables",
-    name: "Đối chiếu Doanh thu, Thuế & Công nợ (4 nguồn)",
-    description: "Kiểm tra chu trình bán hàng: HĐĐT ↔ TK 511 ↔ TK 3331 ↔ Sổ công nợ TK 131",
+    id: "scenario_revenue_vat_receivables",
+    name: "Đối chiếu Toàn diện Doanh thu, Thuế & Công nợ (HĐ ↔ 511, 3331, 131)",
+    description: "Kiểm tra chu trình bán hàng khép kín: HĐĐT ↔ TK 511 ↔ TK 3331 ↔ Sổ công nợ TK 131",
     recommendedSources: [
-      { kind: "e_invoice", title: "Hóa đơn điện tử", description: "Bảng kê HĐ bán ra", required: true },
-      { kind: "ledger_511", title: "Sổ cái TK 511", description: "Doanh thu", required: true },
-      { kind: "ledger_3331", title: "Sổ cái TK 3331", description: "Thuế GTGT", required: true },
-      { kind: "ledger_131", title: "Sổ công nợ TK 131", description: "Phát sinh Nợ TK 131", required: true },
+      {
+        kind: "e_invoice",
+        role: "PRIMARY",
+        title: "Bảng kê Hóa đơn điện tử",
+        description: "HĐĐT bán ra (Nguồn chính)",
+        required: true,
+      },
+      {
+        kind: "ledger_511",
+        role: "REQUIRED_SECONDARY",
+        title: "Sổ cái TK 511",
+        description: "Doanh thu bán hàng (Phát sinh Có)",
+        required: true,
+      },
+      {
+        kind: "ledger_3331",
+        role: "REQUIRED_SECONDARY",
+        title: "Sổ cái TK 3331",
+        description: "Thuế GTGT phải nộp (Phát sinh Có)",
+        required: true,
+      },
+      {
+        kind: "ledger_131",
+        role: "OPTIONAL_SECONDARY",
+        title: "Sổ công nợ TK 131",
+        description: "Công nợ phải thu khách hàng (Phát sinh Nợ)",
+        required: false,
+      },
+    ],
+    rules: [
+      {
+        semantic: "REVENUE",
+        title: "Doanh thu chưa thuế",
+        description: "Hóa đơn Pretax ↔ TK511 Phát sinh Có",
+        primaryField: "pretaxAmount",
+        secondaryField: "creditAmount",
+      },
+      {
+        semantic: "VAT",
+        title: "Thuế GTGT đầu ra",
+        description: "Hóa đơn VAT ↔ TK3331 Phát sinh Có",
+        primaryField: "vatAmount",
+        secondaryField: "creditAmount",
+      },
+      {
+        semantic: "RECEIVABLE",
+        title: "Công nợ phải thu",
+        description: "Hóa đơn Tổng thanh toán ↔ TK131 Phát sinh Nợ",
+        primaryField: "totalAmount",
+        secondaryField: "debitAmount",
+      },
+    ],
+    defaultToleranceVnd: 10,
+    defaultDateDays: 3,
+    enableAggregate: true,
+  },
+  {
+    id: "scenario_input_vat",
+    name: "Đối chiếu Thuế GTGT Đầu vào (HĐ Đầu vào ↔ TK 133)",
+    description: "So khớp Thuế GTGT được khấu trừ trên hóa đơn đầu vào với Sổ chi tiết TK 133",
+    recommendedSources: [
+      {
+        kind: "e_invoice",
+        role: "PRIMARY",
+        title: "Bảng kê Hóa đơn đầu vào",
+        description: "Bảng kê HĐ mua vào từ Cổng Thuế",
+        required: true,
+      },
+      {
+        kind: "ledger_133",
+        role: "REQUIRED_SECONDARY",
+        title: "Sổ cái TK 133 (Thuế GTGT đầu vào)",
+        description: "Phát sinh Nợ TK 133",
+        required: true,
+      },
+    ],
+    rules: [
+      {
+        semantic: "VAT",
+        title: "Thuế GTGT đầu vào",
+        description: "Hóa đơn VAT ↔ TK133 Phát sinh Nợ",
+        primaryField: "vatAmount",
+        secondaryField: "debitAmount",
+      },
     ],
     defaultToleranceVnd: 10,
     defaultDateDays: 3,
@@ -168,11 +254,32 @@ export const PRECONFIGURED_SCENARIOS: Array<import("../types/dataContract").Prec
   },
   {
     id: "scenario_bank_reconciliation",
-    name: "Đối chiếu Tiền gửi & Sao kê Ngân hàng",
-    description: "So khớp Sổ tiền gửi ngân hàng (TK 112) với Sao kê tài khoản từ Internet Banking",
+    name: "Đối chiếu Thu tiền Khách hàng (TK 131 ↔ Sao kê Ngân hàng)",
+    description: "So khớp tiền thanh toán trên sổ công nợ với dòng tiền ghi có trên sao kê ngân hàng",
     recommendedSources: [
-      { kind: "ledger_511", title: "Sổ tiền gửi TK 112", description: "Sổ chi tiết tài khoản ngân hàng của kế toán", required: true },
-      { kind: "bank_statement", title: "Sao kê ngân hàng", description: "File Excel sao kê giao dịch từ ngân hàng", required: true },
+      {
+        kind: "ledger_131",
+        role: "PRIMARY",
+        title: "Sổ công nợ TK 131",
+        description: "Phát sinh Có TK 131 (Khách thanh toán)",
+        required: true,
+      },
+      {
+        kind: "bank_statement",
+        role: "REQUIRED_SECONDARY",
+        title: "Sao kê ngân hàng",
+        description: "Giao dịch phát sinh Có tài khoản ngân hàng",
+        required: true,
+      },
+    ],
+    rules: [
+      {
+        semantic: "BANK_PAYMENT",
+        title: "Dòng tiền thanh toán",
+        description: "TK131 Phát sinh Có ↔ Sao kê Phát sinh Có",
+        primaryField: "creditAmount",
+        secondaryField: "creditAmount",
+      },
     ],
     defaultToleranceVnd: 0,
     defaultDateDays: 3,
@@ -181,8 +288,9 @@ export const PRECONFIGURED_SCENARIOS: Array<import("../types/dataContract").Prec
   {
     id: "scenario_custom_multi_source",
     name: "Đối chiếu Tùy biến N-nguồn",
-    description: "Tự do thêm nhiều file Excel bất kỳ và cấu hình cột đối chiếu linh hoạt",
+    description: "Tự do cấu hình vai trò từng file và các cột đối chiếu",
     recommendedSources: [],
+    rules: [],
     defaultToleranceVnd: 10,
     defaultDateDays: 3,
     enableAggregate: true,

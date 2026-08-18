@@ -10,7 +10,7 @@ pub enum ValueOrigin {
     Derived,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CanonicalRecord {
     pub id: String,
@@ -151,13 +151,25 @@ mod tests {
         assert_eq!(CanonicalRecord::normalize_doc_no("123.0"), "123");
         assert_eq!(CanonicalRecord::normalize_doc_no("  000456  "), "456");
         assert_eq!(CanonicalRecord::normalize_doc_no("00000000"), "0");
-        assert_eq!(CanonicalRecord::normalize_doc_no("INV-2024-001"), "INV-2024-001");
+        assert_eq!(
+            CanonicalRecord::normalize_doc_no("INV-2024-001"),
+            "INV-2024-001"
+        );
     }
 
     #[test]
     fn test_tax_id_normalization() {
-        assert_eq!(CanonicalRecord::normalize_tax_id(" 0101234567 "), "0101234567");
-        assert_eq!(CanonicalRecord::normalize_tax_id("0101234567-001"), "0101234567-001");
-        assert_eq!(CanonicalRecord::normalize_tax_id("MST: 0309998888"), "0309998888");
+        assert_eq!(
+            CanonicalRecord::normalize_tax_id(" 0101234567 "),
+            "0101234567"
+        );
+        assert_eq!(
+            CanonicalRecord::normalize_tax_id("0101234567-001"),
+            "0101234567-001"
+        );
+        assert_eq!(
+            CanonicalRecord::normalize_tax_id("MST: 0309998888"),
+            "0309998888"
+        );
     }
 }

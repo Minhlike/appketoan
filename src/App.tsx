@@ -4,6 +4,7 @@ import "./App.css";
 import type {
   DataSource,
   DataSourceKind,
+  SourceRole,
   ExcelFileMetadata,
   MatchGroup,
   PreconfiguredScenario,
@@ -52,17 +53,54 @@ export function App() {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Scenario change
+  // Scenario change: automatically assign roles to current sources if kinds match
   const handleSelectScenario = (scenario: PreconfiguredScenario) => {
     setSelectedScenario(scenario);
     setToleranceVnd(scenario.defaultToleranceVnd);
     setDateToleranceDays(scenario.defaultDateDays);
     setEnableAggregate(scenario.enableAggregate);
+    setErrorMessage(null);
+
+    setSources((prev) =>
+      prev.map((item, idx) => {
+        const matchingRec = scenario.recommendedSources.find((r) => r.kind === item.source.kind);
+        const assignedRole: SourceRole = matchingRec
+          ? matchingRec.role
+          : idx === 0
+          ? "PRIMARY"
+          : "REQUIRED_SECONDARY";
+        return {
+          ...item,
+          source: {
+            ...item.source,
+            role: assignedRole,
+          },
+        };
+      })
+    );
   };
 
   // Add source
   const handleAddSource = (item: IngestedSourceItem) => {
-    setSources((prev) => [...prev, item]);
+    // Automatically match role from selected scenario if kind matches
+    const matchingRec = selectedScenario.recommendedSources.find(
+      (r) => r.kind === item.source.kind
+    );
+    const assignedRole: SourceRole = matchingRec
+      ? matchingRec.role
+      : sources.length === 0
+      ? "PRIMARY"
+      : "REQUIRED_SECONDARY";
+
+    const newItem: IngestedSourceItem = {
+      ...item,
+      source: {
+        ...item.source,
+        role: assignedRole,
+      },
+    };
+
+    setSources((prev) => [...prev, newItem]);
     setErrorMessage(null);
   };
 
@@ -71,7 +109,7 @@ export function App() {
     setSources((prev) => prev.filter((s) => s.id !== id));
   };
 
-  // Update sheet
+  // Update sheet: re-runs detection and reclassifies source.kind
   const handleUpdateSheet = (id: string, newSheetName: string) => {
     setSources((prev) =>
       prev.map((item) => {
@@ -82,6 +120,7 @@ export function App() {
             source: {
               ...item.source,
               sheetName: newSheetName,
+              kind: sheetMeta?.suggestedKind || item.source.kind,
               headerRow: sheetMeta?.detectedHeaderRow || 1,
               dataStartRow: sheetMeta?.detectedDataStartRow || 2,
               columnMapping: sheetMeta?.suggestedMapping || item.source.columnMapping,
@@ -110,6 +149,23 @@ export function App() {
     );
   };
 
+  // Update source role
+  const handleUpdateRole = (id: string, newRole: SourceRole) => {
+    setSources((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              source: {
+                ...item.source,
+                role: newRole,
+              },
+            }
+          : item
+      )
+    );
+  };
+
   // Save updated mapping
   const handleSaveMapping = (updatedSource: DataSource) => {
     setSources((prev) =>
@@ -131,6 +187,7 @@ export function App() {
         filePath: "einvoices_demo.xlsx",
         sheetName: "Sheet1",
         kind: "e_invoice",
+        role: "PRIMARY",
         headerRow: 1,
         dataStartRow: 2,
         columnMapping: {
@@ -174,6 +231,7 @@ export function App() {
         filePath: "ledger511_demo.xlsx",
         sheetName: "Sheet1",
         kind: "ledger_511",
+        role: "REQUIRED_SECONDARY",
         headerRow: 1,
         dataStartRow: 2,
         columnMapping: {
@@ -225,11 +283,25 @@ export function App() {
     setErrorMessage(null);
   };
 
-  // Run Reconciliation
+  // Run Reconciliation with strict validation
   const handleRunReconciliation = async () => {
     if (sources.length < 2) {
       setErrorMessage("Vui lòng tải lên ít nhất 2 nguồn dữ liệu Excel để thực hiện đối chiếu.");
       return;
+    }
+
+    // Enforce required sources for scenario
+    const requiredScenarioSources = selectedScenario.recommendedSources.filter((r) => r.required);
+    for (const req of requiredScenarioSources) {
+      const isPresent = sources.some(
+        (s) => s.source.kind === req.kind || (s.source.role === "PRIMARY" && req.role === "PRIMARY")
+      );
+      if (!isPresent && selectedScenario.id !== "scenario_custom_multi_source") {
+        setErrorMessage(
+          `Kịch bản "${selectedScenario.name}" yêu cầu bắt buộc có nguồn: "${req.title}". Vui lòng tải lên file dữ liệu tương ứng.`
+        );
+        return;
+      }
     }
 
     try {
@@ -238,13 +310,51 @@ export function App() {
       setExportMessage(null);
 
       const primarySource =
-        sources.find((s) => s.source.kind === "e_invoice") || sources[0];
+        sources.find((s) => s.source.role === "PRIMARY") ||
+        sources.find((s) => s.source.kind === "e_invoice") ||
+        sources[0];
+
+      const requiredSourceIds = sources
+        .filter((s) => s.source.role === "REQUIRED_SECONDARY" || s.source.role === "PRIMARY")
+        .map((s) => s.source.id);
+
+      const optionalSourceIds = sources
+        .filter((s) => s.source.role === "OPTIONAL_SECONDARY")
+        .map((s) => s.source.id);
+
+      const expectedPrimaryKind = selectedScenario.recommendedSources.find(
+        (r) => r.role === "PRIMARY"
+      )?.kind;
+
+      const comparisonRules = selectedScenario.rules.map((r, idx) => {
+        let secKind: DataSourceKind = "ledger_511";
+        if (r.semantic === "VAT") secKind = "ledger_3331";
+        if (r.semantic === "RECEIVABLE") secKind = "ledger_131";
+        if (r.semantic === "BANK_PAYMENT") secKind = "bank_statement";
+
+        return {
+          id: `rule_${idx}_${r.semantic.toLowerCase()}`,
+          name: r.title,
+          semantic: r.semantic,
+          primarySourceKind: expectedPrimaryKind || "e_invoice",
+          primaryField: r.primaryField,
+          secondarySourceKind: secKind,
+          secondaryField: r.secondaryField,
+          isRequired: true,
+          toleranceVnd: toleranceVnd,
+          dateToleranceDays: dateToleranceDays,
+        };
+      });
 
       const session: ReconciliationSession = {
         sessionId: `sess_${Date.now()}`,
         scenarioName: selectedScenario.name,
         primarySourceId: primarySource?.id,
+        expectedPrimaryKind: expectedPrimaryKind,
+        requiredSourceIds: requiredSourceIds.length > 0 ? requiredSourceIds : undefined,
+        optionalSourceIds: optionalSourceIds.length > 0 ? optionalSourceIds : undefined,
         dataSources: sources.map((s) => s.source),
+        comparisonRules,
         matchingToleranceVnd: toleranceVnd,
         dateToleranceDays: dateToleranceDays,
         enableAggregateMatch: enableAggregate,
@@ -326,6 +436,7 @@ export function App() {
           onRemoveSource={handleRemoveSource}
           onUpdateSheet={handleUpdateSheet}
           onUpdateKind={handleUpdateKind}
+          onUpdateRole={handleUpdateRole}
           onOpenMapping={(item) => setActiveMappingItem(item)}
           disabled={isRunning}
         />

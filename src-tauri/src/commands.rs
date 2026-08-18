@@ -30,7 +30,10 @@ pub fn cmd_run_reconciliation(
 
     for source in &session.data_sources {
         // Read raw rows
-        let (raw_rows, header_cols) = if let Some(bytes) = bytes_map.get(&source.id).or_else(|| bytes_map.get(&source.file_path)) {
+        let (raw_rows, header_cols) = if let Some(bytes) = bytes_map
+            .get(&source.id)
+            .or_else(|| bytes_map.get(&source.file_path))
+        {
             let meta = inspect_excel_bytes(bytes, &source.name)
                 .map_err(|e| format!("Lỗi kiểm tra file {}: {}", source.name, e))?;
             let sheet_meta = meta
@@ -38,10 +41,19 @@ pub fn cmd_run_reconciliation(
                 .iter()
                 .find(|s| s.name == source.sheet_name)
                 .or_else(|| meta.sheets.first())
-                .ok_or_else(|| format!("Không tìm thấy sheet '{}' trong file {}", source.sheet_name, source.name))?;
+                .ok_or_else(|| {
+                    format!(
+                        "Không tìm thấy sheet '{}' trong file {}",
+                        source.sheet_name, source.name
+                    )
+                })?;
 
-            let rows = read_sheet_rows_from_bytes(bytes, &sheet_meta.name)
-                .map_err(|e| format!("Lỗi đọc sheet '{}' trong file {}: {}", sheet_meta.name, source.name, e))?;
+            let rows = read_sheet_rows_from_bytes(bytes, &sheet_meta.name).map_err(|e| {
+                format!(
+                    "Lỗi đọc sheet '{}' trong file {}: {}",
+                    sheet_meta.name, source.name, e
+                )
+            })?;
 
             (rows, sheet_meta.columns.clone())
         } else {
@@ -52,10 +64,19 @@ pub fn cmd_run_reconciliation(
                 .iter()
                 .find(|s| s.name == source.sheet_name)
                 .or_else(|| meta.sheets.first())
-                .ok_or_else(|| format!("Không tìm thấy sheet '{}' trong file {}", source.sheet_name, source.name))?;
+                .ok_or_else(|| {
+                    format!(
+                        "Không tìm thấy sheet '{}' trong file {}",
+                        source.sheet_name, source.name
+                    )
+                })?;
 
-            let rows = read_sheet_rows(&source.file_path, &sheet_meta.name)
-                .map_err(|e| format!("Lỗi đọc sheet '{}' trong file {}: {}", sheet_meta.name, source.name, e))?;
+            let rows = read_sheet_rows(&source.file_path, &sheet_meta.name).map_err(|e| {
+                format!(
+                    "Lỗi đọc sheet '{}' trong file {}: {}",
+                    sheet_meta.name, source.name, e
+                )
+            })?;
 
             (rows, sheet_meta.columns.clone())
         };
@@ -64,7 +85,7 @@ pub fn cmd_run_reconciliation(
         source_records_map.insert(source.id.clone(), records);
     }
 
-    Ok(execute_reconciliation(&session, &source_records_map))
+    execute_reconciliation(&session, &source_records_map)
 }
 
 #[tauri::command]

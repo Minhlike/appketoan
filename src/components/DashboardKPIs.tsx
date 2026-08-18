@@ -1,5 +1,6 @@
 import React from "react";
 import type { ReconciliationSummary } from "../types/dataContract";
+import { formatVND, isZeroMoney } from "../utils/money";
 
 interface DashboardKPIsProps {
   summary: ReconciliationSummary;
@@ -12,10 +13,6 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
   activeFilter,
   onSelectFilter,
 }) => {
-  const formatMoney = (val: number) => {
-    return Math.round(val).toLocaleString("vi-VN") + " đ";
-  };
-
   const kpis = [
     {
       id: "ALL",
@@ -73,12 +70,21 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
       sub: "Trùng số chứng từ trong cùng file",
       badgeClass: "kpi-purple",
     },
+    {
+      id: "AMBIGUOUS_MATCH",
+      label: "Cần kiểm tra lại (Ambiguous)",
+      value: summary.ambiguousCount,
+      sub: "Trùng số HĐ hoặc nhiều tổ hợp gộp",
+      badgeClass: "kpi-orange",
+    },
   ];
 
   const hasSemanticBreakdowns =
-    (summary.revenueVariance !== undefined && summary.revenueVariance !== 0) ||
-    (summary.vatVariance !== undefined && summary.vatVariance !== 0) ||
-    (summary.receivableVariance !== undefined && summary.receivableVariance !== 0);
+    (summary.revenueVariance !== undefined && !isZeroMoney(summary.revenueVariance)) ||
+    (summary.vatVariance !== undefined && !isZeroMoney(summary.vatVariance)) ||
+    (summary.receivableVariance !== undefined && !isZeroMoney(summary.receivableVariance));
+
+  const isNetZero = isZeroMoney(summary.netFinancialVariance);
 
   return (
     <section className="dashboard-section">
@@ -90,10 +96,10 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
               <span className="var-label">Lệch Doanh thu:</span>
               <span
                 className={`var-value ${
-                  summary.revenueVariance === 0 ? "var-zero" : "var-pos"
+                  isZeroMoney(summary.revenueVariance) ? "var-zero" : "var-pos"
                 }`}
               >
-                {formatMoney(summary.revenueVariance)}
+                {formatVND(summary.revenueVariance)}
               </span>
             </div>
           )}
@@ -103,10 +109,10 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
               <span className="var-label">Lệch Thuế GTGT:</span>
               <span
                 className={`var-value ${
-                  summary.vatVariance === 0 ? "var-zero" : "var-pos"
+                  isZeroMoney(summary.vatVariance) ? "var-zero" : "var-pos"
                 }`}
               >
-                {formatMoney(summary.vatVariance)}
+                {formatVND(summary.vatVariance)}
               </span>
             </div>
           )}
@@ -116,10 +122,10 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
               <span className="var-label">Lệch Công nợ:</span>
               <span
                 className={`var-value ${
-                  summary.receivableVariance === 0 ? "var-zero" : "var-pos"
+                  isZeroMoney(summary.receivableVariance) ? "var-zero" : "var-pos"
                 }`}
               >
-                {formatMoney(summary.receivableVariance)}
+                {formatVND(summary.receivableVariance)}
               </span>
             </div>
           )}
@@ -129,14 +135,14 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
               <span className="var-label">Chênh lệch tài chính:</span>
               <span
                 className={`var-value ${
-                  summary.netFinancialVariance === 0
+                  isNetZero
                     ? "var-zero"
-                    : summary.netFinancialVariance > 0
-                    ? "var-pos"
-                    : "var-neg"
+                    : String(summary.netFinancialVariance).startsWith("-")
+                    ? "var-neg"
+                    : "var-pos"
                 }`}
               >
-                {formatMoney(summary.netFinancialVariance)}
+                {formatVND(summary.netFinancialVariance)}
               </span>
             </div>
           )}

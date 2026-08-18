@@ -2,7 +2,7 @@ $ErrorActionPreference = "Continue"
 
 $repoRoot = "D:\appketoan"
 $auditDir = Join-Path $repoRoot "audit"
-$zipPathV3 = "D:\appketoan-audit-v3.zip"
+$zipPathV4 = "D:\appketoan-audit-v4.zip"
 $zipPath = "D:\appketoan-audit.zip"
 $stageDir = "D:\temp_audit_stage"
 
@@ -27,24 +27,24 @@ Set-Content -Path (Join-Path $auditDir "git-status.txt") -Value $gitStatus -Enco
 
 # 3. audit/git-diff-stat.txt
 Write-Host "-> Generating audit/git-diff-stat.txt"
-$diffDetail = & git show --stat HEAD
-Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== SHOW STAT HEAD ===`n$diffDetail" -Encoding UTF8
+$diffDetail = & git diff --stat HEAD
+Set-Content -Path (Join-Path $auditDir "git-diff-stat.txt") -Value "=== GIT DIFF STAT ===`n$diffDetail" -Encoding UTF8
 
 # 4. audit/test-results.txt
 Write-Host "-> Running tests and generating audit/test-results.txt"
-Set-Location (Join-Path $repoRoot "crates/reconciliation-core")
-$cargoTestOutput = & cargo test -- --nocapture 2>&1 | Out-String
+Set-Location $repoRoot
+$cargoTestOutput = & cargo test --workspace -- --nocapture 2>&1 | Out-String
 
 Set-Location $repoRoot
 $npmTestOutput = & npm test 2>&1 | Out-String
 
 $testResults = @"
 ================================================================================
-AUDIT TEST SUITE EXECUTION RESULTS - FIX V3 MULTI-SOURCE CORRECTNESS
+AUDIT TEST SUITE EXECUTION RESULTS - FIX V4 MULTI-SOURCE CORRECTNESS
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
---- 1. RUST CORE RECONCILIATION TEST SUITE (cargo test) ---
+--- 1. RUST CORE RECONCILIATION TEST SUITE (cargo test --workspace) ---
 $cargoTestOutput
 
 --- 2. FRONTEND TEST SUITE (npm test / vitest) ---
@@ -56,15 +56,19 @@ Set-Content -Path (Join-Path $auditDir "test-results.txt") -Value $testResults -
 Write-Host "-> Running build and generating audit/build-results.txt"
 Set-Location $repoRoot
 $npmBuildOutput = & npm run build 2>&1 | Out-String
+$tauriCheckOutput = & cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | Out-String
 
 $buildResults = @"
 ================================================================================
-AUDIT BUILD VERIFICATION RESULTS - FIX V3
+AUDIT BUILD VERIFICATION RESULTS - FIX V4
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
 --- 1. FRONTEND PRODUCTION BUNDLE (npm run build) ---
 $npmBuildOutput
+
+--- 2. TAURI RUST PRODUCTION CRATE CHECK ---
+$tauriCheckOutput
 "@
 Set-Content -Path (Join-Path $auditDir "build-results.txt") -Value $buildResults -Encoding UTF8
 
@@ -130,27 +134,27 @@ foreach ($file in $files) {
 
 Write-Host "Total staged files: $includedCount"
 
-Write-Host "=== 3. Compressing staged files into $zipPathV3 and $zipPath ==="
-if (Test-Path $zipPathV3) { Remove-Item -Path $zipPathV3 -Force }
+Write-Host "=== 3. Compressing staged files into $zipPathV4 and $zipPath ==="
+if (Test-Path $zipPathV4) { Remove-Item -Path $zipPathV4 -Force }
 if (Test-Path $zipPath) { Remove-Item -Path $zipPath -Force }
 
-Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV3 -CompressionLevel Optimal
-Copy-Item -Path $zipPathV3 -Destination $zipPath -Force
+Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV4 -CompressionLevel Optimal
+Copy-Item -Path $zipPathV4 -Destination $zipPath -Force
 
 # Cleanup stage directory
 Remove-Item -Path $stageDir -Recurse -Force
 
 Write-Host "=== 4. Validating Created ZIP Archive ==="
-$zipInfo = Get-Item $zipPathV3
+$zipInfo = Get-Item $zipPathV4
 $zipSizeKB = [math]::Round($zipInfo.Length / 1KB, 2)
 $zipSizeMB = [math]::Round($zipInfo.Length / 1MB, 2)
 
-Write-Host "ZIP Path: $zipPathV3"
+Write-Host "ZIP Path: $zipPathV4"
 Write-Host "ZIP Size: $zipSizeKB KB ($zipSizeMB MB)"
 
 # Validate archive contents
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV3)
+$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV4)
 $entryNames = $verifyZip.Entries | ForEach-Object { $_.FullName }
 $verifyZip.Dispose()
 

@@ -1,0 +1,264 @@
+{
+  "sessionId": "sess_ipc_contract_v5",
+  "executedAt": "2026-08-18T18:54:04.274636800+00:00",
+  "profileId": "IPC Contract Verification",
+  "summary": {
+    "totalSourceRecords": 4,
+    "totalTargetRecords": 0,
+    "exactMatchesCount": 0,
+    "toleranceMatchesCount": 0,
+    "aggregateMatchesCount": 0,
+    "mismatchesCount": 0,
+    "missingInTargetCount": 4,
+    "missingInSourceCount": 0,
+    "duplicatesCount": 0,
+    "ambiguousCount": 0,
+    "revenueVariance": "7434371057.50",
+    "vatVariance": "0",
+    "receivableVariance": "0",
+    "totalDiscrepantAmount": "7434371057.50",
+    "netFinancialVariance": "7434371057.50"
+  },
+  "groups": [
+    {
+      "id": "grp_match_rec_zero",
+      "status": "UNMATCHED_MISSING_IN_TARGET",
+      "docNo": "00000001",
+      "primarySourceRecordIds": [
+        "rec_zero"
+      ],
+      "targetSourceRecordIds": [],
+      "sourceBreakdowns": {
+        "src_511": {
+          "sourceId": "src_511",
+          "sourceName": "Sổ 511",
+          "recordIds": [],
+          "comparedAmount": "0",
+          "status": "UNMATCHED_MISSING_IN_TARGET",
+          "discrepancies": [
+            {
+              "fieldName": "docNo",
+              "sourceValue": "1 (Ký hiệu )",
+              "amountDiff": "0",
+              "message": "Chứng từ #1 không tìm thấy trong nguồn Sổ 511"
+            }
+          ]
+        }
+      },
+      "semanticComparisons": [
+        {
+          "semantic": "REVENUE",
+          "semanticName": "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+          "primarySourceId": "src_inv",
+          "primarySourceName": "Hóa đơn",
+          "secondarySourceId": "src_511",
+          "secondarySourceName": "Sổ 511",
+          "secondarySourceKind": "ledger511",
+          "semanticField": "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+          "expectedAmount": "0",
+          "actualAmount": "0",
+          "variance": "0",
+          "status": "UNMATCHED_MISSING_IN_TARGET",
+          "primaryRecordIds": [
+            "rec_zero"
+          ],
+          "discrepancies": [
+            {
+              "fieldName": "docNo",
+              "sourceValue": "1 (Ký hiệu )",
+              "amountDiff": "0",
+              "message": "Chứng từ #1 không tìm thấy trong nguồn Sổ 511"
+            }
+          ]
+        }
+      ],
+      "revenueVariance": "0",
+      "vatVariance": "0",
+      "receivableVariance": "0",
+      "otherVariance": "0",
+      "totalSourceAmount": "0",
+      "totalTargetAmount": "0",
+      "amountVariance": "0"
+    },
+    {
+      "id": "grp_match_rec_large_inv",
+      "status": "UNMATCHED_MISSING_IN_TARGET",
+      "docNo": "00000002",
+      "primarySourceRecordIds": [
+        "rec_large_inv"
+      ],
+      "targetSourceRecordIds": [],
+      "sourceBreakdowns": {
+        "src_511": {
+          "sourceId": "src_511",
+          "sourceName": "Sổ 511",
+          "recordIds": [],
+          "comparedAmount": "0",
+          "status": "UNMATCHED_MISSING_IN_TARGET",
+          "discrepancies": [
+            {
+              "fieldName": "docNo",
+              "sourceValue": "2 (Ký hiệu )",
+              "amountDiff": "7328121057",
+              "message": "Chứng từ #2 không tìm thấy trong nguồn Sổ 511"
+            }
+          ]
+        }
+      },
+      "semanticComparisons": [
+        {
+          "semantic": "REVENUE",
+          "semanticName": "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+          "primarySourceId": "src_inv",
+          "primarySourceName": "Hóa đơn",
+          "secondarySourceId": "src_511",
+          "secondarySourceName": "Sổ 511",
+          "secondarySourceKind": "ledger511",
+          "semanticField": "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+          "expectedAmount": "7328121057",
+          "actualAmount": "0",
+          "variance": "7328121057",
+          "status": "UNMATCHED_MISSING_IN_TARGET",
+          "primaryRecordIds": [
+            "rec_large_inv"
+          ],
+          "discrepancies": [
+            {
+              "fieldName": "docNo",
+              "sourceValue": "2 (Ký hiệu )",
+              "amountDiff": "7328121057",
+              "message": "Chứng từ #2 không tìm thấy trong nguồn Sổ 511"
+            }
+          ]
+        }
+      ],
+      "revenueVariance": "7328121057",
+      "vatVariance": "0",
+      "receivableVariance": "0",
+      "otherVariance": "0",
+      "totalSourceAmount": "7328121057",
+      "totalTargetAmount": "0",
+      "amountVariance": "7328121057"
+    },
+    {
+      "id": "grp_match_rec_fractional",
+      "status": "UNMATCHED_MISSING_IN_TARGET",
+      "docNo": "00000003",
+      "primarySourceRecordIds": [
+        "rec_fractional"
+      ],
+      "targetSourceRecordIds": [],
+      "sourceBreakdowns": {
+        "src_511": {
+          "sourceId": "src_511",
+          "sourceName": "Sổ 511",
+          "recordIds": [],
+          "comparedAmount": "0",
+          "status": "UNMATCHED_MISSING_IN_TARGET",
+          "discrepancies": [
+            {
+              "fieldName": "docNo",
+              "sourceValue": "3 (Ký hiệu )",
+              "amountDiff": "1250000.50",
+              "message": "Chứng từ #3 không tìm thấy trong nguồn Sổ 511"
+            }
+          ]
+        }
+      },
+      "semanticComparisons": [
+        {
+          "semantic": "REVENUE",
+          "semanticName": "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+          "primarySourceId": "src_inv",
+          "primarySourceName": "Hóa đơn",
+          "secondarySourceId": "src_511",
+          "secondarySourceName": "Sổ 511",
+          "secondarySourceKind": "ledger511",
+          "semanticField": "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+          "expectedAmount": "1250000.50",
+          "actualAmount": "0",
+          "variance": "1250000.50",
+          "status": "UNMATCHED_MISSING_IN_TARGET",
+          "primaryRecordIds": [
+            "rec_fractional"
+          ],
+          "discrepancies": [
+            {
+              "fieldName": "docNo",
+              "sourceValue": "3 (Ký hiệu )",
+              "amountDiff": "1250000.50",
+              "message": "Chứng từ #3 không tìm thấy trong nguồn Sổ 511"
+            }
+          ]
+        }
+      ],
+      "revenueVariance": "1250000.50",
+      "vatVariance": "0",
+      "receivableVariance": "0",
+      "otherVariance": "0",
+      "totalSourceAmount": "1250000.50",
+      "totalTargetAmount": "0",
+      "amountVariance": "1250000.50"
+    },
+    {
+      "id": "grp_match_rec_missing_233",
+      "status": "UNMATCHED_MISSING_IN_TARGET",
+      "docNo": "00000233",
+      "primarySourceRecordIds": [
+        "rec_missing_233"
+      ],
+      "targetSourceRecordIds": [],
+      "sourceBreakdowns": {
+        "src_511": {
+          "sourceId": "src_511",
+          "sourceName": "Sổ 511",
+          "recordIds": [],
+          "comparedAmount": "0",
+          "status": "UNMATCHED_MISSING_IN_TARGET",
+          "discrepancies": [
+            {
+              "fieldName": "docNo",
+              "sourceValue": "233 (Ký hiệu )",
+              "amountDiff": "105000000",
+              "message": "Chứng từ #233 không tìm thấy trong nguồn Sổ 511"
+            }
+          ]
+        }
+      },
+      "semanticComparisons": [
+        {
+          "semantic": "REVENUE",
+          "semanticName": "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+          "primarySourceId": "src_inv",
+          "primarySourceName": "Hóa đơn",
+          "secondarySourceId": "src_511",
+          "secondarySourceName": "Sổ 511",
+          "secondarySourceKind": "ledger511",
+          "semanticField": "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
+          "expectedAmount": "105000000",
+          "actualAmount": "0",
+          "variance": "105000000",
+          "status": "UNMATCHED_MISSING_IN_TARGET",
+          "primaryRecordIds": [
+            "rec_missing_233"
+          ],
+          "discrepancies": [
+            {
+              "fieldName": "docNo",
+              "sourceValue": "233 (Ký hiệu )",
+              "amountDiff": "105000000",
+              "message": "Chứng từ #233 không tìm thấy trong nguồn Sổ 511"
+            }
+          ]
+        }
+      ],
+      "revenueVariance": "105000000",
+      "vatVariance": "0",
+      "receivableVariance": "0",
+      "otherVariance": "0",
+      "totalSourceAmount": "105000000",
+      "totalTargetAmount": "0",
+      "amountVariance": "105000000"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ fn test_end_to_end_reconciliation_engine_flow() {
         session_id: "sess_e2e_test_01".to_string(),
         scenario_name: "Đối chiếu Doanh thu & Thuế đầu ra (3 nguồn)".to_string(),
         primary_source_id: Some("src_e_invoice".to_string()),
+        expected_primary_kind: None,
         required_source_ids: None,
         optional_source_ids: None,
         data_sources: vec![
@@ -27,6 +28,7 @@ fn test_end_to_end_reconciliation_engine_flow() {
                 file_path: "mock_einvoices.xlsx".to_string(),
                 sheet_name: "Sheet1".to_string(),
                 kind: DataSourceKind::EInvoice,
+                role: SourceRole::Primary,
                 header_row: 1,
                 data_start_row: 2,
                 column_mapping: ColumnMapping::default(),
@@ -37,11 +39,13 @@ fn test_end_to_end_reconciliation_engine_flow() {
                 file_path: "mock_ledger511.xlsx".to_string(),
                 sheet_name: "Sheet1".to_string(),
                 kind: DataSourceKind::Ledger511,
+                role: SourceRole::RequiredSecondary,
                 header_row: 1,
                 data_start_row: 2,
                 column_mapping: ColumnMapping::default(),
             },
         ],
+        comparison_rules: vec![],
         matching_tolerance_vnd: dec!(10),
         date_tolerance_days: 3,
         enable_aggregate_match: true,
@@ -51,7 +55,8 @@ fn test_end_to_end_reconciliation_engine_flow() {
     source_map.insert("src_e_invoice".to_string(), e_invoices);
     source_map.insert("src_ledger_511".to_string(), ledger_511);
 
-    let result = execute_reconciliation(&session, &source_map);
+    let result =
+        execute_reconciliation(&session, &source_map).expect("Reconciliation should succeed");
 
     // Assert summary metrics
     assert_eq!(result.summary.total_source_records, 7);
@@ -61,7 +66,11 @@ fn test_end_to_end_reconciliation_engine_flow() {
     // Test Excel Export
     let temp_export_path = std::env::temp_dir().join("test_reconciliation_report.xlsx");
     let export_res = export_reconciliation_to_excel(&result, &temp_export_path);
-    assert!(export_res.is_ok(), "Excel export failed: {:?}", export_res.err());
+    assert!(
+        export_res.is_ok(),
+        "Excel export failed: {:?}",
+        export_res.err()
+    );
 
     let summary = export_res.unwrap();
     assert!(summary.file_size_bytes > 1000);
@@ -69,7 +78,11 @@ fn test_end_to_end_reconciliation_engine_flow() {
 
     // Verify exported Excel can be opened by Calamine reader
     let inspected = inspect_excel_file(&temp_export_path);
-    assert!(inspected.is_ok(), "Failed to read exported Excel: {:?}", inspected.err());
+    assert!(
+        inspected.is_ok(),
+        "Failed to read exported Excel: {:?}",
+        inspected.err()
+    );
     let meta = inspected.unwrap();
     assert_eq!(meta.sheets.len(), 3);
     assert_eq!(meta.sheets[0].name, "Tong quan");

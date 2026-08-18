@@ -1,6 +1,27 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use crate::models::reconciliation_rule::ComparisonRule;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SourceRole {
+    #[default]
+    Primary,
+    RequiredSecondary,
+    OptionalSecondary,
+}
+
+impl SourceRole {
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Primary => "Nguồn chính (PRIMARY)",
+            Self::RequiredSecondary => "Nguồn bắt buộc (REQUIRED)",
+            Self::OptionalSecondary => "Nguồn bổ trợ (OPTIONAL)",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum DataSourceKind {
@@ -110,6 +131,8 @@ pub struct DataSource {
     pub file_path: String,
     pub sheet_name: String,
     pub kind: DataSourceKind,
+    #[serde(default)]
+    pub role: SourceRole,
     #[serde(default = "default_header_row")]
     pub header_row: u32,
     #[serde(default = "default_data_start_row")]
@@ -157,10 +180,14 @@ pub struct ReconciliationSession {
     pub scenario_name: String,
     pub primary_source_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_primary_kind: Option<DataSourceKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub required_source_ids: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub optional_source_ids: Option<Vec<String>>,
     pub data_sources: Vec<DataSource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comparison_rules: Vec<ComparisonRule>,
     pub matching_tolerance_vnd: Decimal,
     pub date_tolerance_days: u32,
     pub enable_aggregate_match: bool,
@@ -187,6 +214,7 @@ mod tests {
             file_path: "C:/data/hd_t1.xlsx".to_string(),
             sheet_name: "Sheet1".to_string(),
             kind: DataSourceKind::EInvoice,
+            role: SourceRole::Primary,
             header_row: 1,
             data_start_row: 2,
             column_mapping: ColumnMapping {
@@ -199,6 +227,7 @@ mod tests {
 
         let json = serde_json::to_string(&ds).expect("Serialization failed");
         assert!(json.contains("e_invoice"));
+        assert!(json.contains("PRIMARY"));
         assert!(json.contains("ds_01"));
         assert!(json.contains("creditAmountColumn"));
 

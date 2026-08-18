@@ -2,9 +2,12 @@ use reconciliation_core::models::*;
 
 #[test]
 fn test_golden_dataset_schema_and_integrity() {
-    let e_invoices_json = include_str!("../../../fixtures/synthetic/einvoices_comprehensive_synthetic.json");
-    let ledger_511_json = include_str!("../../../fixtures/synthetic/ledger_511_comprehensive_synthetic.json");
-    let golden_result_json = include_str!("../../../fixtures/expected/golden_comprehensive_reconciliation_result.json");
+    let e_invoices_json =
+        include_str!("../../../fixtures/synthetic/einvoices_comprehensive_synthetic.json");
+    let ledger_511_json =
+        include_str!("../../../fixtures/synthetic/ledger_511_comprehensive_synthetic.json");
+    let golden_result_json =
+        include_str!("../../../fixtures/expected/golden_comprehensive_reconciliation_result.json");
 
     let e_invoices: Vec<CanonicalRecord> =
         serde_json::from_str(e_invoices_json).expect("Failed to parse synthetic e-invoices");

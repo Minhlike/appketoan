@@ -1,5 +1,6 @@
 import React from "react";
-import type { MatchGroup, MatchStatus } from "../types/dataContract";
+import type { MatchGroup, MatchStatus, SemanticFieldComparison } from "../types/dataContract";
+import { formatVND, isZeroMoney } from "../utils/money";
 
 interface DetailInspectorModalProps {
   group: MatchGroup | null;
@@ -14,10 +15,6 @@ export const DetailInspectorModal: React.FC<DetailInspectorModalProps> = ({
 }) => {
   if (!isOpen || !group) return null;
 
-  const formatMoney = (val: number) => {
-    return Math.round(val).toLocaleString("vi-VN") + " đ";
-  };
-
   const getStatusBadge = (status: MatchStatus) => {
     switch (status) {
       case "MATCHED_EXACT":
@@ -26,6 +23,8 @@ export const DetailInspectorModal: React.FC<DetailInspectorModalProps> = ({
         return <span className="status-badge badge-tolerance">≈ Khớp có dung sai</span>;
       case "MATCHED_AGGREGATE":
         return <span className="status-badge badge-aggregate">∑ Khớp gộp (1-N)</span>;
+      case "MATCHED_WITH_MISSING_SOURCE":
+        return <span className="status-badge badge-missing-target">⚠️ Thiếu nguồn bổ trợ</span>;
       case "MISMATCH_AMOUNT":
         return <span className="status-badge badge-mismatch">⚠️ Sai lệch số tiền / thuế</span>;
       case "MISMATCH_METADATA":
@@ -37,11 +36,13 @@ export const DetailInspectorModal: React.FC<DetailInspectorModalProps> = ({
       case "DUPLICATE_SUSPECT":
         return <span className="status-badge badge-duplicate">⚇ Nghi ngờ trùng lặp</span>;
       case "AMBIGUOUS_MATCH":
-        return <span className="status-badge badge-ambiguous">? Cần kiểm tra lại</span>;
+        return <span className="status-badge badge-ambiguous">? Cần kiểm tra lại (Ambiguous)</span>;
       default:
         return <span className="status-badge">{status}</span>;
     }
   };
+
+  const comparisons: SemanticFieldComparison[] = group.semanticComparisons || [];
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -51,8 +52,10 @@ export const DetailInspectorModal: React.FC<DetailInspectorModalProps> = ({
             <div className="modal-tag-row">
               {getStatusBadge(group.status)}
               <span className="group-id-tag">Mã nhóm: {group.id}</span>
+              {group.docNo && <span className="group-id-tag">Số HĐ: #{group.docNo}</span>}
+              {group.series && <span className="group-id-tag">Ký hiệu: {group.series}</span>}
             </div>
-            <h3 className="modal-title">Kiểm tra chi tiết đối chiếu & Bằng chứng kiểm toán</h3>
+            <h3 className="modal-title">Kiểm tra chi tiết đối chiếu theo bản chất kế toán</h3>
           </div>
           <button type="button" className="btn-close" onClick={onClose}>
             ✕
@@ -60,34 +63,91 @@ export const DetailInspectorModal: React.FC<DetailInspectorModalProps> = ({
         </div>
 
         <div className="modal-body">
-          {/* Summary financial comparison bar */}
-          <div className="inspector-summary-bar">
-            <div className="summary-item">
-              <span className="summary-lbl">Tổng tiền Nguồn chính (A):</span>
-              <strong className="summary-val">{formatMoney(group.totalSourceAmount)}</strong>
-            </div>
-            <div className="summary-item">
-              <span className="summary-lbl">Tổng tiền Nguồn đối chiếu (B):</span>
-              <strong className="summary-val">{formatMoney(group.totalTargetAmount)}</strong>
-            </div>
-            <div className="summary-item">
-              <span className="summary-lbl">Chênh lệch tài chính:</span>
-              <strong
-                className={`summary-val ${
-                  group.amountVariance === 0
-                    ? "var-zero"
-                    : group.amountVariance > 0
-                    ? "var-pos"
-                    : "var-neg"
-                }`}
-              >
-                {formatMoney(group.amountVariance)}
-              </strong>
+          {/* Document Identity Info */}
+          <div className="doc-identity-card" style={{ background: "#f8fafc", padding: "0.75rem 1rem", borderRadius: "6px", marginBottom: "1rem", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.5rem" }}>
+              <div><strong>Số chứng từ:</strong> {group.docNo || "N/A"}</div>
+              <div><strong>Ký hiệu:</strong> {group.series || "(Trống)"}</div>
+              <div><strong>Ngày lập:</strong> {group.date || "N/A"}</div>
+              <div><strong>Khách hàng / Đối tác:</strong> {group.partnerName || "N/A"}</div>
             </div>
           </div>
 
-          {/* Discrepancies list */}
-          {group.discrepancies && group.discrepancies.length > 0 ? (
+          {/* Semantic Comparison Sections */}
+          {comparisons.length > 0 ? (
+            <div className="semantic-comparisons-list" style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "1.5rem" }}>
+              {comparisons.map((comp, idx) => {
+                const isExact = comp.status === "MATCHED_EXACT";
+                const isZero = isZeroMoney(comp.variance);
+                return (
+                  <div
+                    key={idx}
+                    className="semantic-card"
+                    style={{
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "8px",
+                      padding: "1rem",
+                      background: isExact ? "#ffffff" : "#fff7ed",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.5rem" }}>
+                      <div>
+                        <strong style={{ fontSize: "1rem", color: "#1e293b" }}>{comp.semanticName}</strong>
+                        <span style={{ marginLeft: "0.5rem", color: "#64748b", fontSize: "0.875rem" }}>
+                          ({comp.primarySourceName} ↔ {comp.secondarySourceName})
+                        </span>
+                      </div>
+                      {getStatusBadge(comp.status)}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "0.5rem" }}>
+                      <div className="val-box val-source" style={{ background: "#f1f5f9", padding: "0.5rem 0.75rem", borderRadius: "4px" }}>
+                        <div style={{ fontSize: "0.8rem", color: "#64748b" }}>Giá trị Nguồn chính (A):</div>
+                        <div style={{ fontSize: "1.1rem", fontWeight: "bold" }}>{formatVND(comp.expectedAmount)}</div>
+                      </div>
+                      <div className="val-box val-target" style={{ background: "#f1f5f9", padding: "0.5rem 0.75rem", borderRadius: "4px" }}>
+                        <div style={{ fontSize: "0.8rem", color: "#64748b" }}>Giá trị Đối chiếu (B):</div>
+                        <div style={{ fontSize: "1.1rem", fontWeight: "bold" }}>{formatVND(comp.actualAmount)}</div>
+                      </div>
+                      <div className="val-box" style={{ background: isZero ? "#f1f5f9" : "#fee2e2", padding: "0.5rem 0.75rem", borderRadius: "4px" }}>
+                        <div style={{ fontSize: "0.8rem", color: "#64748b" }}>Chênh lệch (A - B):</div>
+                        <div style={{ fontSize: "1.1rem", fontWeight: "bold", color: isZero ? "#059669" : "#dc2626" }}>
+                          {formatVND(comp.variance)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {comp.discrepancies && comp.discrepancies.length > 0 && (
+                      <div style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#b91c1c" }}>
+                        {comp.discrepancies.map((d, dIdx) => (
+                          <div key={dIdx}>⚠️ {d.message}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Fallback single summary bar if no semantic comparisons */
+            <div className="inspector-summary-bar">
+              <div className="summary-item">
+                <span className="summary-lbl">Tổng tiền Nguồn chính (A):</span>
+                <strong className="summary-val">{formatVND(group.totalSourceAmount)}</strong>
+              </div>
+              <div className="summary-item">
+                <span className="summary-lbl">Tổng tiền Đối chiếu (B):</span>
+                <strong className="summary-val">{formatVND(group.totalTargetAmount)}</strong>
+              </div>
+              <div className="summary-item">
+                <span className="summary-lbl">Chênh lệch:</span>
+                <strong className="summary-val">{formatVND(group.amountVariance)}</strong>
+              </div>
+            </div>
+          )}
+
+          {/* Group-level Discrepancies list */}
+          {group.discrepancies && group.discrepancies.length > 0 && comparisons.length === 0 && (
             <div className="inspector-diff-section">
               <h4 className="section-subtitle">Danh sách các điểm sai lệch phát hiện được:</h4>
               <div className="diff-cards-list">
@@ -96,29 +156,13 @@ export const DetailInspectorModal: React.FC<DetailInspectorModalProps> = ({
                     <div className="diff-card-header">
                       <span className="diff-field-name">Trường dữ liệu: {d.fieldName}</span>
                       {d.amountDiff !== undefined && d.amountDiff !== null && (
-                        <span className="diff-amount-tag">
-                          Lệch: {formatMoney(d.amountDiff)}
-                        </span>
+                        <span className="diff-amount-tag">Lệch: {formatVND(d.amountDiff)}</span>
                       )}
                     </div>
                     <div className="diff-msg">{d.message}</div>
-                    <div className="diff-values-row">
-                      <div className="val-box val-source">
-                        <span className="val-lbl">Giá trị Nguồn A:</span>
-                        <span className="val-text">{d.sourceValue || "(Trống)"}</span>
-                      </div>
-                      <div className="val-box val-target">
-                        <span className="val-lbl">Giá trị Nguồn B:</span>
-                        <span className="val-text">{d.targetValue || "(Trống)"}</span>
-                      </div>
-                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          ) : (
-            <div className="inspector-exact-banner">
-              ✓ Nhóm chứng từ này khớp chính xác 100% tất cả các trường dữ liệu và số tiền.
             </div>
           )}
 

@@ -50,7 +50,12 @@ pub fn parse_excel_date(input: &str) -> Option<String> {
                 parts[2].parse::<u32>(),
             ) {
                 if let Some(date) = NaiveDate::from_ymd_opt(y, m, d) {
-                    return Some(format!("{:04}-{:02}-{:02}", date.year(), date.month(), date.day()));
+                    return Some(format!(
+                        "{:04}-{:02}-{:02}",
+                        date.year(),
+                        date.month(),
+                        date.day()
+                    ));
                 }
             }
         }
@@ -62,7 +67,12 @@ pub fn parse_excel_date(input: &str) -> Option<String> {
                 parts[2].parse::<i32>(),
             ) {
                 if let Some(date) = NaiveDate::from_ymd_opt(y, m, d) {
-                    return Some(format!("{:04}-{:02}-{:02}", date.year(), date.month(), date.day()));
+                    return Some(format!(
+                        "{:04}-{:02}-{:02}",
+                        date.year(),
+                        date.month(),
+                        date.day()
+                    ));
                 }
             }
         }
@@ -74,7 +84,12 @@ pub fn parse_excel_date(input: &str) -> Option<String> {
 /// Sanitizes monetary text into a standard Decimal
 pub fn parse_amount(input: &str) -> Option<Decimal> {
     let trimmed = input.trim();
-    if trimmed.is_empty() || trimmed == "-" || trimmed == "N/A" || trimmed == "null" || trimmed == "nil" {
+    if trimmed.is_empty()
+        || trimmed == "-"
+        || trimmed == "N/A"
+        || trimmed == "null"
+        || trimmed == "nil"
+    {
         return None;
     }
 
@@ -235,7 +250,9 @@ pub fn normalize_data_source_rows(
 
     let col_index = |target_opt: &Option<String>| -> Option<usize> {
         let target = target_opt.as_ref()?;
-        header_columns.iter().position(|col| col.trim() == target.trim())
+        header_columns
+            .iter()
+            .position(|col| col.trim() == target.trim())
     };
 
     let idx_doc_no = col_index(&mapping.doc_no_column);
@@ -288,8 +305,7 @@ pub fn normalize_data_source_rows(
         let template_code = get_val(idx_template_code);
         let date = get_val(idx_date).and_then(|d| parse_excel_date(&d));
 
-        let buyer_tax_id =
-            get_val(idx_buyer_tax_id).map(|t| CanonicalRecord::normalize_tax_id(&t));
+        let buyer_tax_id = get_val(idx_buyer_tax_id).map(|t| CanonicalRecord::normalize_tax_id(&t));
         let seller_tax_id =
             get_val(idx_seller_tax_id).map(|t| CanonicalRecord::normalize_tax_id(&t));
 
@@ -307,21 +323,22 @@ pub fn normalize_data_source_rows(
         let credit_amount = get_val(idx_credit_amount).and_then(|a| parse_amount(&a));
 
         // Read total_amount directly from total_amount_column if mapped
-        let (total_amount, total_amount_origin) = if let Some(tot) = get_val(idx_total_amount).and_then(|a| parse_amount(&a)) {
-            (tot, ValueOrigin::Source)
-        } else if let (Some(pretax), Some(vat)) = (pretax_amount, vat_amount) {
-            let disc = discount_amount.unwrap_or(Decimal::ZERO);
-            let fee = fee_amount.unwrap_or(Decimal::ZERO);
-            (pretax + vat - disc + fee, ValueOrigin::Derived)
-        } else if let Some(pretax) = pretax_amount {
-            (pretax, ValueOrigin::Derived)
-        } else if let Some(credit) = credit_amount {
-            (credit, ValueOrigin::Derived)
-        } else if let Some(debit) = debit_amount {
-            (debit, ValueOrigin::Derived)
-        } else {
-            (Decimal::ZERO, ValueOrigin::Derived)
-        };
+        let (total_amount, total_amount_origin) =
+            if let Some(tot) = get_val(idx_total_amount).and_then(|a| parse_amount(&a)) {
+                (tot, ValueOrigin::Source)
+            } else if let (Some(pretax), Some(vat)) = (pretax_amount, vat_amount) {
+                let disc = discount_amount.unwrap_or(Decimal::ZERO);
+                let fee = fee_amount.unwrap_or(Decimal::ZERO);
+                (pretax + vat - disc + fee, ValueOrigin::Derived)
+            } else if let Some(pretax) = pretax_amount {
+                (pretax, ValueOrigin::Derived)
+            } else if let Some(credit) = credit_amount {
+                (credit, ValueOrigin::Derived)
+            } else if let Some(debit) = debit_amount {
+                (debit, ValueOrigin::Derived)
+            } else {
+                (Decimal::ZERO, ValueOrigin::Derived)
+            };
 
         let vat_rate = get_val(idx_vat_rate);
         let debit_account = get_val(idx_debit_account);
@@ -403,9 +420,18 @@ mod tests {
     #[test]
     fn test_parse_excel_dates() {
         assert_eq!(parse_excel_date("45300"), Some("2024-01-09".to_string()));
-        assert_eq!(parse_excel_date("15/01/2026"), Some("2026-01-15".to_string()));
-        assert_eq!(parse_excel_date("2026-01-15"), Some("2026-01-15".to_string()));
-        assert_eq!(parse_excel_date("15-01-2026 14:30:00"), Some("2026-01-15".to_string()));
+        assert_eq!(
+            parse_excel_date("15/01/2026"),
+            Some("2026-01-15".to_string())
+        );
+        assert_eq!(
+            parse_excel_date("2026-01-15"),
+            Some("2026-01-15".to_string())
+        );
+        assert_eq!(
+            parse_excel_date("15-01-2026 14:30:00"),
+            Some("2026-01-15".to_string())
+        );
     }
 
     #[test]

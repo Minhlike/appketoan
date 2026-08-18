@@ -1,6 +1,6 @@
-use std::path::Path;
 use calamine::{open_workbook_auto, open_workbook_auto_from_rs, Data, Range, Reader};
 use std::io::Cursor;
+use std::path::Path;
 
 use crate::models::{ExcelFileMetadata, SheetMetadata};
 use crate::reader::header_detector::detect_header_and_mapping_with_context;
@@ -64,8 +64,12 @@ pub fn inspect_excel_file<P: AsRef<Path>>(path: P) -> Result<ExcelFileMetadata, 
 
     let file_size_bytes = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
 
-    let mut workbook = open_workbook_auto(p)
-        .map_err(|e| format!("Không thể mở file Excel: {}. Hãy kiểm tra định dạng file.", e))?;
+    let mut workbook = open_workbook_auto(p).map_err(|e| {
+        format!(
+            "Không thể mở file Excel: {}. Hãy kiểm tra định dạng file.",
+            e
+        )
+    })?;
 
     let sheet_names = workbook.sheet_names().to_vec();
     let mut sheets = Vec::with_capacity(sheet_names.len());
@@ -79,10 +83,7 @@ pub fn inspect_excel_file<P: AsRef<Path>>(path: P) -> Result<ExcelFileMetadata, 
             let (detected_header, detected_start, columns, suggested_mapping, suggested_kind, conf) =
                 detect_header_and_mapping_with_context(sheet_name, &preview_string_rows);
 
-            let preview_rows: Vec<Vec<String>> = preview_string_rows
-                .into_iter()
-                .take(10)
-                .collect();
+            let preview_rows: Vec<Vec<String>> = preview_string_rows.into_iter().take(10).collect();
 
             sheets.push(SheetMetadata {
                 name: sheet_name.clone(),
@@ -125,10 +126,7 @@ pub fn inspect_excel_bytes(bytes: &[u8], file_name: &str) -> Result<ExcelFileMet
             let (detected_header, detected_start, columns, suggested_mapping, suggested_kind, conf) =
                 detect_header_and_mapping_with_context(sheet_name, &preview_string_rows);
 
-            let preview_rows: Vec<Vec<String>> = preview_string_rows
-                .into_iter()
-                .take(10)
-                .collect();
+            let preview_rows: Vec<Vec<String>> = preview_string_rows.into_iter().take(10).collect();
 
             sheets.push(SheetMetadata {
                 name: sheet_name.clone(),
@@ -158,8 +156,8 @@ pub fn read_sheet_rows<P: AsRef<Path>>(
     path: P,
     sheet_name: &str,
 ) -> Result<Vec<Vec<String>>, String> {
-    let mut workbook = open_workbook_auto(path.as_ref())
-        .map_err(|e| format!("Không thể mở file: {}", e))?;
+    let mut workbook =
+        open_workbook_auto(path.as_ref()).map_err(|e| format!("Không thể mở file: {}", e))?;
 
     let range = workbook
         .worksheet_range(sheet_name)
@@ -174,8 +172,8 @@ pub fn read_sheet_rows_from_bytes(
     sheet_name: &str,
 ) -> Result<Vec<Vec<String>>, String> {
     let cursor = Cursor::new(bytes);
-    let mut workbook = open_workbook_auto_from_rs(cursor)
-        .map_err(|e| format!("Không thể đọc dữ liệu: {}", e))?;
+    let mut workbook =
+        open_workbook_auto_from_rs(cursor).map_err(|e| format!("Không thể đọc dữ liệu: {}", e))?;
 
     let range = workbook
         .worksheet_range(sheet_name)

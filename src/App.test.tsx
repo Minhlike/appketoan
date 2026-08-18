@@ -52,8 +52,8 @@ describe("AppKetoan UI End-to-End Workflow", () => {
     expect(screen.getByText(/📊 Xuất Báo Cáo Excel/i)).toBeDefined();
 
     // Check table headers
-    expect(screen.getByText(/Tiền Nguồn A/i)).toBeDefined();
-    expect(screen.getByText(/Tiền Nguồn B/i)).toBeDefined();
+    expect(screen.getByText(/Doanh thu \(511\)/i)).toBeDefined();
+    expect(screen.getByText(/Thuế GTGT \(3331\)/i)).toBeDefined();
     expect(screen.getByText(/Chi tiết & Lý do sai lệch/i)).toBeDefined();
   });
 
@@ -72,8 +72,8 @@ describe("AppKetoan UI End-to-End Workflow", () => {
 
     // Modal should open
     expect(
-      screen.getByText(/Kiểm tra chi tiết đối chiếu & Bằng chứng kiểm toán/i)
+      screen.getByText(/Kiểm tra chi tiết đối chiếu theo bản chất kế toán/i)
     ).toBeDefined();
-    expect(screen.getByText(/Tổng tiền Nguồn chính \(A\):/i)).toBeDefined();
+    expect(screen.getByText(/Số chứng từ:/i)).toBeDefined();
   });
 });
