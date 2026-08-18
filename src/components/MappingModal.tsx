@@ -50,13 +50,18 @@ export const MappingModal: React.FC<MappingModalProps> = ({
     description: string;
     required?: boolean;
   }> = [
-    { key: "docNoColumn", label: "Số hóa đơn / Số chứng từ", description: "Cột chứa số HĐ hoặc mã chứng từ", required: true },
+    { key: "docNoColumn", label: "Số hóa đơn / Số chứng từ", description: "Số chứng từ để đối chiếu (Số ct / Số HĐ)", required: true },
+    { key: "docCodeColumn", label: "Mã chứng từ", description: "Loại / Mã CT (ví dụ: HĐ, PKT, PC)" },
     { key: "seriesColumn", label: "Ký hiệu hóa đơn", description: "Ví dụ: 1C26TAA, C24TBB" },
+    { key: "templateCodeColumn", label: "Ký hiệu mẫu số", description: "Ví dụ: 1, 2, 01GTKT" },
     { key: "dateColumn", label: "Ngày lập / Ngày chứng từ", description: "Định dạng DD/MM/YYYY hoặc ngày Excel" },
-    { key: "partnerTaxIdColumn", label: "Mã số thuế (MST)", description: "MST người mua hoặc đối tác" },
+    { key: "buyerTaxIdColumn", label: "MST người mua", description: "Mã số thuế bên mua / đối tác" },
+    { key: "sellerTaxIdColumn", label: "MST người bán", description: "Mã số thuế đơn vị phát hành" },
+    { key: "partnerTaxIdColumn", label: "Mã số thuế đối tác", description: "MST đối tác chung" },
     { key: "partnerNameColumn", label: "Tên khách hàng / Đơn vị", description: "Tên đối tác hoặc người mua" },
     { key: "pretaxAmountColumn", label: "Doanh thu chưa thuế", description: "Tiền hàng trước thuế" },
     { key: "vatAmountColumn", label: "Tiền thuế GTGT", description: "Số tiền thuế GTGT" },
+    { key: "discountAmountColumn", label: "Tiền chiết khấu thương mại", description: "Số tiền chiết khấu (nếu có)" },
     { key: "totalAmountColumn", label: "Tổng tiền thanh toán", description: "Tổng tiền sau thuế thanh toán" },
     { key: "creditAmountColumn", label: "Phát sinh Có", description: "Dành cho sổ cái TK 511, TK 3331" },
     { key: "debitAmountColumn", label: "Phát sinh Nợ", description: "Dành cho sổ cái TK 131, TK 133" },

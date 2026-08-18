@@ -16,12 +16,16 @@ fn generate_synthetic_dataset(count: usize, source_id: &str) -> Vec<CanonicalRec
             source_row: (i + 1) as u32,
             date: Some(format!("2026-01-{:02}", (i % 28) + 1)),
             doc_no: Some(format!("{:07}", i)),
+            doc_code: None,
             series: Some("1C26TAA".to_string()),
             template_code: Some("1".to_string()),
             partner_tax_id: Some(format!("010{:07}", i % 500)),
+            buyer_tax_id: Some(format!("010{:07}", i % 500)),
+            seller_tax_id: None,
             partner_name: Some(format!("Công ty Thử Nghiệm {}", i % 500)),
             pretax_amount: Some(pretax),
             vat_amount: Some(vat),
+            discount_amount: None,
             total_amount: total,
             debit_amount: None,
             credit_amount: Some(pretax),
@@ -50,6 +54,7 @@ fn test_performance_scaling_1k_to_100k() {
         let session = ReconciliationSession {
             session_id: format!("perf_test_{}", count),
             scenario_name: "Benchmark Performance".to_string(),
+            primary_source_id: Some("src_a".to_string()),
             data_sources: vec![
                 DataSource {
                     id: "src_a".to_string(),

@@ -17,12 +17,16 @@ export type DataSourceKind =
 export interface ColumnMapping {
   dateColumn?: string;
   docNoColumn?: string;
+  docCodeColumn?: string;
   seriesColumn?: string;
   templateCodeColumn?: string;
   partnerTaxIdColumn?: string;
+  buyerTaxIdColumn?: string;
+  sellerTaxIdColumn?: string;
   partnerNameColumn?: string;
   pretaxAmountColumn?: string;
   vatAmountColumn?: string;
+  discountAmountColumn?: string;
   totalAmountColumn?: string;
   debitAmountColumn?: string;
   creditAmountColumn?: string;
@@ -68,6 +72,7 @@ export interface ExcelFileMetadata {
 export interface ReconciliationSession {
   sessionId: string;
   scenarioName: string;
+  primarySourceId?: string;
   dataSources: DataSource[];
   matchingToleranceVnd: number;
   dateToleranceDays: number;
@@ -80,12 +85,16 @@ export interface CanonicalRecord {
   sourceRow: number;
   date?: string;
   docNo?: string;
+  docCode?: string;
   series?: string;
   templateCode?: string;
   partnerTaxId?: string;
+  buyerTaxId?: string;
+  sellerTaxId?: string;
   partnerName?: string;
   pretaxAmount?: number;
   vatAmount?: number;
+  discountAmount?: number;
   totalAmount: number;
   debitAmount?: number;
   creditAmount?: number;

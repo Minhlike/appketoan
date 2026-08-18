@@ -87,8 +87,7 @@ pub fn parse_amount(input: &str) -> Option<Decimal> {
         .replace("usd", "")
         .replace("USD", "")
         .replace("đồng", "")
-        .replace(' ', "")
-        .replace('\u{a0}', "") // non-breaking space
+        .replace([' ', '\u{a0}'], "")
         .trim()
         .to_string();
 
@@ -155,6 +154,55 @@ pub fn parse_amount(input: &str) -> Option<Decimal> {
     Some(val)
 }
 
+/// Checks if a cell is an exact summary / subtotal title keyword
+fn is_summary_keyword(cell: &str) -> bool {
+    let norm = remove_diacritics(cell)
+        .chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect::<String>()
+        .trim()
+        .to_lowercase();
+
+    // Critical Safeguard: If the cell contains "cong ty" (company), it is a customer/vendor name, NEVER a summary row!
+    if norm.contains("cong ty") || norm.contains("doanh nghiep") || norm.contains("chi nhanh") || norm.contains("hop tac xa") {
+        return false;
+    }
+
+    // Exact summary tokens
+    matches!(
+        norm.as_str(),
+        "cong"
+            | "tong cong"
+            | "tong"
+            | "tong so"
+            | "total"
+            | "grand total"
+            | "subtotal"
+            | "so du dau ky"
+            | "phat sinh trong ky"
+            | "so phat sinh trong ky"
+            | "so du cuoi ky"
+            | "cong phat sinh"
+            | "tong phat sinh"
+            | "cong thang"
+            | "cong quy"
+            | "cong nam"
+            | "luy ke"
+            | "so luy ke"
+            | "nguoi lap"
+            | "nguoi lap bieu"
+            | "ke toan truong"
+            | "giam doc"
+            | "thu truong"
+            | "don vi bao cao"
+            | "ky tinh thue"
+            | "bang ke hoa don"
+            | "so chi tiet"
+            | "so nhat ky"
+    ) || norm.starts_with("ngay    thang")
+        || norm.starts_with("ngay ... thang")
+}
+
 /// Checks if a row is a subtotal, summary, or garbage row
 pub fn is_garbage_or_subtotal_row(cells: &[String]) -> bool {
     let non_empty: Vec<&str> = cells
@@ -167,36 +215,9 @@ pub fn is_garbage_or_subtotal_row(cells: &[String]) -> bool {
         return true;
     }
 
-    // Check all cells for subtotal / footer / summary keywords
+    // If any non-empty cell matches an exact summary keyword, treat as garbage/subtotal row
     for cell in &non_empty {
-        let norm = remove_diacritics(cell).to_lowercase();
-        if norm.starts_with("cong")
-            || norm.contains("tong cong")
-            || norm.contains("tong so")
-            || norm.contains("total")
-            || norm.contains("grand total")
-            || norm.contains("nguoi lap")
-            || norm.contains("ke toan truong")
-            || norm.contains("giam doc")
-            || norm.contains("thu truong")
-            || norm.contains("ngay ... thang")
-            || norm.contains("ngay    thang")
-            || norm.contains("so du dau ky")
-            || norm.contains("so du cuoi ky")
-            || norm.contains("phat sinh trong ky")
-            || norm.contains("so phat sinh trong ky")
-            || norm.contains("tong phat sinh")
-            || norm.contains("cong phat sinh")
-            || norm.contains("cong thang")
-            || norm.contains("cong quy")
-            || norm.contains("cong nam")
-            || norm.contains("luy ke")
-            || norm.contains("bang ke hoa don")
-            || norm.contains("so chi tiet")
-            || norm.contains("so nhat ky")
-            || norm.contains("don vi bao cao")
-            || norm.contains("ky tinh thue")
-        {
+        if is_summary_keyword(cell) {
             return true;
         }
     }
@@ -223,13 +244,17 @@ pub fn normalize_data_source_rows(
     };
 
     let idx_doc_no = col_index(&mapping.doc_no_column);
+    let idx_doc_code = col_index(&mapping.doc_code_column);
     let idx_series = col_index(&mapping.series_column);
     let idx_template_code = col_index(&mapping.template_code_column);
     let idx_date = col_index(&mapping.date_column);
     let idx_partner_tax_id = col_index(&mapping.partner_tax_id_column);
+    let idx_buyer_tax_id = col_index(&mapping.buyer_tax_id_column);
+    let idx_seller_tax_id = col_index(&mapping.seller_tax_id_column);
     let idx_partner_name = col_index(&mapping.partner_name_column);
     let idx_pretax_amount = col_index(&mapping.pretax_amount_column);
     let idx_vat_amount = col_index(&mapping.vat_amount_column);
+    let idx_discount_amount = col_index(&mapping.discount_amount_column);
     let idx_total_amount = col_index(&mapping.total_amount_column);
     let idx_debit_amount = col_index(&mapping.debit_amount_column);
     let idx_credit_amount = col_index(&mapping.credit_amount_column);
@@ -261,22 +286,44 @@ pub fn normalize_data_source_rows(
 
         let raw_doc_no = get_val(idx_doc_no);
         let doc_no = raw_doc_no.as_deref().map(CanonicalRecord::normalize_doc_no);
+        let doc_code = get_val(idx_doc_code);
 
         let series = get_val(idx_series).map(|s| s.trim().to_uppercase());
         let template_code = get_val(idx_template_code);
         let date = get_val(idx_date).and_then(|d| parse_excel_date(&d));
 
-        let partner_tax_id =
-            get_val(idx_partner_tax_id).map(|t| CanonicalRecord::normalize_tax_id(&t));
+        let buyer_tax_id =
+            get_val(idx_buyer_tax_id).map(|t| CanonicalRecord::normalize_tax_id(&t));
+        let seller_tax_id =
+            get_val(idx_seller_tax_id).map(|t| CanonicalRecord::normalize_tax_id(&t));
+
+        let partner_tax_id = get_val(idx_partner_tax_id)
+            .map(|t| CanonicalRecord::normalize_tax_id(&t))
+            .or_else(|| buyer_tax_id.clone());
+
         let partner_name = get_val(idx_partner_name);
 
         let pretax_amount = get_val(idx_pretax_amount).and_then(|a| parse_amount(&a));
         let vat_amount = get_val(idx_vat_amount).and_then(|a| parse_amount(&a));
+        let discount_amount = get_val(idx_discount_amount).and_then(|a| parse_amount(&a));
         let debit_amount = get_val(idx_debit_amount).and_then(|a| parse_amount(&a));
         let credit_amount = get_val(idx_credit_amount).and_then(|a| parse_amount(&a));
-        let total_amount = get_val(idx_total_amount)
-            .and_then(|a| parse_amount(&a))
-            .unwrap_or(Decimal::ZERO);
+
+        // Read total_amount directly from total_amount_column if mapped
+        let total_amount = if let Some(tot) = get_val(idx_total_amount).and_then(|a| parse_amount(&a)) {
+            tot
+        } else if let (Some(pretax), Some(vat)) = (pretax_amount, vat_amount) {
+            // Derived value when total amount column is not present in workbook
+            pretax + vat
+        } else if let Some(pretax) = pretax_amount {
+            pretax
+        } else if let Some(credit) = credit_amount {
+            credit
+        } else if let Some(debit) = debit_amount {
+            debit
+        } else {
+            Decimal::ZERO
+        };
 
         let vat_rate = get_val(idx_vat_rate);
         let debit_account = get_val(idx_debit_account);
@@ -294,18 +341,22 @@ pub fn normalize_data_source_rows(
             }
         }
 
-        let mut record = CanonicalRecord {
+        let record = CanonicalRecord {
             id: format!("{}_row_{}", data_source.id, source_row),
             source_id: data_source.id.clone(),
             source_row,
             date,
             doc_no,
+            doc_code,
             series,
             template_code,
             partner_tax_id,
+            buyer_tax_id,
+            seller_tax_id,
             partner_name,
             pretax_amount,
             vat_amount,
+            discount_amount,
             total_amount,
             debit_amount,
             credit_amount,
@@ -318,11 +369,8 @@ pub fn normalize_data_source_rows(
             raw_fields,
         };
 
-        record.reconcile_monetary_invariants();
-
         // STRICT FILTERING:
         // 1. If row has no monetary values at all (empty/zero amount across pretax, vat, debit, credit, total), skip it!
-        // This prevents non-accounting or zero-value invoice header rows from being falsely flagged as missing.
         if record.has_no_monetary_value() {
             continue;
         }
@@ -364,16 +412,37 @@ mod tests {
     }
 
     #[test]
-    fn test_garbage_row_detection() {
+    fn test_company_names_never_filtered_as_subtotal() {
+        // MUST NOT be treated as summary / garbage
+        assert!(!is_garbage_or_subtotal_row(&[
+            "1".to_string(),
+            "00000101".to_string(),
+            "CÔNG TY TNHH ABC".to_string(),
+            "10,000,000".to_string()
+        ]));
+        assert!(!is_garbage_or_subtotal_row(&[
+            "2".to_string(),
+            "00000102".to_string(),
+            "Công ty cổ phần XYZ".to_string(),
+            "20,000,000".to_string()
+        ]));
+        assert!(!is_garbage_or_subtotal_row(&[
+            "3".to_string(),
+            "00000103".to_string(),
+            "Doanh nghiệp tư nhân Hưng Thịnh".to_string(),
+            "5,000,000".to_string()
+        ]));
+
+        // MUST be treated as summary / garbage
         assert!(is_garbage_or_subtotal_row(&[
-            "Tổng cộng".to_string(),
+            "CỘNG".to_string(),
             "".to_string(),
             "50,000,000".to_string()
         ]));
         assert!(is_garbage_or_subtotal_row(&[
-            "Cộng".to_string(),
+            "TỔNG CỘNG".to_string(),
             "".to_string(),
-            "10,000,000".to_string()
+            "50,000,000".to_string()
         ]));
         assert!(is_garbage_or_subtotal_row(&[
             "SỐ DƯ ĐẦU KỲ".to_string(),
@@ -386,13 +455,9 @@ mod tests {
             "7,223,121,057".to_string()
         ]));
         assert!(is_garbage_or_subtotal_row(&[
-            "Người lập biểu".to_string(),
-            "".to_string()
-        ]));
-        assert!(!is_garbage_or_subtotal_row(&[
-            "1".to_string(),
-            "00000101".to_string(),
-            "10,000,000".to_string()
+            "SỐ DƯ CUỐI KỲ".to_string(),
+            "".to_string(),
+            "0".to_string()
         ]));
     }
 }

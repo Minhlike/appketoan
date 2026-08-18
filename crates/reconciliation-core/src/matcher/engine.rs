@@ -8,43 +8,58 @@ use crate::models::{
     ReconciliationResult, ReconciliationSession, ReconciliationSummary, SourceMatchBreakdown,
 };
 
-/// Resolves the effective accounting comparison amount for a record based on source type
-pub fn get_comparison_amount(
-    record: &CanonicalRecord,
-    source_kind: &DataSourceKind,
-    is_primary: bool,
-) -> Decimal {
-    match source_kind {
-        DataSourceKind::EInvoice => {
-            if is_primary {
-                record.pretax_amount.unwrap_or(record.total_amount)
-            } else {
-                record.total_amount
-            }
-        }
-        DataSourceKind::Ledger511 => {
-            record
+/// Resolves pairwise accounting comparison amounts based on exact source relationship
+pub fn resolve_pair_comparison_amounts(
+    primary: &CanonicalRecord,
+    primary_kind: &DataSourceKind,
+    secondary: &CanonicalRecord,
+    secondary_kind: &DataSourceKind,
+) -> (Decimal, Decimal) {
+    match (primary_kind, secondary_kind) {
+        (DataSourceKind::EInvoice, DataSourceKind::Ledger511) => (
+            primary.pretax_amount.unwrap_or(primary.total_amount),
+            secondary
                 .credit_amount
-                .unwrap_or_else(|| record.pretax_amount.unwrap_or(record.total_amount))
-        }
-        DataSourceKind::Ledger3331 => {
-            record
+                .unwrap_or_else(|| secondary.pretax_amount.unwrap_or(secondary.total_amount)),
+        ),
+        (DataSourceKind::EInvoice, DataSourceKind::Ledger3331) => (
+            primary.vat_amount.unwrap_or(primary.total_amount),
+            secondary
                 .credit_amount
-                .unwrap_or_else(|| record.vat_amount.unwrap_or(record.total_amount))
-        }
-        DataSourceKind::Ledger131 => {
-            record.debit_amount.unwrap_or(record.total_amount)
-        }
+                .unwrap_or_else(|| secondary.vat_amount.unwrap_or(secondary.total_amount)),
+        ),
+        (DataSourceKind::EInvoice, DataSourceKind::Ledger131) => (
+            primary.total_amount,
+            secondary
+                .debit_amount
+                .unwrap_or(secondary.total_amount),
+        ),
+        (DataSourceKind::EInvoice, DataSourceKind::Ledger133) => (
+            primary.vat_amount.unwrap_or(primary.total_amount),
+            secondary
+                .debit_amount
+                .unwrap_or(secondary.total_amount),
+        ),
+        (DataSourceKind::EInvoice, DataSourceKind::BankStatement) => (
+            primary.total_amount,
+            secondary.credit_amount.unwrap_or(secondary.total_amount),
+        ),
         _ => {
-            if let Some(credit) = record.credit_amount {
-                credit
-            } else if let Some(debit) = record.debit_amount {
-                debit
-            } else if let Some(pretax) = record.pretax_amount {
-                pretax
+            let pri = if let Some(pre) = primary.pretax_amount {
+                pre
             } else {
-                record.total_amount
-            }
+                primary.total_amount
+            };
+            let sec = if let Some(cred) = secondary.credit_amount {
+                cred
+            } else if let Some(deb) = secondary.debit_amount {
+                deb
+            } else if let Some(pre) = secondary.pretax_amount {
+                pre
+            } else {
+                secondary.total_amount
+            };
+            (pri, sec)
         }
     }
 }
@@ -59,7 +74,18 @@ pub fn execute_reconciliation(
     let allow_aggregate = session.enable_aggregate_match;
 
     let empty_vec = Vec::new();
-    let primary_source = session.data_sources.first();
+
+    // Deterministically select primary source
+    let primary_source = if let Some(ref pri_id) = session.primary_source_id {
+        session.data_sources.iter().find(|s| &s.id == pri_id)
+    } else {
+        session
+            .data_sources
+            .iter()
+            .find(|s| s.kind == DataSourceKind::EInvoice)
+            .or_else(|| session.data_sources.first())
+    };
+
     let primary_source_id = primary_source
         .map(|s| s.id.as_str())
         .unwrap_or("src_primary");
@@ -71,7 +97,11 @@ pub fn execute_reconciliation(
         .get(primary_source_id)
         .unwrap_or(&empty_vec);
 
-    let secondary_sources: Vec<_> = session.data_sources.iter().skip(1).collect();
+    let secondary_sources: Vec<_> = session
+        .data_sources
+        .iter()
+        .filter(|s| s.id != primary_source_id)
+        .collect();
 
     let mut consumed_primary_ids = HashSet::new();
     let mut consumed_secondary_ids = HashSet::new();
@@ -102,7 +132,7 @@ pub fn execute_reconciliation(
             }
             let total_src: Decimal = recs
                 .iter()
-                .map(|r| get_comparison_amount(r, primary_kind, true))
+                .map(|r| r.pretax_amount.unwrap_or(r.total_amount))
                 .sum();
 
             groups.push(MatchGroup {
@@ -138,7 +168,6 @@ pub fn execute_reconciliation(
         source_name: String,
         source_kind: DataSourceKind,
         by_doc_no: HashMap<String, Vec<&'a CanonicalRecord>>,
-        by_voucher_no: HashMap<String, Vec<&'a CanonicalRecord>>,
         by_tax_amount: HashMap<(String, i64), Vec<&'a CanonicalRecord>>,
         all_records: &'a [CanonicalRecord],
     }
@@ -154,7 +183,6 @@ pub fn execute_reconciliation(
         total_secondary_records_count += sec_records.len();
 
         let mut by_doc_no: HashMap<String, Vec<&CanonicalRecord>> = HashMap::new();
-        let mut by_voucher_no: HashMap<String, Vec<&CanonicalRecord>> = HashMap::new();
         let mut by_tax_amount: HashMap<(String, i64), Vec<&CanonicalRecord>> = HashMap::new();
 
         for rec in sec_records {
@@ -164,16 +192,14 @@ pub fn execute_reconciliation(
                     by_doc_no.entry(clean_doc).or_default().push(rec);
                 }
             }
-            if let Some(v_no) = &rec.voucher_no {
-                let clean_v = CanonicalRecord::normalize_doc_no(v_no);
-                if !clean_v.is_empty() {
-                    by_voucher_no.entry(clean_v).or_default().push(rec);
-                }
-            }
             if let Some(tax_id) = &rec.partner_tax_id {
                 let clean_tax = CanonicalRecord::normalize_tax_id(tax_id);
                 if !clean_tax.is_empty() {
-                    let comp_amt = get_comparison_amount(rec, &sec_source.kind, false);
+                    let comp_amt = rec
+                        .credit_amount
+                        .or(rec.debit_amount)
+                        .or(rec.pretax_amount)
+                        .unwrap_or(rec.total_amount);
                     let rounded = comp_amt.round().to_string().parse::<i64>().unwrap_or(0);
                     by_tax_amount.entry((clean_tax, rounded)).or_default().push(rec);
                 }
@@ -185,7 +211,6 @@ pub fn execute_reconciliation(
             source_name: sec_source.name.clone(),
             source_kind: sec_source.kind.clone(),
             by_doc_no,
-            by_voucher_no,
             by_tax_amount,
             all_records: sec_records,
         });
@@ -210,17 +235,17 @@ pub fn execute_reconciliation(
             _ => continue,
         };
 
-        let primary_comp_amount = get_comparison_amount(primary, primary_kind, true);
-
-        // Match against each secondary source independently
         let mut group_target_ids: Vec<String> = Vec::new();
         let mut group_discrepancies: Vec<FieldDiscrepancy> = Vec::new();
         let mut group_source_breakdowns: HashMap<String, SourceMatchBreakdown> = HashMap::new();
         let mut total_target_amount = Decimal::ZERO;
         let mut matched_in_any_secondary = false;
+        let mut all_secondaries_exact = true;
         let mut has_mismatch = false;
         let mut has_tolerance = false;
         let mut has_aggregate = false;
+
+        let primary_display_amount = primary.pretax_amount.unwrap_or(primary.total_amount);
 
         for sec_idx in &secondary_indexes {
             let candidates = sec_idx.by_doc_no.get(&doc_key);
@@ -231,6 +256,7 @@ pub fn execute_reconciliation(
                     .collect();
 
                 if available.is_empty() {
+                    all_secondaries_exact = false;
                     continue;
                 }
 
@@ -238,32 +264,39 @@ pub fn execute_reconciliation(
 
                 if available.len() == 1 {
                     let target = *available[0];
-                    let target_comp_amount =
-                        get_comparison_amount(target, &sec_idx.source_kind, false);
-                    total_target_amount += target_comp_amount;
+                    let (pri_comp, tgt_comp) = resolve_pair_comparison_amounts(
+                        primary,
+                        primary_kind,
+                        target,
+                        &sec_idx.source_kind,
+                    );
+                    total_target_amount += tgt_comp;
 
                     let discrepancies = analyze_pair_discrepancies(
                         primary,
                         target,
-                        primary_comp_amount,
-                        target_comp_amount,
+                        pri_comp,
+                        tgt_comp,
                         tolerance_vnd,
                         date_tolerance_days,
                     );
 
-                    let diff = (primary_comp_amount - target_comp_amount).abs();
+                    let diff = (pri_comp - tgt_comp).abs();
                     let sec_status = if discrepancies.is_empty() {
                         MatchStatus::MatchedExact
                     } else if diff <= tolerance_vnd
                         && discrepancies.iter().all(|d| d.field_name == "amount")
                     {
                         has_tolerance = true;
+                        all_secondaries_exact = false;
                         MatchStatus::MatchedWithTolerance
                     } else if diff > tolerance_vnd {
                         has_mismatch = true;
+                        all_secondaries_exact = false;
                         MatchStatus::MismatchAmount
                     } else {
                         has_mismatch = true;
+                        all_secondaries_exact = false;
                         MatchStatus::MismatchMetadata
                     };
 
@@ -277,20 +310,33 @@ pub fn execute_reconciliation(
                             source_id: sec_idx.source_id.clone(),
                             source_name: sec_idx.source_name.clone(),
                             record_ids: vec![target.id.clone()],
-                            compared_amount: target_comp_amount,
+                            compared_amount: tgt_comp,
                             status: sec_status,
                             discrepancies,
                         },
                     );
                 } else if allow_aggregate {
                     // Aggregate 1-to-N
-                    let sum_target: Decimal = available
-                        .iter()
-                        .map(|c| get_comparison_amount(c, &sec_idx.source_kind, false))
-                        .sum();
+                    let mut sum_target = Decimal::ZERO;
+                    let (pri_comp, _) = resolve_pair_comparison_amounts(
+                        primary,
+                        primary_kind,
+                        available[0],
+                        &sec_idx.source_kind,
+                    );
+
+                    for c in &available {
+                        let (_, tgt_comp) = resolve_pair_comparison_amounts(
+                            primary,
+                            primary_kind,
+                            c,
+                            &sec_idx.source_kind,
+                        );
+                        sum_target += tgt_comp;
+                    }
                     total_target_amount += sum_target;
 
-                    let agg_diff = (primary_comp_amount - sum_target).abs();
+                    let agg_diff = (pri_comp - sum_target).abs();
                     let target_ids: Vec<String> = available.iter().map(|c| c.id.clone()).collect();
                     for id in &target_ids {
                         consumed_secondary_ids.insert(id.clone());
@@ -299,15 +345,16 @@ pub fn execute_reconciliation(
 
                     if agg_diff <= tolerance_vnd {
                         has_aggregate = true;
+                        all_secondaries_exact = false;
                         let discrepancies = if !agg_diff.is_zero() {
                             vec![FieldDiscrepancy {
                                 field_name: "amount".to_string(),
-                                source_value: Some(format_vnd(primary_comp_amount)),
+                                source_value: Some(format_vnd(pri_comp)),
                                 target_value: Some(format_vnd(sum_target)),
                                 amount_diff: Some(agg_diff),
                                 message: format!(
                                     "Khớp gộp tổng: Nguồn chính ({}) đ = Tổng {} dòng ({}) đ",
-                                    format_vnd(primary_comp_amount),
+                                    format_vnd(pri_comp),
                                     target_ids.len(),
                                     format_vnd(sum_target)
                                 ),
@@ -330,14 +377,15 @@ pub fn execute_reconciliation(
                         );
                     } else {
                         has_mismatch = true;
+                        all_secondaries_exact = false;
                         let discrepancies = vec![FieldDiscrepancy {
                             field_name: "amount".to_string(),
-                            source_value: Some(format_vnd(primary_comp_amount)),
+                            source_value: Some(format_vnd(pri_comp)),
                             target_value: Some(format_vnd(sum_target)),
                             amount_diff: Some(agg_diff),
                             message: format!(
                                 "Lệch tiền gộp: Nguồn chính là {} đ, Tổng {} dòng là {} đ (lệch {} đ)",
-                                format_vnd(primary_comp_amount),
+                                format_vnd(pri_comp),
                                 target_ids.len(),
                                 format_vnd(sum_target),
                                 format_vnd(agg_diff)
@@ -358,6 +406,8 @@ pub fn execute_reconciliation(
                         );
                     }
                 }
+            } else {
+                all_secondaries_exact = false;
             }
         }
 
@@ -366,6 +416,8 @@ pub fn execute_reconciliation(
 
             let overall_status = if has_mismatch {
                 MatchStatus::MismatchAmount
+            } else if all_secondaries_exact && !group_source_breakdowns.is_empty() {
+                MatchStatus::MatchedExact
             } else if has_tolerance {
                 MatchStatus::MatchedWithTolerance
             } else if has_aggregate {
@@ -374,7 +426,7 @@ pub fn execute_reconciliation(
                 MatchStatus::MatchedExact
             };
 
-            let amount_variance = primary_comp_amount - total_target_amount;
+            let amount_variance = primary_display_amount - total_target_amount;
 
             groups.push(MatchGroup {
                 id: format!("grp_match_{}", primary.id),
@@ -383,7 +435,7 @@ pub fn execute_reconciliation(
                 target_source_record_ids: group_target_ids,
                 source_breakdowns: group_source_breakdowns,
                 discrepancies: group_discrepancies,
-                total_source_amount: primary_comp_amount,
+                total_source_amount: primary_display_amount,
                 total_target_amount,
                 amount_variance,
             });
@@ -399,7 +451,6 @@ pub fn execute_reconciliation(
             continue;
         }
 
-        // Strict rule: If primary has doc_no, do NOT false-match with different doc_no!
         if primary.doc_no.is_some() {
             continue;
         }
@@ -407,7 +458,7 @@ pub fn execute_reconciliation(
         if let Some(tax_id) = &primary.partner_tax_id {
             let clean_tax = CanonicalRecord::normalize_tax_id(tax_id);
             if !clean_tax.is_empty() {
-                let primary_comp_amount = get_comparison_amount(primary, primary_kind, true);
+                let primary_comp_amount = primary.pretax_amount.unwrap_or(primary.total_amount);
                 let rounded = primary_comp_amount.round().to_string().parse::<i64>().unwrap_or(0);
 
                 for sec_idx in &secondary_indexes {
@@ -419,16 +470,21 @@ pub fn execute_reconciliation(
 
                         if available.len() == 1 {
                             let target = *available[0];
-                            let target_comp_amount =
-                                get_comparison_amount(target, &sec_idx.source_kind, false);
+                            let (pri_comp, tgt_comp) = resolve_pair_comparison_amounts(
+                                primary,
+                                primary_kind,
+                                target,
+                                &sec_idx.source_kind,
+                            );
+
                             consumed_primary_ids.insert(primary.id.clone());
                             consumed_secondary_ids.insert(target.id.clone());
 
                             let discrepancies = analyze_pair_discrepancies(
                                 primary,
                                 target,
-                                primary_comp_amount,
-                                target_comp_amount,
+                                pri_comp,
+                                tgt_comp,
                                 tolerance_vnd,
                                 date_tolerance_days,
                             );
@@ -440,9 +496,9 @@ pub fn execute_reconciliation(
                                 target_source_record_ids: vec![target.id.clone()],
                                 source_breakdowns: HashMap::new(),
                                 discrepancies,
-                                total_source_amount: primary_comp_amount,
-                                total_target_amount: target_comp_amount,
-                                amount_variance: primary_comp_amount - target_comp_amount,
+                                total_source_amount: pri_comp,
+                                total_target_amount: tgt_comp,
+                                amount_variance: pri_comp - tgt_comp,
                             });
                             break;
                         }
@@ -455,7 +511,6 @@ pub fn execute_reconciliation(
     // -------------------------------------------------------------
     // PASS 3: Residual Sweep for Missing Records
     // -------------------------------------------------------------
-    // Residual Unmatched in Primary -> Missing in Target
     for primary in primary_records {
         if consumed_primary_ids.contains(&primary.id) {
             continue;
@@ -463,7 +518,7 @@ pub fn execute_reconciliation(
         consumed_primary_ids.insert(primary.id.clone());
 
         let doc_display = primary.doc_no.as_deref().unwrap_or("N/A");
-        let primary_comp_amount = get_comparison_amount(primary, primary_kind, true);
+        let primary_comp_amount = primary.pretax_amount.unwrap_or(primary.total_amount);
 
         groups.push(MatchGroup {
             id: format!("grp_missing_target_{}", primary.id),
@@ -488,7 +543,6 @@ pub fn execute_reconciliation(
         });
     }
 
-    // Residual Unmatched in Secondary -> Missing in Primary
     for sec_idx in &secondary_indexes {
         for sec in sec_idx.all_records {
             if consumed_secondary_ids.contains(&sec.id) {
@@ -501,7 +555,11 @@ pub fn execute_reconciliation(
                 .as_deref()
                 .or(sec.voucher_no.as_deref())
                 .unwrap_or("N/A");
-            let sec_comp_amount = get_comparison_amount(sec, &sec_idx.source_kind, false);
+            let sec_comp_amount = sec
+                .credit_amount
+                .or(sec.debit_amount)
+                .or(sec.pretax_amount)
+                .unwrap_or(sec.total_amount);
 
             groups.push(MatchGroup {
                 id: format!("grp_missing_source_{}", sec.id),

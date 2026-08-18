@@ -71,11 +71,16 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
     }
   };
 
+  const processFiles = async (fileList: File[]) => {
+    for (const file of fileList) {
+      await processFile(file);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      Array.from(e.target.files).forEach((file) => {
-        void processFile(file);
-      });
+      const fileList = Array.from(e.target.files);
+      void processFiles(fileList);
       e.target.value = "";
     }
   };
@@ -96,13 +101,17 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
     if (disabled) return;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const validFiles: File[] = [];
       Array.from(e.dataTransfer.files).forEach((file) => {
         if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".xlsb")) {
-          void processFile(file);
+          validFiles.push(file);
         } else {
           setErrorMessage("Vui lòng chỉ tải lên file định dạng Excel (.xlsx, .xls, .xlsb)");
         }
       });
+      if (validFiles.length > 0) {
+        void processFiles(validFiles);
+      }
     }
   };
 

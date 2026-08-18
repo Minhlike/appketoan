@@ -219,9 +219,13 @@ export function App() {
       setErrorMessage(null);
       setExportMessage(null);
 
+      const primarySource =
+        sources.find((s) => s.source.kind === "e_invoice") || sources[0];
+
       const session: ReconciliationSession = {
         sessionId: `sess_${Date.now()}`,
         scenarioName: selectedScenario.name,
+        primarySourceId: primarySource?.id,
         dataSources: sources.map((s) => s.source),
         matchingToleranceVnd: toleranceVnd,
         dateToleranceDays: dateToleranceDays,

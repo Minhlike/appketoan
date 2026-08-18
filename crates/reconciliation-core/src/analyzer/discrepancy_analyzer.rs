@@ -13,7 +13,7 @@ pub fn format_vnd(amount: Decimal) -> String {
     let len = chars.len();
 
     for (i, &c) in chars.iter().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             res.push(',');
         }
         res.push(c);

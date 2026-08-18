@@ -1,7 +1,7 @@
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum DataSourceKind {
     EInvoice,
@@ -12,13 +12,8 @@ pub enum DataSourceKind {
     BankStatement,
     CashBook,
     BranchLedger,
+    #[default]
     Custom,
-}
-
-impl Default for DataSourceKind {
-    fn default() -> Self {
-        Self::Custom
-    }
 }
 
 impl DataSourceKind {
@@ -47,6 +42,9 @@ pub struct ColumnMapping {
     pub doc_no_column: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_code_column: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub series_column: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -56,6 +54,12 @@ pub struct ColumnMapping {
     pub partner_tax_id_column: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub buyer_tax_id_column: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seller_tax_id_column: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub partner_name_column: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -63,6 +67,9 @@ pub struct ColumnMapping {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vat_amount_column: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discount_amount_column: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_amount_column: Option<String>,
@@ -140,11 +147,12 @@ pub struct ExcelFileMetadata {
     pub sheets: Vec<SheetMetadata>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReconciliationSession {
     pub session_id: String,
     pub scenario_name: String,
+    pub primary_source_id: Option<String>,
     pub data_sources: Vec<DataSource>,
     pub matching_tolerance_vnd: Decimal,
     pub date_tolerance_days: u32,
@@ -176,7 +184,7 @@ mod tests {
             data_start_row: 2,
             column_mapping: ColumnMapping {
                 doc_no_column: Some("Số hóa đơn".to_string()),
-                total_amount_column: Some("Tổng tiền".to_string()),
+                total_amount_column: Some("Tổng tiền thanh toán".to_string()),
                 credit_amount_column: Some("Phát sinh Có".to_string()),
                 ..Default::default()
             },

@@ -1,3 +1,4 @@
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -10,7 +11,7 @@ pub enum MatchKeyType {
     CustomKeys(Vec<String>),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MatchingRule {
     pub id: String,
@@ -19,7 +20,7 @@ pub struct MatchingRule {
     #[serde(default)]
     pub allow_date_variance_days: u32,
     #[serde(default)]
-    pub allow_amount_tolerance_vnd: f64,
+    pub allow_amount_tolerance_vnd: Decimal,
     #[serde(default)]
     pub enable_aggregate_match: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -33,14 +34,14 @@ impl Default for MatchingRule {
             name: "Đối chiếu Hóa đơn chuẩn (Số HĐ + Ký hiệu + Tiền)".to_string(),
             primary_keys: vec![MatchKeyType::SeriesAndDocNo],
             allow_date_variance_days: 3,
-            allow_amount_tolerance_vnd: 1.0,
+            allow_amount_tolerance_vnd: Decimal::ONE,
             enable_aggregate_match: false,
             aggregate_grouping_keys: vec![],
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReconciliationProfile {
     pub id: String,
