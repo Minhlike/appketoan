@@ -112,9 +112,12 @@ describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
     expect(parseVietnameseMoneyInput("1..000").success).toBe(false);
     expect(parseVietnameseMoneyInput("10,2,3").success).toBe(false);
     expect(parseVietnameseMoneyInput("abc").success).toBe(false);
+    // Excess precision (> 4 decimals) rejected without silent truncation
+    expect(parseVietnameseMoneyInput("10.000,12345").success).toBe(false);
     expect(() => normalizeMoneyInput("-500")).toThrow();
     expect(() => normalizeMoneyInput("1..000")).toThrow();
     expect(() => normalizeMoneyInput("abc")).toThrow();
+    expect(() => normalizeMoneyInput("10.000,12345")).toThrow();
   });
 
   it("renders detail explanation for Case 1: Revenue MATCHED, VAT & 131 NOT_CHECKED", () => {
@@ -272,7 +275,7 @@ describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
     };
 
     const detail = formatDetailReason(group);
-    expect(detail).toContain("Chứng từ #233 không tìm thấy");
+    expect(detail).toContain("Thiếu TK511: 105.000.000 đ");
     expect(detail).toContain("Thuế GTGT và Công nợ chưa đối chiếu");
     expect(detail).not.toContain("Khớp hoàn toàn");
   });

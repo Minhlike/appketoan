@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
-use crate::models::{CanonicalRecord, DataSourceKind, ReconciliationSession, SourceRole};
+use crate::models::{
+    CanonicalRecord, DataSource, DataSourceKind, ReconciliationSession, SourceRole,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -132,13 +134,17 @@ pub fn compute_canonical_content_fingerprint(
 struct AcceptedSourceMeta {
     source_id: String,
     source_name: String,
+    file_path: String,
+    sheet_name: String,
     kind: DataSourceKind,
+    role: SourceRole,
     raw_hash: Option<String>,
     content_fingerprint: String,
     record_fingerprints: HashSet<String>,
 }
 
 /// Analyzes incoming physical files/datasets for exact duplicate, content duplicate, subset, and partial overlap
+/// Dataset identity is sheet-aware: same workbook with different selected sheets are NOT duplicate!
 pub fn analyze_intake_data_sources(
     session: &ReconciliationSession,
     source_records_map: &HashMap<String, Vec<CanonicalRecord>>,
@@ -172,24 +178,38 @@ pub fn analyze_intake_data_sources(
                 continue;
             }
 
-            // 1. Exact raw byte duplicate
-            if let (Some(curr_raw), Some(prev_raw)) = (&raw_hash, &prev.raw_hash) {
-                if curr_raw == prev_raw {
-                    matched_relation = DatasetRelation::ExactDuplicate {
-                        original_source_id: prev.source_id.clone(),
-                        raw_sha256: curr_raw.clone(),
-                    };
-                    is_eligible = false;
-                    diag_msg = format!(
-                        "File '{}' giống hoàn toàn file '{}'. Bản sao không được tính lại.",
-                        ds.name, prev.source_name
-                    );
-                    exact_dup_count += 1;
-                    break;
-                }
+            let same_sheet = ds
+                .sheet_name
+                .trim()
+                .eq_ignore_ascii_case(prev.sheet_name.trim());
+            let same_file_path = ds
+                .file_path
+                .trim()
+                .eq_ignore_ascii_case(prev.file_path.trim());
+            let same_raw_hash = match (&raw_hash, &prev.raw_hash) {
+                (Some(curr_raw), Some(prev_raw)) => curr_raw == prev_raw,
+                _ => false,
+            };
+
+            // 1. Exact raw byte & sheet duplicate (Fast signal only if sheet and content match)
+            if (same_raw_hash || same_file_path)
+                && same_sheet
+                && content_fp == prev.content_fingerprint
+            {
+                matched_relation = DatasetRelation::ExactDuplicate {
+                    original_source_id: prev.source_id.clone(),
+                    raw_sha256: raw_hash.clone().unwrap_or_default(),
+                };
+                is_eligible = false;
+                diag_msg = format!(
+                    "File '{}' (Sheet '{}') giống hoàn toàn với '{}' (Sheet '{}'). Bản sao không được tính lại.",
+                    ds.name, ds.sheet_name, prev.source_name, prev.sheet_name
+                );
+                exact_dup_count += 1;
+                break;
             }
 
-            // 2. Canonical content duplicate (reformatted Excel file)
+            // 2. Canonical content duplicate (reformatted Excel with identical normalized records)
             if content_fp == prev.content_fingerprint && !recs.is_empty() {
                 matched_relation = DatasetRelation::ContentDuplicate {
                     original_source_id: prev.source_id.clone(),
@@ -204,9 +224,10 @@ pub fn analyze_intake_data_sources(
                 break;
             }
 
-            // 3. Subset / Partial Overlap checks
+            // 3. Subset & Partial Overlap checks (SYMMETRIC & FAIL-CLOSED)
             if !record_fps.is_empty() && !prev.record_fingerprints.is_empty() {
                 let overlap_count = record_fps.intersection(&prev.record_fingerprints).count();
+
                 if overlap_count == record_fps.len()
                     && record_fps.len() < prev.record_fingerprints.len()
                 {
@@ -217,13 +238,34 @@ pub fn analyze_intake_data_sources(
                         total_in_superset: prev.record_fingerprints.len(),
                     };
                     is_eligible = false;
+                    requires_user_confirmation = true;
                     diag_msg = format!(
-                        "Tập dữ liệu '{}' ({} dòng) là tập con của '{}' ({} dòng). Bỏ qua để tránh tính lặp.",
+                        "Tập dữ liệu '{}' ({} dòng) là tập con của '{}' ({} dòng). Cần xác nhận của người dùng (fail-closed).",
                         ds.name, record_fps.len(), prev.source_name, prev.record_fingerprints.len()
                     );
                     subset_dup_count += 1;
                     break;
-                } else if overlap_count > 0 {
+                } else if overlap_count == prev.record_fingerprints.len()
+                    && prev.record_fingerprints.len() < record_fps.len()
+                {
+                    // Previous is strict subset of current (symmetric)
+                    matched_relation = DatasetRelation::SubsetDuplicate {
+                        superset_source_id: ds.id.clone(),
+                        record_count: prev.record_fingerprints.len(),
+                        total_in_superset: record_fps.len(),
+                    };
+                    is_eligible = false;
+                    requires_user_confirmation = true;
+                    diag_msg = format!(
+                        "Tập dữ liệu trước '{}' ({} dòng) là tập con của tập hiện tại '{}' ({} dòng). Cần xác nhận của người dùng (fail-closed).",
+                        prev.source_name, prev.record_fingerprints.len(), ds.name, record_fps.len()
+                    );
+                    subset_dup_count += 1;
+                    break;
+                } else if overlap_count > 0
+                    && overlap_count < record_fps.len()
+                    && overlap_count < prev.record_fingerprints.len()
+                {
                     let ratio = (overlap_count as f64 / record_fps.len() as f64) * 100.0;
                     matched_relation = DatasetRelation::PartialOverlap {
                         overlapping_source_id: prev.source_id.clone(),
@@ -246,7 +288,10 @@ pub fn analyze_intake_data_sources(
             accepted_sources.push(AcceptedSourceMeta {
                 source_id: ds.id.clone(),
                 source_name: ds.name.clone(),
+                file_path: ds.file_path.clone(),
+                sheet_name: ds.sheet_name.clone(),
                 kind: ds.kind.clone(),
+                role: ds.role,
                 raw_hash: raw_hash.clone(),
                 content_fingerprint: content_fp.clone(),
                 record_fingerprints: record_fps,
@@ -267,7 +312,15 @@ pub fn analyze_intake_data_sources(
     }
 
     let unique_count = accepted_sources.len();
-    let logical_count = unique_count;
+
+    // Compute logical source count based on disjoint partition groups
+    let mut kind_role_groups: HashMap<(DataSourceKind, SourceRole), usize> = HashMap::new();
+    for acc in &accepted_sources {
+        *kind_role_groups
+            .entry((acc.kind.clone(), acc.role))
+            .or_insert(0) += 1;
+    }
+    let logical_count = kind_role_groups.len();
 
     IntakeAnalysisResult {
         total_physical_sources: session.data_sources.len(),
@@ -291,25 +344,31 @@ pub type FilteredIntakeResult = Result<
     String,
 >;
 
-/// Filter session and records map through the intake gate
-/// Returns filtered ReconciliationSession and records map containing only unique logical sources
+/// Filter session and records map through the intake gate & construct logical sources for disjoint partitions
+/// Returns filtered ReconciliationSession and records map containing only unified logical sources
 pub fn filter_reconciliation_session_and_records(
     session: &ReconciliationSession,
     source_records_map: &HashMap<String, Vec<CanonicalRecord>>,
     raw_file_hashes: &HashMap<String, String>,
 ) -> FilteredIntakeResult {
-    let analysis = analyze_intake_data_sources(session, source_records_map, raw_file_hashes);
+    let mut analysis = analyze_intake_data_sources(session, source_records_map, raw_file_hashes);
 
     if analysis.requires_user_confirmation {
-        let overlap_details: Vec<String> = analysis
+        let issues: Vec<String> = analysis
             .source_analyses
             .iter()
-            .filter(|a| matches!(a.relation, DatasetRelation::PartialOverlap { .. }))
+            .filter(|a| {
+                matches!(
+                    a.relation,
+                    DatasetRelation::PartialOverlap { .. }
+                        | DatasetRelation::SubsetDuplicate { .. }
+                )
+            })
             .map(|a| a.diagnostic_message.clone())
             .collect();
         return Err(format!(
-            "PARTIAL_OVERLAP: Yêu cầu xác nhận của người dùng trước khi hợp nhất dữ liệu: {}",
-            overlap_details.join("; ")
+            "DATASET_CONFLICT: Yêu cầu xác nhận của người dùng trước khi đối chiếu (fail-closed): {}",
+            issues.join("; ")
         ));
     }
 
@@ -320,12 +379,7 @@ pub fn filter_reconciliation_session_and_records(
         .map(|a| a.source_id.clone())
         .collect();
 
-    let mut filtered_session = session.clone();
-    filtered_session
-        .data_sources
-        .retain(|ds| eligible_source_ids.contains(&ds.id));
-
-    // Build remap lookup: duplicate_id -> original_source_id
+    // Map duplicate sources to their canonical original source ID
     let mut remap_map: HashMap<String, String> = HashMap::new();
     for a in &analysis.source_analyses {
         match &a.relation {
@@ -343,19 +397,93 @@ pub fn filter_reconciliation_session_and_records(
         }
     }
 
-    // Helper to resolve canonical id through chain of duplicates
+    // Group eligible sources by (DataSourceKind, SourceRole) for LogicalSource partition construction
+    let mut partition_groups: HashMap<(DataSourceKind, SourceRole), Vec<&DataSource>> =
+        HashMap::new();
+    for ds in &session.data_sources {
+        if eligible_source_ids.contains(&ds.id) {
+            partition_groups
+                .entry((ds.kind.clone(), ds.role))
+                .or_default()
+                .push(ds);
+        }
+    }
+
+    let mut unified_data_sources: Vec<DataSource> = Vec::new();
+    let mut unified_records_map: HashMap<String, Vec<CanonicalRecord>> = HashMap::new();
+
+    for ((kind, role), group) in partition_groups {
+        if group.len() == 1 {
+            let single_ds = group[0];
+            unified_data_sources.push(single_ds.clone());
+            let recs = source_records_map
+                .get(&single_ds.id)
+                .cloned()
+                .unwrap_or_default();
+            unified_records_map.insert(single_ds.id.clone(), recs);
+        } else {
+            // Disjoint multi-file partition merge into a single LogicalSource
+            let primary_rep = group[0];
+            let logical_id = primary_rep.id.clone();
+            let mut merged_name_parts: Vec<String> = Vec::new();
+            let mut merged_records: Vec<CanonicalRecord> = Vec::new();
+
+            for (part_idx, part_ds) in group.iter().enumerate() {
+                merged_name_parts.push(part_ds.name.clone());
+                // Remap all partition members to the canonical logical ID
+                remap_map.insert(part_ds.id.clone(), logical_id.clone());
+
+                if let Some(part_recs) = source_records_map.get(&part_ds.id) {
+                    for rec in part_recs {
+                        let mut cloned_rec = rec.clone();
+                        cloned_rec.source_id = logical_id.clone();
+                        // Generate partition-unique record id to avoid collision
+                        cloned_rec.id = format!("{}_part{}_{}", logical_id, part_idx, rec.id);
+                        merged_records.push(cloned_rec);
+                    }
+                }
+            }
+
+            let logical_ds = DataSource {
+                id: logical_id.clone(),
+                name: format!("{} (Hợp nhất {} phân đoạn)", primary_rep.name, group.len()),
+                file_path: primary_rep.file_path.clone(),
+                sheet_name: primary_rep.sheet_name.clone(),
+                kind: kind.clone(),
+                role,
+                header_row: primary_rep.header_row,
+                data_start_row: primary_rep.data_start_row,
+                column_mapping: primary_rep.column_mapping.clone(),
+            };
+
+            unified_data_sources.push(logical_ds);
+            unified_records_map.insert(logical_id, merged_records);
+        }
+    }
+
+    analysis.logical_sources_count = unified_data_sources.len();
+
+    // Helper to resolve canonical id through chain of duplicates & partitions
     let resolve_id = |id: &str| -> String {
         let mut target = id.to_string();
         while let Some(mapped) = remap_map.get(&target) {
+            if mapped == &target {
+                break;
+            }
             target = mapped.clone();
         }
         target
     };
 
+    let final_valid_ids: HashSet<String> =
+        unified_data_sources.iter().map(|s| s.id.clone()).collect();
+    let mut filtered_session = session.clone();
+    filtered_session.data_sources = unified_data_sources;
+
     // 1. Remap primary_source_id
     if let Some(ref pri_id) = filtered_session.primary_source_id {
         let canonical_pri = resolve_id(pri_id);
-        if eligible_source_ids.contains(&canonical_pri) {
+        if final_valid_ids.contains(&canonical_pri) {
             filtered_session.primary_source_id = Some(canonical_pri);
         } else if let Some(first_primary) = filtered_session
             .data_sources
@@ -371,8 +499,7 @@ pub fn filter_reconciliation_session_and_records(
         let mut remapped_req: Vec<String> = Vec::new();
         for id in req_ids {
             let canonical_id = resolve_id(id);
-            if eligible_source_ids.contains(&canonical_id) && !remapped_req.contains(&canonical_id)
-            {
+            if final_valid_ids.contains(&canonical_id) && !remapped_req.contains(&canonical_id) {
                 remapped_req.push(canonical_id);
             }
         }
@@ -384,20 +511,12 @@ pub fn filter_reconciliation_session_and_records(
         let mut remapped_opt: Vec<String> = Vec::new();
         for id in opt_ids {
             let canonical_id = resolve_id(id);
-            if eligible_source_ids.contains(&canonical_id) && !remapped_opt.contains(&canonical_id)
-            {
+            if final_valid_ids.contains(&canonical_id) && !remapped_opt.contains(&canonical_id) {
                 remapped_opt.push(canonical_id);
             }
         }
         filtered_session.optional_source_ids = Some(remapped_opt);
     }
 
-    let mut filtered_records_map = HashMap::new();
-    for (src_id, recs) in source_records_map {
-        if eligible_source_ids.contains(src_id) {
-            filtered_records_map.insert(src_id.clone(), recs.clone());
-        }
-    }
-
-    Ok((filtered_session, filtered_records_map, analysis))
+    Ok((filtered_session, unified_records_map, analysis))
 }

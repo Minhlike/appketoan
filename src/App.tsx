@@ -19,7 +19,7 @@ import {
   PRECONFIGURED_SCENARIOS,
   runReconciliation,
 } from "./services/api";
-import { normalizeMoneyInput } from "./utils/money";
+import { parseVietnameseMoneyInput } from "./utils/money";
 
 import { Header } from "./components/Header";
 import { ScenarioSelector } from "./components/ScenarioSelector";
@@ -45,6 +45,8 @@ export function App() {
 
   // Settings
   const [toleranceVnd, setToleranceVnd] = useState<MoneyValue>(selectedScenario.defaultToleranceVnd);
+  const [toleranceInput, setToleranceInput] = useState<string>(selectedScenario.defaultToleranceVnd);
+  const [toleranceError, setToleranceError] = useState<string | null>(null);
   const [dateToleranceDays, setDateToleranceDays] = useState<number>(selectedScenario.defaultDateDays);
   const [enableAggregate, setEnableAggregate] = useState<boolean>(selectedScenario.enableAggregate);
 
@@ -60,6 +62,8 @@ export function App() {
   const handleSelectScenario = (scenario: PreconfiguredScenario) => {
     setSelectedScenario(scenario);
     setToleranceVnd(scenario.defaultToleranceVnd);
+    setToleranceInput(scenario.defaultToleranceVnd);
+    setToleranceError(null);
     setDateToleranceDays(scenario.defaultDateDays);
     setEnableAggregate(scenario.enableAggregate);
     setErrorMessage(null);
@@ -454,17 +458,43 @@ export function App() {
         {/* Options & Action Bar */}
         <section className="action-toolbar-card">
           <div className="toolbar-options">
-            <label className="option-control">
-              <span>Dung sai số tiền:</span>
-              <input
-                type="text"
-                className="input-control input-sm"
-                value={toleranceVnd}
-                onChange={(e) => setToleranceVnd(normalizeMoneyInput(e.target.value))}
-                disabled={isRunning}
-                placeholder="0"
-              />
-              <span className="unit-label">VND</span>
+            <label className="option-control" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span>Dung sai số tiền:</span>
+                <input
+                  type="text"
+                  className={`input-control input-sm ${toleranceError ? "input-error" : ""}`}
+                  value={toleranceInput}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setToleranceInput(raw);
+                    const parsed = parseVietnameseMoneyInput(raw);
+                    if (parsed.success) {
+                      setToleranceVnd(parsed.value);
+                      setToleranceError(null);
+                    } else {
+                      setToleranceError(parsed.error);
+                    }
+                  }}
+                  disabled={isRunning}
+                  placeholder="0"
+                  style={{
+                    borderColor: toleranceError ? "#ef4444" : undefined,
+                  }}
+                />
+                <span className="unit-label">VND</span>
+              </div>
+              {toleranceError && (
+                <span
+                  style={{
+                    color: "#dc2626",
+                    fontSize: "0.75rem",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  ⚠️ {toleranceError}
+                </span>
+              )}
             </label>
 
             <label className="option-control">
@@ -496,7 +526,7 @@ export function App() {
               type="button"
               className={`btn btn-primary btn-lg ${isRunning ? "btn-loading" : ""}`}
               onClick={() => void handleRunReconciliation()}
-              disabled={isRunning || sources.length < 2}
+              disabled={isRunning || sources.length < 2 || toleranceError !== null}
             >
               {isRunning ? "⏳ Đang đối chiếu..." : "▶ CHẠY ĐỐI CHIẾU"}
             </button>

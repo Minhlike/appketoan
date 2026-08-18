@@ -40,6 +40,17 @@ export function formatDetailReason(group: MatchGroup): string {
 
   // 1. If there are explicit discrepancies
   if (discrepancies.length > 0) {
+    const isMissingInTarget = group.status === "UNMATCHED_MISSING_IN_TARGET" ||
+      discrepancies.some((d) => d.message.includes("không tìm thấy bản ghi"));
+    
+    if (isMissingInTarget) {
+      const missingAmount = group.amountVariance || group.revenueVariance || group.totalSourceAmount;
+      const secName = comparisons.find((c) => c.status === "UNMATCHED_MISSING_IN_TARGET")?.secondarySourceName || "TK511";
+      const targetLabel = secName.includes("511") ? "TK511" : secName;
+      const msg = `Thiếu ${targetLabel}: ${formatVND(missingAmount)}`;
+      return uncheckedSuffix ? `${msg}; ${uncheckedSuffix}.` : `${msg}.`;
+    }
+
     const discMessages = discrepancies.map((d) => d.message).join(" • ");
     if (uncheckedSuffix) {
       return `${discMessages}; ${uncheckedSuffix}.`;
@@ -49,8 +60,10 @@ export function formatDetailReason(group: MatchGroup): string {
 
   // 2. Unmatched Missing in Target
   if (group.status === "UNMATCHED_MISSING_IN_TARGET") {
-    const missingAmount = group.amountVariance || group.totalSourceAmount;
-    const msg = `Thiếu chứng từ trong bên đối chiếu (Lệch: ${formatVND(missingAmount)})`;
+    const missingAmount = group.amountVariance || group.revenueVariance || group.totalSourceAmount;
+    const secName = comparisons.find((c) => c.status === "UNMATCHED_MISSING_IN_TARGET")?.secondarySourceName || "TK511";
+    const targetLabel = secName.includes("511") ? "TK511" : secName;
+    const msg = `Thiếu ${targetLabel}: ${formatVND(missingAmount)}`;
     return uncheckedSuffix ? `${msg}; ${uncheckedSuffix}.` : `${msg}.`;
   }
 
@@ -103,7 +116,7 @@ export function formatDetailReason(group: MatchGroup): string {
       }
     });
 
-    const prefix = checkedSummary.length > 0 ? `✓ ${checkedSummary.join(", ")}` : "✓ Khớp";
+    const prefix = checkedSummary.length > 0 ? checkedSummary.join(", ") : "Khớp";
     if (uncheckedSuffix) {
       return `${prefix}; ${uncheckedSuffix}.`;
     }

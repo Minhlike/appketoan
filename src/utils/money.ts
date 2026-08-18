@@ -167,7 +167,13 @@ export function parseVietnameseMoneyInput(val: string | number | undefined | nul
     if (!/^[0-9]+$/.test(rawInt) || (fracPart !== undefined && fracPart !== "" && !/^[0-9]+$/.test(fracPart))) {
       return { success: false, error: "Phần nguyên hoặc phần thập phân chứa ký tự không hợp lệ" };
     }
-    const cleanFrac = fracPart ? fracPart.slice(0, 4) : "";
+    if (fracPart && fracPart.length > 4) {
+      return {
+        success: false,
+        error: "Độ chính xác thập phân vượt quá giới hạn cho phép (tối đa 4 chữ số thập phân)",
+      };
+    }
+    const cleanFrac = fracPart || "";
     const res = cleanFrac === "" || /^0+$/.test(cleanFrac)
       ? rawInt
       : `${rawInt}.${cleanFrac}`;

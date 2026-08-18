@@ -5078,3 +5078,608 @@ fn test_42_unsupported_rule_in_residual_sweep() {
         .iter()
         .any(|d| d.message.contains("UNSUPPORTED_RECONCILIATION_RULE")));
 }
+
+// -------------------------------------------------------------------------------------------------
+// 43. SAME WORKBOOK, SAME SHEET DUPLICATE DETECTION
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_43_same_workbook_same_sheet_duplicate() {
+    use reconciliation_core::intake::{analyze_intake_data_sources, DatasetRelation};
+
+    let mut src1 = create_source(
+        "src1",
+        "Sổ cái T7",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    src1.file_path = "D:\\data\\SoKeToan.xlsx".to_string();
+    src1.sheet_name = "TK511_T7".to_string();
+
+    let mut src2 = create_source(
+        "src2",
+        "Sổ cái T7 Bản sao",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    src2.file_path = "D:\\data\\SoKeToan.xlsx".to_string();
+    src2.sheet_name = "TK511_T7".to_string();
+
+    let session = ReconciliationSession {
+        session_id: "sess_same_sheet".to_string(),
+        scenario_name: "Same Sheet Test".to_string(),
+        primary_source_id: None,
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+
+    let recs = vec![CanonicalRecord {
+        id: "r1".to_string(),
+        source_id: "src1".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        credit_amount: Some(dec!(100)),
+        total_amount: dec!(100),
+        ..Default::default()
+    }];
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src1".to_string(), recs.clone());
+    records_map.insert("src2".to_string(), recs);
+
+    let mut raw_hashes = HashMap::new();
+    raw_hashes.insert("src1".to_string(), "hash_same_wb".to_string());
+    raw_hashes.insert("src2".to_string(), "hash_same_wb".to_string());
+
+    let analysis = analyze_intake_data_sources(&session, &records_map, &raw_hashes);
+    assert_eq!(analysis.unique_datasets_count, 1);
+    assert_eq!(analysis.exact_duplicates_count, 1);
+    let diag2 = analysis
+        .source_analyses
+        .iter()
+        .find(|d| d.source_id == "src2")
+        .unwrap();
+    assert!(matches!(
+        diag2.relation,
+        DatasetRelation::ExactDuplicate { .. }
+    ));
+}
+
+// -------------------------------------------------------------------------------------------------
+// 44. SAME WORKBOOK, DIFFERENT SHEETS NO FALSE-DEDUP (FALSE_DEDUP_COUNT = 0)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_44_same_workbook_different_sheets_no_false_dedup() {
+    use reconciliation_core::intake::{analyze_intake_data_sources, DatasetRelation};
+
+    let mut src1 = create_source(
+        "src1",
+        "Sổ cái T7",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    src1.file_path = "D:\\data\\SoKeToan.xlsx".to_string();
+    src1.sheet_name = "TK511_T7".to_string();
+
+    let mut src2 = create_source(
+        "src2",
+        "Sổ cái T8",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    src2.file_path = "D:\\data\\SoKeToan.xlsx".to_string();
+    src2.sheet_name = "TK511_T8".to_string(); // DIFFERENT SHEET
+
+    let session = ReconciliationSession {
+        session_id: "sess_diff_sheet".to_string(),
+        scenario_name: "Diff Sheet Test".to_string(),
+        primary_source_id: None,
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src1, src2],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+
+    let recs1 = vec![CanonicalRecord {
+        id: "r1".to_string(),
+        source_id: "src1".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        credit_amount: Some(dec!(100)),
+        total_amount: dec!(100),
+        ..Default::default()
+    }];
+
+    let recs2 = vec![CanonicalRecord {
+        id: "r2".to_string(),
+        source_id: "src2".to_string(),
+        source_row: 2,
+        doc_no: Some("002".to_string()),
+        credit_amount: Some(dec!(200)),
+        total_amount: dec!(200),
+        ..Default::default()
+    }];
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src1".to_string(), recs1);
+    records_map.insert("src2".to_string(), recs2);
+
+    let mut raw_hashes = HashMap::new();
+    raw_hashes.insert("src1".to_string(), "hash_same_wb".to_string());
+    raw_hashes.insert("src2".to_string(), "hash_same_wb".to_string());
+
+    let analysis = analyze_intake_data_sources(&session, &records_map, &raw_hashes);
+    // MUST NOT be treated as duplicate because sheets are different!
+    assert_eq!(analysis.unique_datasets_count, 2);
+    assert_eq!(analysis.exact_duplicates_count, 0);
+    assert_eq!(analysis.content_duplicates_count, 0);
+    let diag2 = analysis
+        .source_analyses
+        .iter()
+        .find(|d| d.source_id == "src2")
+        .unwrap();
+    assert_eq!(diag2.relation, DatasetRelation::Unique);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 45. DISJOINT MONTHLY PARTITIONS LOGICAL SOURCE MERGE
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_45_disjoint_monthly_partitions_logical_source_merge() {
+    use reconciliation_core::intake::filter_reconciliation_session_and_records;
+
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn cả quý",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let src_tk_jan = create_source(
+        "src_tk_jan",
+        "TK511 Tháng 1",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let src_tk_feb = create_source(
+        "src_tk_feb",
+        "TK511 Tháng 2",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_partitions".to_string(),
+        scenario_name: "Partition Merge Test".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_tk_jan".to_string(), "src_tk_feb".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_tk_jan, src_tk_feb],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_revenue".to_string(),
+            name: "Doanh thu".to_string(),
+            semantic: ComparisonSemantic::Revenue,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "pretaxAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger511,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let inv_recs = vec![
+        CanonicalRecord {
+            id: "inv_1".to_string(),
+            source_id: "src_inv".to_string(),
+            source_row: 2,
+            doc_no: Some("001".to_string()),
+            date: Some("2026-01-10".to_string()),
+            pretax_amount: Some(dec!(10_000_000)),
+            total_amount: dec!(10_000_000),
+            ..Default::default()
+        },
+        CanonicalRecord {
+            id: "inv_2".to_string(),
+            source_id: "src_inv".to_string(),
+            source_row: 3,
+            doc_no: Some("002".to_string()),
+            date: Some("2026-02-15".to_string()),
+            pretax_amount: Some(dec!(20_000_000)),
+            total_amount: dec!(20_000_000),
+            ..Default::default()
+        },
+    ];
+
+    let tk_jan_recs = vec![CanonicalRecord {
+        id: "tk_jan_1".to_string(),
+        source_id: "src_tk_jan".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-01-10".to_string()),
+        credit_amount: Some(dec!(10_000_000)),
+        total_amount: dec!(10_000_000),
+        ..Default::default()
+    }];
+
+    let tk_feb_recs = vec![CanonicalRecord {
+        id: "tk_feb_2".to_string(),
+        source_id: "src_tk_feb".to_string(),
+        source_row: 2,
+        doc_no: Some("002".to_string()),
+        date: Some("2026-02-15".to_string()),
+        credit_amount: Some(dec!(20_000_000)),
+        total_amount: dec!(20_000_000),
+        ..Default::default()
+    }];
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), inv_recs);
+    records_map.insert("src_tk_jan".to_string(), tk_jan_recs);
+    records_map.insert("src_tk_feb".to_string(), tk_feb_recs);
+
+    let (filtered_sess, filtered_recs, analysis) =
+        filter_reconciliation_session_and_records(&session, &records_map, &HashMap::new()).unwrap();
+
+    assert_eq!(analysis.total_physical_sources, 3);
+    assert_eq!(analysis.unique_datasets_count, 3);
+    assert_eq!(analysis.logical_sources_count, 2); // 1 Invoice + 1 Merged Ledger511
+
+    let res = execute_reconciliation(&filtered_sess, &filtered_recs).unwrap();
+    assert_eq!(res.summary.exact_matches_count, 2);
+    assert_eq!(res.summary.mismatches_count, 0);
+    assert_eq!(res.summary.missing_in_target_count, 0);
+    assert_eq!(res.summary.revenue_variance, Decimal::ZERO);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 46. SYMMETRIC SUBSET FAIL-CLOSED BOTH ORDERS
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_46_symmetric_subset_fail_closed_both_orders() {
+    use reconciliation_core::intake::analyze_intake_data_sources;
+
+    let src_big = create_source(
+        "src_big",
+        "Sổ cái đầy đủ",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let src_small = create_source(
+        "src_small",
+        "Sổ cái tập con",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+
+    let rec_1 = CanonicalRecord {
+        id: "r1".to_string(),
+        source_id: "s".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        credit_amount: Some(dec!(100)),
+        total_amount: dec!(100),
+        ..Default::default()
+    };
+    let rec_2 = CanonicalRecord {
+        id: "r2".to_string(),
+        source_id: "s".to_string(),
+        source_row: 3,
+        doc_no: Some("002".to_string()),
+        credit_amount: Some(dec!(200)),
+        total_amount: dec!(200),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_big".to_string(), vec![rec_1.clone(), rec_2]);
+    records_map.insert("src_small".to_string(), vec![rec_1]);
+
+    // Order 1: Big first, Small second
+    let session1 = ReconciliationSession {
+        session_id: "s1".to_string(),
+        scenario_name: "Order 1".to_string(),
+        primary_source_id: None,
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src_big.clone(), src_small.clone()],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+    let analysis1 = analyze_intake_data_sources(&session1, &records_map, &HashMap::new());
+    assert!(
+        analysis1.requires_user_confirmation,
+        "Subset order 1 must be fail-closed"
+    );
+    assert_eq!(analysis1.subset_duplicates_count, 1);
+
+    // Order 2: Small first, Big second
+    let session2 = ReconciliationSession {
+        session_id: "s2".to_string(),
+        scenario_name: "Order 2".to_string(),
+        primary_source_id: None,
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src_small, src_big],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+    let analysis2 = analyze_intake_data_sources(&session2, &records_map, &HashMap::new());
+    assert!(
+        analysis2.requires_user_confirmation,
+        "Subset order 2 must be fail-closed"
+    );
+    assert_eq!(analysis2.subset_duplicates_count, 1);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 47. SYMMETRIC PARTIAL OVERLAP FAIL-CLOSED BOTH ORDERS
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_47_symmetric_partial_overlap_fail_closed_both_orders() {
+    use reconciliation_core::intake::analyze_intake_data_sources;
+
+    let src_a = create_source(
+        "src_a",
+        "Tập A",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let src_b = create_source(
+        "src_b",
+        "Tập B",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+
+    let rec_1 = CanonicalRecord {
+        id: "r1".into(),
+        source_id: "s".into(),
+        source_row: 2,
+        doc_no: Some("001".into()),
+        credit_amount: Some(dec!(100)),
+        total_amount: dec!(100),
+        ..Default::default()
+    };
+    let rec_2 = CanonicalRecord {
+        id: "r2".into(),
+        source_id: "s".into(),
+        source_row: 3,
+        doc_no: Some("002".into()),
+        credit_amount: Some(dec!(200)),
+        total_amount: dec!(200),
+        ..Default::default()
+    };
+    let rec_3 = CanonicalRecord {
+        id: "r3".into(),
+        source_id: "s".into(),
+        source_row: 4,
+        doc_no: Some("003".into()),
+        credit_amount: Some(dec!(300)),
+        total_amount: dec!(300),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_a".to_string(), vec![rec_1, rec_2.clone()]);
+    records_map.insert("src_b".to_string(), vec![rec_2, rec_3]);
+
+    // Order 1: A then B
+    let session1 = ReconciliationSession {
+        session_id: "s1".to_string(),
+        scenario_name: "A then B".to_string(),
+        primary_source_id: None,
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src_a.clone(), src_b.clone()],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+    let analysis1 = analyze_intake_data_sources(&session1, &records_map, &HashMap::new());
+    assert!(analysis1.requires_user_confirmation);
+    assert_eq!(analysis1.partial_overlaps_count, 1);
+
+    // Order 2: B then A
+    let session2 = ReconciliationSession {
+        session_id: "s2".to_string(),
+        scenario_name: "B then A".to_string(),
+        primary_source_id: None,
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src_b, src_a],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+    let analysis2 = analyze_intake_data_sources(&session2, &records_map, &HashMap::new());
+    assert!(analysis2.requires_user_confirmation);
+    assert_eq!(analysis2.partial_overlaps_count, 1);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 48. MULTI-PART UPLOAD ORDER INVARIANCE (PERMUTATIONS)
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_48_multi_part_upload_order_invariance_permutations() {
+    use reconciliation_core::intake::filter_reconciliation_session_and_records;
+
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let mut src_inv_copy = src_inv.clone();
+    src_inv_copy.id = "src_inv_copy".to_string();
+
+    let src_tk_p1 = create_source(
+        "src_tk_p1",
+        "TK511 Phần 1",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let src_tk_p2 = create_source(
+        "src_tk_p2",
+        "TK511 Phần 2",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let mut src_tk_p1_copy = src_tk_p1.clone();
+    src_tk_p1_copy.id = "src_tk_p1_copy".to_string();
+
+    let inv_recs = vec![
+        CanonicalRecord {
+            id: "inv_1".into(),
+            source_id: "src_inv".into(),
+            source_row: 2,
+            doc_no: Some("001".into()),
+            pretax_amount: Some(dec!(100)),
+            total_amount: dec!(100),
+            ..Default::default()
+        },
+        CanonicalRecord {
+            id: "inv_2".into(),
+            source_id: "src_inv".into(),
+            source_row: 3,
+            doc_no: Some("002".into()),
+            pretax_amount: Some(dec!(200)),
+            total_amount: dec!(200),
+            ..Default::default()
+        },
+    ];
+    let tk_p1_recs = vec![CanonicalRecord {
+        id: "tk1".into(),
+        source_id: "src_tk_p1".into(),
+        source_row: 2,
+        doc_no: Some("001".into()),
+        credit_amount: Some(dec!(100)),
+        total_amount: dec!(100),
+        ..Default::default()
+    }];
+    let tk_p2_recs = vec![CanonicalRecord {
+        id: "tk2".into(),
+        source_id: "src_tk_p2".into(),
+        source_row: 2,
+        doc_no: Some("002".into()),
+        credit_amount: Some(dec!(200)),
+        total_amount: dec!(200),
+        ..Default::default()
+    }];
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), inv_recs.clone());
+    records_map.insert("src_inv_copy".to_string(), inv_recs);
+    records_map.insert("src_tk_p1".to_string(), tk_p1_recs.clone());
+    records_map.insert("src_tk_p1_copy".to_string(), tk_p1_recs);
+    records_map.insert("src_tk_p2".to_string(), tk_p2_recs);
+
+    let all_sources = [src_inv, src_tk_p1, src_tk_p2, src_inv_copy, src_tk_p1_copy];
+
+    let base_rules = vec![ComparisonRule {
+        id: "rule_revenue".to_string(),
+        name: "Doanh thu".to_string(),
+        semantic: ComparisonSemantic::Revenue,
+        primary_source_kind: DataSourceKind::EInvoice,
+        primary_field: "pretaxAmount".to_string(),
+        secondary_source_kind: DataSourceKind::Ledger511,
+        secondary_field: "creditAmount".to_string(),
+        is_required: true,
+        tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+    }];
+
+    // Test multiple distinct permutations
+    let permutations = [
+        vec![0, 1, 2, 3, 4],
+        vec![4, 3, 2, 1, 0],
+        vec![1, 0, 4, 2, 3],
+        vec![2, 4, 0, 3, 1],
+        vec![3, 2, 1, 0, 4],
+    ];
+
+    for (perm_idx, p) in permutations.iter().enumerate() {
+        let perm_sources: Vec<DataSource> = p.iter().map(|&idx| all_sources[idx].clone()).collect();
+        let session = ReconciliationSession {
+            session_id: format!("sess_perm_{}", perm_idx),
+            scenario_name: format!("Permutation {}", perm_idx),
+            primary_source_id: Some(if perm_idx % 2 == 0 {
+                "src_inv".to_string()
+            } else {
+                "src_inv_copy".to_string()
+            }),
+            expected_primary_kind: None,
+            required_source_ids: None,
+            optional_source_ids: None,
+            data_sources: perm_sources,
+            comparison_rules: base_rules.clone(),
+            matching_tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+            enable_aggregate_match: false,
+        };
+
+        let (filtered_sess, filtered_recs, analysis) =
+            filter_reconciliation_session_and_records(&session, &records_map, &HashMap::new())
+                .unwrap();
+
+        assert_eq!(analysis.unique_datasets_count, 3);
+        assert_eq!(analysis.logical_sources_count, 2);
+
+        let res = execute_reconciliation(&filtered_sess, &filtered_recs).unwrap();
+        assert_eq!(res.summary.exact_matches_count, 2);
+        assert_eq!(res.summary.mismatches_count, 0);
+        assert_eq!(res.summary.missing_in_target_count, 0);
+        assert_eq!(res.summary.revenue_variance, Decimal::ZERO);
+    }
+}

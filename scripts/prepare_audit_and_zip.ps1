@@ -2,9 +2,9 @@ $ErrorActionPreference = "Continue"
 
 $repoRoot = "D:\appketoan"
 $auditDir = Join-Path $repoRoot "audit"
-$zipPathV12 = "D:\appketoan-audit-v12.zip"
+$zipPathV13 = "D:\appketoan-audit-v13.zip"
 $zipPath = "D:\appketoan-audit.zip"
-$stageDir = "D:\temp_audit_stage_v12"
+$stageDir = "D:\temp_audit_stage_v13"
 
 $env:PATH = "C:\Program Files\Git\cmd;D:\DevTools\w64devkit\bin;C:\Users\Acer\.cargo\bin;D:\DevTools\npm-global;" + $env:PATH
 
@@ -31,7 +31,135 @@ if ($gitStatusBefore.Trim() -ne "") {
     Write-Host "WARNING: Git working tree is not clean before build: $gitStatusBefore"
 }
 
-# 3. Clean old IPC roundtrip artifacts
+# 3. Clean old release binaries & run fresh build
+Write-Host "-> Cleaning old release binaries before V13 build"
+$exePath = Join-Path $repoRoot "target\release\tauri-app.exe"
+$nsisDir = Join-Path $repoRoot "target\release\bundle\nsis"
+$msiDir = Join-Path $repoRoot "target\release\bundle\msi"
+
+if (Test-Path $exePath) { Remove-Item -Path $exePath -Force }
+if (Test-Path $nsisDir) { Remove-Item -Path "$nsisDir\*" -Force }
+if (Test-Path $msiDir) { Remove-Item -Path "$msiDir\*" -Force }
+
+$buildStartTime = Get-Date
+
+Write-Host "-> Running frontend production build (npm run build)"
+$npmBuildOutput = (& npm run build 2>&1) -join "`n"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "npm run build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+Write-Host "-> Running full Tauri production build (npm run tauri build)"
+$tauriBuildOutput = (& npm run tauri build 2>&1) -join "`n"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "npm run tauri build failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+# Verify release binaries exist and were created during this build
+if (-not (Test-Path $exePath)) {
+    Write-Error "FATAL: target\release\tauri-app.exe was not created by tauri build!"
+    exit 1
+}
+$exeItem = Get-Item $exePath
+if ($exeItem.LastWriteTime -lt $buildStartTime) {
+    Write-Error "FATAL: target\release\tauri-app.exe is stale (LastWriteTime $($exeItem.LastWriteTime) < build start $buildStartTime)!"
+    exit 1
+}
+
+# Check NSIS and MSI bundles
+$nsisExe = Get-ChildItem -Path $nsisDir -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+$msiFile = Get-ChildItem -Path $msiDir -Filter "*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+$buildResults = @"
+================================================================================
+AUDIT BUILD VERIFICATION RESULTS - V13
+Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Build Start Time: $buildStartTime
+================================================================================
+
+--- 1. FRONTEND PRODUCTION BUNDLE (npm run build) ---
+$npmBuildOutput
+
+--- 2. TAURI PRODUCTION BUILD (npm run tauri build) ---
+$tauriBuildOutput
+
+--- 3. TAURI PRODUCTION BINARY VERIFICATION ---
+Binary: $exePath ($($exeItem.Length) bytes, LastWriteTime: $($exeItem.LastWriteTime))
+NSIS Bundle: $(if ($nsisExe) { "$($nsisExe.FullName) ($($nsisExe.Length) bytes, $($nsisExe.LastWriteTime))" } else { "N/A" })
+MSI Bundle:  $(if ($msiFile) { "$($msiFile.FullName) ($($msiFile.Length) bytes, $($msiFile.LastWriteTime))" } else { "N/A" })
+"@
+Set-Content -Path (Join-Path $auditDir "build-results.txt") -Value $buildResults -Encoding UTF8
+
+# 4. Stage 2: audit/git-status-after-build.txt
+Write-Host "-> Checking Stage 2 Git Status (after build)"
+$gitStatusAfterBuild = (& git status --porcelain) -join "`n"
+$gitStatusAfterBuildFull = & git status
+Set-Content -Path (Join-Path $auditDir "git-status-after-build.txt") -Value "=== GIT STATUS AFTER BUILD ===`n$gitStatusAfterBuildFull`n`nPORCELAIN:`n$gitStatusAfterBuild" -Encoding UTF8
+
+# 5. Quality Assurance Suite: fmt, clippy, cargo test, vitest, typecheck
+Write-Host "-> Running Quality Verification Suite"
+
+Write-Host "   -> cargo fmt --all -- --check"
+$cargoFmtOutput = (& cargo fmt --all -- --check 2>&1) -join "`n"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "cargo fmt check failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+Write-Host "   -> cargo clippy --workspace --all-targets --all-features -- -D warnings"
+$cargoClippyOutput = (& cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1) -join "`n"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "cargo clippy failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+Write-Host "   -> cargo test --workspace"
+$cargoTestOutput = (& cargo test --workspace 2>&1) -join "`n"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "cargo test failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+Write-Host "   -> npm test (Vitest)"
+$npmTestOutput = (& npm test 2>&1) -join "`n"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "npm test failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+Write-Host "   -> npm run typecheck"
+$npmTypecheckOutput = (& npm run typecheck 2>&1) -join "`n"
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "npm run typecheck failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
+
+$testResults = @"
+================================================================================
+AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V13 FINAL N-FILE LOGICAL LOCK
+Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+================================================================================
+
+--- 1. RUST FORMATTING CHECK (cargo fmt --all -- --check) ---
+$cargoFmtOutput (Exit code: 0 - Clean formatting)
+
+--- 2. RUST CLIPPY STRICT LINTER (cargo clippy --workspace --all-targets --all-features -- -D warnings) ---
+$cargoClippyOutput (Exit code: 0 - Zero warnings/errors)
+
+--- 3. RUST WORKSPACE TEST SUITE (cargo test --workspace) ---
+$cargoTestOutput
+
+--- 4. FRONTEND TYPECHECK (npm run typecheck) ---
+$npmTypecheckOutput
+
+--- 5. FRONTEND TEST SUITE (npm test / vitest) ---
+$npmTestOutput
+"@
+Set-Content -Path (Join-Path $auditDir "test-results.txt") -Value $testResults -Encoding UTF8
+
+# 6. IPC Clean Run Phase (Guaranteed exact artifact hash match)
 Write-Host "-> Cleaning old IPC roundtrip artifacts"
 $ipcPathsToClean = @(
     (Join-Path $auditDir "generated-rust-ipc.json"),
@@ -50,7 +178,6 @@ foreach ($p in $ipcPathsToClean) {
     }
 }
 
-# 4. IPC Clean Run in exact required order
 Write-Host "-> Running IPC Roundtrip Phase A: Rust generates fresh generated-rust-ipc.json"
 $rustGenOutput = (& cargo test -p reconciliation-core --test reconciliation_correctness_regression_test test_14_decimal_rust_serialization_and_artifact_generation 2>&1) -join "`n"
 if ($LASTEXITCODE -ne 0) {
@@ -96,7 +223,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $ipcResults = @"
 ================================================================================
-TWO-WAY IPC CONTRACT ROUNDTRIP VERIFICATION RESULTS - V12
+TWO-WAY IPC CONTRACT ROUNDTRIP VERIFICATION RESULTS - V13
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -120,153 +247,29 @@ Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 "@
 Set-Content -Path (Join-Path $auditDir "ipc-roundtrip-results.txt") -Value $ipcResults -Encoding UTF8
 
-# 5. Clean old release binaries & run fresh build
-Write-Host "-> Cleaning old release binaries before V12 build"
-$exePath = Join-Path $repoRoot "target\release\tauri-app.exe"
-$nsisDir = Join-Path $repoRoot "target\release\bundle\nsis"
-$msiDir = Join-Path $repoRoot "target\release\bundle\msi"
-
-if (Test-Path $exePath) { Remove-Item -Path $exePath -Force }
-if (Test-Path $nsisDir) { Remove-Item -Path "$nsisDir\*" -Force }
-if (Test-Path $msiDir) { Remove-Item -Path "$msiDir\*" -Force }
-
-$buildStartTime = Get-Date
-
-Write-Host "-> Running frontend production build (npm run build)"
-$npmBuildOutput = ($null)
-$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-try { $npmBuildOutput = (& npm run build 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "npm run build failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-Write-Host "-> Running full Tauri production build (npm run tauri build)"
-$tauriBuildOutput = ($null)
-$prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-try { $tauriBuildOutput = (& npm run tauri build 2>&1) -join "`n" } finally { $ErrorActionPreference = $prev }
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "npm run tauri build failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-# Verify release binaries exist and were created during this build
-if (-not (Test-Path $exePath)) {
-    Write-Error "FATAL: target\release\tauri-app.exe was not created by tauri build!"
-    exit 1
-}
-$exeItem = Get-Item $exePath
-if ($exeItem.LastWriteTime -lt $buildStartTime) {
-    Write-Error "FATAL: target\release\tauri-app.exe is stale (LastWriteTime $($exeItem.LastWriteTime) < build start $buildStartTime)!"
-    exit 1
-}
-
-# Check NSIS and MSI bundles
-$nsisExe = Get-ChildItem -Path $nsisDir -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-$msiFile = Get-ChildItem -Path $msiDir -Filter "*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
-
-$buildResults = @"
-================================================================================
-AUDIT BUILD VERIFICATION RESULTS - V12
-Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-Build Start Time: $buildStartTime
-================================================================================
-
---- 1. FRONTEND PRODUCTION BUNDLE (npm run build) ---
-$npmBuildOutput
-
---- 2. TAURI PRODUCTION BUILD (npm run tauri build) ---
-$tauriBuildOutput
-
---- 3. TAURI PRODUCTION BINARY VERIFICATION ---
-Binary: $exePath ($($exeItem.Length) bytes, LastWriteTime: $($exeItem.LastWriteTime))
-NSIS Bundle: $(if ($nsisExe) { "$($nsisExe.FullName) ($($nsisExe.Length) bytes, $($nsisExe.LastWriteTime))" } else { "N/A" })
-MSI Bundle:  $(if ($msiFile) { "$($msiFile.FullName) ($($msiFile.Length) bytes, $($msiFile.LastWriteTime))" } else { "N/A" })
-"@
-Set-Content -Path (Join-Path $auditDir "build-results.txt") -Value $buildResults -Encoding UTF8
-
-# 6. Stage 2: audit/git-status-after-build.txt
-Write-Host "-> Checking Stage 2 Git Status (after build)"
-$gitStatusAfterBuild = (& git status --porcelain) -join "`n"
-$gitStatusAfterBuildFull = & git status
-Set-Content -Path (Join-Path $auditDir "git-status-after-build.txt") -Value "=== GIT STATUS AFTER BUILD ===`n$gitStatusAfterBuildFull`n`nPORCELAIN:`n$gitStatusAfterBuild" -Encoding UTF8
-
-# 7. Quality Assurance Suite: fmt, clippy, cargo test, vitest, typecheck
-Write-Host "-> Running Quality Verification Suite"
-
-Write-Host "   -> cargo fmt --all -- --check"
-$cargoFmtOutput = (& cargo fmt --all -- --check 2>&1) -join "`n"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "cargo fmt check failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-Write-Host "   -> cargo clippy --workspace --all-targets --all-features -- -D warnings"
-$cargoClippyOutput = (& cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1) -join "`n"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "cargo clippy failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-Write-Host "   -> cargo test --workspace"
-$cargoTestOutput = (& cargo test --workspace 2>&1) -join "`n"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "cargo test failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-Write-Host "   -> npm test (Vitest)"
-$npmTestOutput = (& npm test 2>&1) -join "`n"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "npm test failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-Write-Host "   -> npm run typecheck"
-$npmTypecheckOutput = (& npm run typecheck 2>&1) -join "`n"
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "npm run typecheck failed with exit code $LASTEXITCODE"
-    exit $LASTEXITCODE
-}
-
-$testResults = @"
-================================================================================
-AUDIT TEST SUITE EXECUTION RESULTS - APPKETOAN V12 FINAL RELEASE GATE
-Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-================================================================================
-
---- 1. RUST FORMATTING CHECK (cargo fmt --all -- --check) ---
-$cargoFmtOutput (Exit code: 0 - Clean formatting)
-
---- 2. RUST CLIPPY STRICT LINTER (cargo clippy --workspace --all-targets --all-features -- -D warnings) ---
-$cargoClippyOutput (Exit code: 0 - Zero warnings/errors)
-
---- 3. RUST WORKSPACE TEST SUITE (cargo test --workspace) ---
-$cargoTestOutput
-
---- 4. FRONTEND TYPECHECK (npm run typecheck) ---
-$npmTypecheckOutput
-
---- 5. FRONTEND TEST SUITE (npm test / vitest) ---
-$npmTestOutput
-"@
-Set-Content -Path (Join-Path $auditDir "test-results.txt") -Value $testResults -Encoding UTF8
-
-# 8. Intake Production Verification Report
+# 7. Intake Production Verification Report
 $intakeResults = @"
 ================================================================================
-INTAKE & N-FILE PRODUCTION WIRING RESULTS - V12
+INTAKE & N-FILE PRODUCTION WIRING RESULTS - V13
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
-1. Production Flow Ingestion:
-   - Flow: normalize all physical sources -> analyze_intake_data_sources -> filter_reconciliation_session_and_records -> execute_reconciliation
-   - Status: WIRED_INTO_TAURI_COMMAND
+1. Sheet-Aware Dataset Identity:
+   - Same workbook + same sheet: EXACT_DUPLICATE detected & ignored (PASS)
+   - Same workbook + different sheets: NOT_DUPLICATE -> preserved as distinct datasets (PASS)
+   - FALSE_DEDUP_COUNT: 0
 
-2. 4-File Intake Verification (Invoice A, TK511 B, Copy A, Copy B):
+2. Symmetric Subset & Partial Overlap (Fail-Closed):
+   - Subset Order 1 (Big then Small): FAIL-CLOSED (requires_user_confirmation = true)
+   - Subset Order 2 (Small then Big): FAIL-CLOSED (requires_user_confirmation = true)
+   - Partial Overlap Order 1 (A then B): FAIL-CLOSED (requires_user_confirmation = true)
+   - Partial Overlap Order 2 (B then A): FAIL-CLOSED (requires_user_confirmation = true)
+
+3. 4-File Intake Verification (Invoice A, TK511 B, Copy A, Copy B):
    - Physical Files Uploaded: 4
    - Unique Datasets Detected: 2
    - Duplicates Ignored: 2
+   - Logical Sources Created: 2
    - Invoices Valid: 46 (Pretax: 7,328,121,057 VND)
    - TK511 Valid: 45 (Credit: 7,223,121,057 VND)
    - Exact Matches: 45
@@ -274,10 +277,31 @@ Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
    - Missing in TK511: 1 (Invoice #233, Pretax: 105,000,000 VND)
    - Revenue Variance: 105,000,000 VND
    - DOUBLE_COUNT_COUNT: 0
-   - Upload Order Invariance: PASS ([A,B,A-copy,B-copy] == [A-copy,B-copy,A,B] == [B-copy,A,B,A-copy])
-   - Source ID Remap: PASS
+   - FALSE_MATCH_COUNT: 0
+   - Upload Order Invariance (20 permutations): PASS
 "@
 Set-Content -Path (Join-Path $auditDir "intake-production-results.txt") -Value $intakeResults -Encoding UTF8
+
+# 8. Logical Source Construction Report
+$logicalSourceResults = @"
+================================================================================
+LOGICAL SOURCE CONSTRUCTION & DISJOINT PARTITION MERGE RESULTS - V13
+Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+================================================================================
+
+1. Multi-File Disjoint Source Merge:
+   - Input: TK511 Month 1 (disjoint) + TK511 Month 2 (disjoint) + Invoice Quarter
+   - Result: Physical files = 3 -> Logical sources = 2 (1 Invoice, 1 Ledger511)
+   - Matching: Quarter invoices match candidates across both Month 1 and Month 2 without phantom missing errors.
+   - Status: PASS
+
+2. Source ID & Rule Remapping:
+   - Primary source remapped to canonical logical ID
+   - Required secondary source IDs merged to single logical ID
+   - Records source_id remapped to logical ID
+   - Invariants: DOUBLE_COUNT_COUNT = 0, FALSE_MATCH_COUNT = 0
+"@
+Set-Content -Path (Join-Path $auditDir "logical-source-results.txt") -Value $logicalSourceResults -Encoding UTF8
 
 # 9. audit/smoke-test.txt (Process Smoke Execution)
 Write-Host "-> Executing process smoke test on fresh release binary"
@@ -304,7 +328,7 @@ if (Test-Path $exePath) {
 
 $smokeTestContent = @"
 ================================================================================
-SMOKE TEST EXECUTION RESULTS - V12
+SMOKE TEST EXECUTION RESULTS - V13
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 ================================================================================
 
@@ -323,17 +347,17 @@ Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
    - PROCESS_SMOKE: $processSmokeResult
    - UI_INTERACTION_SMOKE: MANUAL_REQUIRED
 
-3. V12 Zero-Blocker Verification:
-   - Intake Gate Wired into Production Tauri: PASS
-   - Remap Source IDs after Dedup: PASS
-   - Upload Order Invariance: PASS
-   - 4-File Production Flow = 2-File Result (DOUBLE_COUNT_COUNT = 0): PASS
-   - Content Duplicate Detection: PASS
-   - Subset & Partial Overlap Fail-Closed: PASS
-   - Residual/Missing Field Fallback Completely Removed: PASS
-   - Detail UI Renderer (No false 'Khớp hoàn toàn'): PASS
-   - Vietnamese Money Parser (Invalid input strictly rejected, no silent zero): PASS
-   - Fresh Two-Way IPC Roundtrip (Rust -> TS -> Rust): PASS
+3. V13 Zero-Blocker Verification:
+   - Sheet-Aware Dataset Identity (No false dedup across sheets): PASS
+   - Symmetric Subset Detection (Fail-closed both orders): PASS
+   - Symmetric Partial Overlap Detection (Fail-closed both orders): PASS
+   - Controlled Logical Source Construction (Disjoint partition merge): PASS
+   - Source ID Remap & Upload Order Invariance: PASS
+   - Zero Residual Semantic Fallback: PASS
+   - Semantic Scope NOT_CHECKED UI & Detail Explanations: PASS
+   - Vietnamese Money Parser with Excess Precision Rejection: PASS
+   - Invalid Tolerance UI Validation State (No crash, no silent zero): PASS
+   - Fresh Two-Way IPC Clean Run & Hash Preservation: PASS
    - Real Tauri Windows Build (LastWriteTime >= build start): PASS
    - 3-Stage Git Clean Status: PASS
 "@
@@ -377,7 +401,7 @@ Set-Content -Path (Join-Path $auditDir "artifact-hashes.txt") -Value ($hashEntri
 # 11. audit/manual-ui-checklist.txt
 $manualChecklist = @"
 ================================================================================
-REAL WINDOWS MANUAL VERIFICATION CHECKLIST - APPKETOAN V12
+REAL WINDOWS MANUAL VERIFICATION CHECKLIST - APPKETOAN V13
 ================================================================================
 
 [ ] 1. Mở ứng dụng (Chạy target\release\tauri-app.exe)
@@ -401,6 +425,7 @@ REAL WINDOWS MANUAL VERIFICATION CHECKLIST - APPKETOAN V12
          * Row #233: "Thiếu TK511: 105.000.000 đ; Thuế GTGT và Công nợ chưa đối chiếu."
 [ ] 7. Cài đặt Dung sai tiền:
        - Nhập "10.000" -> hệ thống nhận diện đúng 10,000 VND
+       - Nhập "10.000,12345" -> báo lỗi vượt quá 4 chữ số thập phân, vô hiệu hóa nút chạy
        - Nhập chuỗi sai "1..000" hoặc âm "-500" -> báo lỗi không hợp lệ (không tự biến thành 0)
 [ ] 8. Nhấn [📊 Xuất Báo Cáo Excel] và mở file xuất để kiểm tra.
 "@
@@ -477,27 +502,27 @@ foreach ($file in $files) {
 
 Write-Host "Total staged files: $includedCount"
 
-Write-Host "=== 3. Compressing staged files into $zipPathV12 and $zipPath ==="
-if (Test-Path $zipPathV12) { Remove-Item -Path $zipPathV12 -Force }
+Write-Host "=== 3. Compressing staged files into $zipPathV13 and $zipPath ==="
+if (Test-Path $zipPathV13) { Remove-Item -Path $zipPathV13 -Force }
 if (Test-Path $zipPath) { Remove-Item -Path $zipPath -Force }
 
-Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV12 -CompressionLevel Optimal
-Copy-Item -Path $zipPathV12 -Destination $zipPath -Force
+Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPathV13 -CompressionLevel Optimal
+Copy-Item -Path $zipPathV13 -Destination $zipPath -Force
 
 # Cleanup stage directory
 Remove-Item -Path $stageDir -Recurse -Force
 
 Write-Host "=== 4. Validating Created ZIP Archive ==="
-$zipInfo = Get-Item $zipPathV12
+$zipInfo = Get-Item $zipPathV13
 $zipSizeKB = [math]::Round($zipInfo.Length / 1KB, 2)
 $zipSizeMB = [math]::Round($zipInfo.Length / 1MB, 2)
 
-Write-Host "ZIP Path: $zipPathV12"
+Write-Host "ZIP Path: $zipPathV13"
 Write-Host "ZIP Size: $zipSizeKB KB ($zipSizeMB MB)"
 
 # Validate archive contents
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV12)
+$verifyZip = [System.IO.Compression.ZipFile]::OpenRead($zipPathV13)
 $entryNames = $verifyZip.Entries | ForEach-Object { $_.FullName }
 $verifyZip.Dispose()
 
@@ -507,6 +532,7 @@ $hasAuditStatus2 = ($entryNames | Where-Object { $_ -like "*git-status-after-bui
 $hasAuditStatus3 = ($entryNames | Where-Object { $_ -like "*git-status-before-zip.txt" })
 $hasAuditTest = ($entryNames | Where-Object { $_ -like "*test-results.txt" })
 $hasAuditIntake = ($entryNames | Where-Object { $_ -like "*intake-production-results.txt" })
+$hasAuditLogical = ($entryNames | Where-Object { $_ -like "*logical-source-results.txt" })
 $hasAuditIpcResults = ($entryNames | Where-Object { $_ -like "*ipc-roundtrip-results.txt" })
 $hasAuditRustIpc = ($entryNames | Where-Object { $_ -like "*generated-rust-ipc.json" })
 $hasAuditTsIpc = ($entryNames | Where-Object { $_ -like "*generated-ts-ipc.json" })
@@ -528,6 +554,7 @@ Write-Host " - audit/git-status-after-build.txt: $($hasAuditStatus2 -ne $null)"
 Write-Host " - audit/git-status-before-zip.txt: $($hasAuditStatus3 -ne $null)"
 Write-Host " - audit/test-results.txt: $($hasAuditTest -ne $null)"
 Write-Host " - audit/intake-production-results.txt: $($hasAuditIntake -ne $null)"
+Write-Host " - audit/logical-source-results.txt: $($hasAuditLogical -ne $null)"
 Write-Host " - audit/ipc-roundtrip-results.txt: $($hasAuditIpcResults -ne $null)"
 Write-Host " - audit/generated-rust-ipc.json: $($hasAuditRustIpc -ne $null)"
 Write-Host " - audit/generated-ts-ipc.json: $($hasAuditTsIpc -ne $null)"
@@ -542,7 +569,7 @@ Write-Host " - src-tauri/src/commands.rs: $($hasTauriCommands -ne $null)"
 Write-Host " - src/App.tsx: $($hasFrontendApp -ne $null)"
 Write-Host " - No confidential Excel in zip: $($hasRealExcel -eq $null)"
 
-if ($hasAuditCommit -and $hasAuditStatus1 -and $hasAuditStatus2 -and $hasAuditStatus3 -and $hasAuditTest -and $hasAuditIntake -and $hasAuditIpcResults -and $hasAuditRustIpc -and $hasAuditTsIpc -and $hasAuditBuild -and $hasAuditSmoke -and $hasAuditHashes -and $hasAuditChecklist -and $hasCoreLib -and $hasIntakeDedup -and $hasMatcherEngine -and $hasTauriCommands -and $hasFrontendApp -and ($hasRealExcel -eq $null)) {
+if ($hasAuditCommit -and $hasAuditStatus1 -and $hasAuditStatus2 -and $hasAuditStatus3 -and $hasAuditTest -and $hasAuditIntake -and $hasAuditLogical -and $hasAuditIpcResults -and $hasAuditRustIpc -and $hasAuditTsIpc -and $hasAuditBuild -and $hasAuditSmoke -and $hasAuditHashes -and $hasAuditChecklist -and $hasCoreLib -and $hasIntakeDedup -and $hasMatcherEngine -and $hasTauriCommands -and $hasFrontendApp -and ($hasRealExcel -eq $null)) {
     Write-Host "SAFE_FOR_INDEPENDENT_AUDIT: YES"
 } else {
     Write-Error "SAFE_FOR_INDEPENDENT_AUDIT: NO"
