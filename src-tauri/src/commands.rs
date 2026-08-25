@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use reconciliation_core::{
@@ -10,6 +11,23 @@ use reconciliation_core::{
     ExcelFileMetadata, ExportSummary, ReconciliationResult, ReconciliationSession,
 };
 use sha2::{Digest, Sha256};
+
+fn sha256_file_streaming(path: &Path) -> Result<String, String> {
+    let mut file =
+        std::fs::File::open(path).map_err(|e| format!("Không thể mở file để băm: {}", e))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|e| format!("Không thể đọc file để băm: {}", e))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
 
 #[tauri::command]
 pub fn cmd_inspect_excel_file(file_path: String) -> Result<ExcelFileMetadata, String> {
@@ -71,9 +89,7 @@ pub fn cmd_run_reconciliation(
 
             (rows, sheet_meta.columns.clone(), Some(hash))
         } else if Path::new(&source.file_path).exists() {
-            let file_bytes = std::fs::read(&source.file_path)
-                .map_err(|e| format!("Lỗi đọc file {}: {}", source.file_path, e))?;
-            let hash = format!("{:x}", Sha256::digest(&file_bytes));
+            let hash = sha256_file_streaming(Path::new(&source.file_path))?;
             let meta = inspect_excel_file(&source.file_path)
                 .map_err(|e| format!("Lỗi kiểm tra file {}: {}", source.name, e))?;
             let sheet_meta = if source.sheet_name.trim().is_empty() {
@@ -132,20 +148,44 @@ pub fn cmd_run_reconciliation(
         }
     }
 
-    if !reference_controls.is_empty() {
-        if reference_controls.len() != session.data_sources.len() {
-            return Err("Không trộn nguồn danh mục/báo cáo với đối chiếu giao dịch trong cùng một lần chạy.".to_string());
-        }
+    if source_records_map.is_empty() {
         return execute_reference_controls(&session, reference_controls);
     }
 
+    // Reference sources remain typed controls, but are allowed to coexist with
+    // transactional sources in one audit session. They are deliberately not
+    // injected into the transaction matcher as empty pseudo-datasets.
+    let transactional_source_ids: std::collections::HashSet<&str> =
+        source_records_map.keys().map(String::as_str).collect();
+    let mut transactional_session = session.clone();
+    transactional_session
+        .data_sources
+        .retain(|source| transactional_source_ids.contains(source.id.as_str()));
+    transactional_session.required_source_ids = session.required_source_ids.as_ref().map(|ids| {
+        ids.iter()
+            .filter(|id| transactional_source_ids.contains(id.as_str()))
+            .cloned()
+            .collect()
+    });
+    transactional_session.optional_source_ids = session.optional_source_ids.as_ref().map(|ids| {
+        ids.iter()
+            .filter(|id| transactional_source_ids.contains(id.as_str()))
+            .cloned()
+            .collect()
+    });
+
     // 1. Pass through intake dedup & dataset identity gate
     let (filtered_session, filtered_records_map, intake_analysis) =
-        filter_reconciliation_session_and_records(&session, &source_records_map, &raw_file_hashes)?;
+        filter_reconciliation_session_and_records(
+            &transactional_session,
+            &source_records_map,
+            &raw_file_hashes,
+        )?;
 
     // 2. Execute core reconciliation on clean logical datasets
     let mut result = execute_reconciliation(&filtered_session, &filtered_records_map)?;
     result.intake_analysis = Some(intake_analysis);
+    result.reference_controls = reference_controls;
 
     Ok(result)
 }

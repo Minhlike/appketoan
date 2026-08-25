@@ -31,6 +31,8 @@
 - Added ledger-112/bank monetary direction semantics and matcher compatibility checks.
 - Extended source detection, UI source roles/kinds, mapping editor, and V15 regression coverage.
 - Enforced all-rule evaluation per source pair, typed invoice lifecycle gating, and a typed IPC/UI control path for one-source partner/sales-analysis scenarios.
+- Added a generic `LedgerEntry` compatibility view, one physical index per source with compiled semantic controls, deterministic bank candidate evidence, bounded aggregate search, and gross (non-netted) discrepancy reporting.
+- Partner-master and sales-analysis controls can now accompany transactional sources through IPC; they remain typed controls instead of empty transactional datasets.
 
 ## Tests
 

@@ -1,5 +1,4 @@
 use chrono::{NaiveDate, Utc};
-use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use std::collections::{HashMap, HashSet};
 
@@ -306,14 +305,21 @@ pub fn execute_reconciliation(
         source_kind: DataSourceKind,
         source_role: SourceRole,
         is_required: bool,
-        rule: Option<&'a ComparisonRule>,
         by_series_and_doc: HashMap<(String, String), Vec<&'a CanonicalRecord>>,
         by_doc_no_only: HashMap<String, Vec<&'a CanonicalRecord>>,
-        by_tax_amount: HashMap<(String, i64), Vec<&'a CanonicalRecord>>,
+        by_tax_id: HashMap<String, Vec<&'a CanonicalRecord>>,
         all_records: &'a [CanonicalRecord],
     }
 
+    /// A semantic rule compiled against one physical source index. The index
+    /// and identity maps are built once even when a source has many semantics.
+    struct CompiledControl<'a> {
+        source_index: usize,
+        rule: Option<&'a ComparisonRule>,
+    }
+
     let mut secondary_indexes: Vec<SourceIndex> = Vec::new();
+    let mut compiled_controls: Vec<CompiledControl> = Vec::new();
     let mut total_secondary_records_count = 0;
 
     for sec_source in &secondary_sources {
@@ -329,60 +335,55 @@ pub fn execute_reconciliation(
             sec_source.role != SourceRole::OptionalSecondary
         };
 
-        let rules_for_source =
-            pair_rules(primary_kind, &sec_source.kind, &session.comparison_rules);
-        let rules_for_source: Vec<Option<&ComparisonRule>> = if rules_for_source.is_empty() {
-            vec![None]
-        } else {
-            rules_for_source.into_iter().map(Some).collect()
-        };
+        let mut by_series_and_doc: HashMap<(String, String), Vec<&CanonicalRecord>> =
+            HashMap::new();
+        let mut by_doc_no_only: HashMap<String, Vec<&CanonicalRecord>> = HashMap::new();
+        let mut by_tax_id: HashMap<String, Vec<&CanonicalRecord>> = HashMap::new();
 
-        for rule in rules_for_source {
-            let mut by_series_and_doc: HashMap<(String, String), Vec<&CanonicalRecord>> =
-                HashMap::new();
-            let mut by_doc_no_only: HashMap<String, Vec<&CanonicalRecord>> = HashMap::new();
-            let mut by_tax_amount: HashMap<(String, i64), Vec<&CanonicalRecord>> = HashMap::new();
-
-            for rec in sec_records {
-                if let Some(doc) = &rec.doc_no {
-                    let clean_doc = CanonicalRecord::normalize_doc_no(doc);
-                    if !clean_doc.is_empty() {
-                        let series = rec.series.as_deref().unwrap_or("").to_string();
-                        by_series_and_doc
-                            .entry((series, clean_doc.clone()))
-                            .or_default()
-                            .push(rec);
-                        by_doc_no_only.entry(clean_doc).or_default().push(rec);
-                    }
-                }
-                if let Some(tax_id) = &rec.partner_tax_id {
-                    let clean_tax = CanonicalRecord::normalize_tax_id(tax_id);
-                    if !clean_tax.is_empty() {
-                        if let Some(rule) = rule {
-                            if let Ok(comp_amt) = extract_rule_amount(rec, &rule.secondary_field) {
-                                let rounded = comp_amt.round().to_i64().unwrap_or(0);
-                                by_tax_amount
-                                    .entry((clean_tax, rounded))
-                                    .or_default()
-                                    .push(rec);
-                            }
-                        }
-                    }
+        for rec in sec_records {
+            if let Some(doc) = &rec.doc_no {
+                let clean_doc = CanonicalRecord::normalize_doc_no(doc);
+                if !clean_doc.is_empty() {
+                    let series = rec.series.as_deref().unwrap_or("").to_string();
+                    by_series_and_doc
+                        .entry((series, clean_doc.clone()))
+                        .or_default()
+                        .push(rec);
+                    by_doc_no_only.entry(clean_doc).or_default().push(rec);
                 }
             }
+            if let Some(tax_id) = &rec.partner_tax_id {
+                let clean_tax = CanonicalRecord::normalize_tax_id(tax_id);
+                if !clean_tax.is_empty() {
+                    by_tax_id.entry(clean_tax).or_default().push(rec);
+                }
+            }
+        }
 
-            secondary_indexes.push(SourceIndex {
-                source_id: sec_source.id.clone(),
-                source_name: sec_source.name.clone(),
-                source_kind: sec_source.kind.clone(),
-                source_role: sec_source.role,
-                is_required,
-                rule,
-                by_series_and_doc,
-                by_doc_no_only,
-                by_tax_amount,
-                all_records: sec_records,
+        let source_index = secondary_indexes.len();
+        secondary_indexes.push(SourceIndex {
+            source_id: sec_source.id.clone(),
+            source_name: sec_source.name.clone(),
+            source_kind: sec_source.kind.clone(),
+            source_role: sec_source.role,
+            is_required,
+            by_series_and_doc,
+            by_doc_no_only,
+            by_tax_id,
+            all_records: sec_records,
+        });
+        let rules_for_source =
+            pair_rules(primary_kind, &sec_source.kind, &session.comparison_rules);
+        if rules_for_source.is_empty() {
+            compiled_controls.push(CompiledControl {
+                source_index,
+                rule: None,
             });
+        } else {
+            compiled_controls.extend(rules_for_source.into_iter().map(|rule| CompiledControl {
+                source_index,
+                rule: Some(rule),
+            }));
         }
     }
 
@@ -433,10 +434,16 @@ pub fn execute_reconciliation(
             Some(d) => {
                 let clean = CanonicalRecord::normalize_doc_no(d);
                 if clean.is_empty() {
-                    continue;
+                    if primary_kind == &DataSourceKind::Ledger112 {
+                        primary.id.clone()
+                    } else {
+                        continue;
+                    }
+                } else {
+                    clean
                 }
-                clean
             }
+            None if primary_kind == &DataSourceKind::Ledger112 => primary.id.clone(),
             _ => continue,
         };
         let primary_series = primary.series.as_deref().unwrap_or("").to_string();
@@ -465,8 +472,9 @@ pub fn execute_reconciliation(
 
         let primary_display_amount = primary.pretax_amount.unwrap_or(primary.total_amount);
 
-        for sec_idx in &secondary_indexes {
-            let (rule, semantic_name, rule_tolerance_vnd, rule_date_tol_days) = match sec_idx
+        for control in &compiled_controls {
+            let sec_idx = &secondary_indexes[control.source_index];
+            let (rule, semantic_name, rule_tolerance_vnd, rule_date_tol_days) = match control
                 .rule
                 .and_then(|rule| {
                     rule_metadata(rule, default_tolerance_vnd, default_date_tolerance_days)
@@ -546,8 +554,35 @@ pub fn execute_reconciliation(
                 }
             };
 
-            // Find candidates with series awareness
-            let raw_candidates: Vec<&CanonicalRecord> = if !primary_series.is_empty() {
+            let is_bank_pair = primary_kind == &DataSourceKind::Ledger112
+                && sec_idx.source_kind == DataSourceKind::BankStatement;
+
+            // Bank statements frequently lack invoice number and tax id. Their
+            // policy is deliberately separate from document-key matching.
+            let raw_candidates: Vec<&CanonicalRecord> = if is_bank_pair {
+                match crate::matcher::select_bank_candidate(
+                    primary,
+                    primary_kind,
+                    &sec_idx
+                        .all_records
+                        .iter()
+                        .filter(|candidate| !consumed_secondary_ids.contains(&candidate.id))
+                        .map(|candidate| candidate as &CanonicalRecord)
+                        .collect::<Vec<_>>(),
+                    &sec_idx.source_kind,
+                    rule,
+                    rule_tolerance_vnd,
+                    rule_date_tol_days,
+                ) {
+                    crate::matcher::BankCandidateDecision::Accepted { record_id, .. } => sec_idx
+                        .all_records
+                        .iter()
+                        .filter(|candidate| candidate.id == record_id)
+                        .map(|candidate| candidate as &CanonicalRecord)
+                        .collect(),
+                    crate::matcher::BankCandidateDecision::NeedsReview { .. } => vec![],
+                }
+            } else if !primary_series.is_empty() {
                 if let Some(list) = sec_idx
                     .by_series_and_doc
                     .get(&(primary_series.clone(), doc_key.clone()))
@@ -592,7 +627,11 @@ pub fn execute_reconciliation(
 
             if available.is_empty() {
                 all_secondaries_exact = false;
-                if !sec_idx.is_required {
+                if is_bank_pair {
+                    // No deterministic evidence is a review finding, never an
+                    // implicit exact match or fuzzy fallback.
+                    has_unsupported_rule = true;
+                } else if !sec_idx.is_required {
                     has_missing_optional_secondary = true;
                 } else {
                     has_missing_required_secondary = true;
@@ -671,7 +710,11 @@ pub fn execute_reconciliation(
                 .collect();
 
             let mut matching_subsets: Vec<Vec<usize>> = Vec::new();
-            let subset_n = available.len().min(16);
+            // Aggregate matching is an explicitly bounded slow path.  At most
+            // 12 candidates are explored (4,095 non-empty subsets); a second
+            // valid result is already enough to classify it as ambiguous.
+            const MAX_AGGREGATE_CANDIDATES: usize = 12;
+            let subset_n = available.len().min(MAX_AGGREGATE_CANDIDATES);
             let total_combos = 1usize << subset_n;
 
             for mask in 1..total_combos {
@@ -715,6 +758,9 @@ pub fn execute_reconciliation(
                     });
                     if all_valid {
                         matching_subsets.push(subset_indices);
+                        if matching_subsets.len() > 1 {
+                            break;
+                        }
                     }
                 }
             }
@@ -1115,6 +1161,12 @@ pub fn execute_reconciliation(
 
         consumed_primary_ids.insert(primary.id.clone());
 
+        // A physical record can be checked by more than one semantic rule.
+        // Preserve a stable, unique physical-id list for group-level navigation
+        // while semantic_comparisons retains each individual control result.
+        let mut seen_target_ids = HashSet::new();
+        group_target_ids.retain(|record_id| seen_target_ids.insert(record_id.clone()));
+
         let overall_status = if has_unsupported_rule {
             MatchStatus::NeedsReview
         } else if has_amount_mismatch {
@@ -1213,9 +1265,10 @@ pub fn execute_reconciliation(
                 let mut has_ambiguous_fallback = false;
                 let mut has_missing_required = false;
 
-                for sec_idx in &secondary_indexes {
+                for control in &compiled_controls {
+                    let sec_idx = &secondary_indexes[control.source_index];
                     let (rule, semantic_name, rule_tolerance_vnd, rule_date_tol_days) =
-                        match sec_idx.rule.and_then(|rule| {
+                        match control.rule.and_then(|rule| {
                             rule_metadata(rule, default_tolerance_vnd, default_date_tolerance_days)
                         }) {
                             Some(v) => v,
@@ -1228,11 +1281,9 @@ pub fn execute_reconciliation(
                         Err(_) => continue,
                     };
 
-                    let rounded = pri_comp.round().to_i64().unwrap_or(0);
-
                     let candidates = sec_idx
-                        .by_tax_amount
-                        .get(&(clean_tax.clone(), rounded))
+                        .by_tax_id
+                        .get(&clean_tax)
                         .map(|c| c.as_slice())
                         .unwrap_or(&[]);
 
@@ -1250,6 +1301,9 @@ pub fn execute_reconciliation(
                                     primary_kind,
                                     c,
                                     &sec_idx.source_kind,
+                                )
+                                && extract_rule_amount(c, &rule.secondary_field).is_ok_and(
+                                    |amount| (amount - pri_comp).abs() <= rule_tolerance_vnd,
                                 )
                         })
                         .collect();
@@ -1441,8 +1495,9 @@ pub fn execute_reconciliation(
             message: disc_msg,
         };
 
-        for sec_idx in &secondary_indexes {
-            let (rule, semantic_name) = match sec_idx.rule.and_then(|rule| {
+        for control in &compiled_controls {
+            let sec_idx = &secondary_indexes[control.source_index];
+            let (rule, semantic_name) = match control.rule.and_then(|rule| {
                 rule_metadata(rule, default_tolerance_vnd, default_date_tolerance_days)
             }) {
                 Some((r, s, _, _)) => (r, s),
@@ -1548,8 +1603,11 @@ pub fn execute_reconciliation(
     // -------------------------------------------------------------
     // PASS 3: Residual Sweep for Secondary-Missing Records
     // -------------------------------------------------------------
-    for sec_idx in &secondary_indexes {
-        let sec_rule = sec_idx.rule;
+    for (source_index, sec_idx) in secondary_indexes.iter().enumerate() {
+        let sec_rule = compiled_controls
+            .iter()
+            .find(|control| control.source_index == source_index)
+            .and_then(|control| control.rule);
 
         for sec in sec_idx.all_records {
             if consumed_secondary_ids.contains(&sec.id) {
@@ -1702,7 +1760,6 @@ pub fn execute_reconciliation(
     let mut sum_vat_var = Decimal::ZERO;
     let mut sum_receivable_var = Decimal::ZERO;
     let mut sum_total_discrepant = Decimal::ZERO;
-    let mut net_variance = Decimal::ZERO;
 
     for g in &groups {
         match g.status {
@@ -1729,7 +1786,6 @@ pub fn execute_reconciliation(
             + g.receivable_variance.abs()
             + g.other_variance.abs();
         sum_total_discrepant += grp_abs_discrepant;
-        net_variance += g.amount_variance;
     }
 
     Ok(ReconciliationResult {
@@ -1752,7 +1808,9 @@ pub fn execute_reconciliation(
             vat_variance: sum_vat_var,
             receivable_variance: sum_receivable_var,
             total_discrepant_amount: sum_total_discrepant,
-            net_financial_variance: net_variance,
+            // Compatibility field deliberately mirrors gross magnitude; it is
+            // never used to claim offsetting semantic errors are resolved.
+            net_financial_variance: sum_total_discrepant,
         },
         groups,
         reference_controls: vec![],

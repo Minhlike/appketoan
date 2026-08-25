@@ -154,6 +154,9 @@ pub struct ReconciliationSummary {
     pub receivable_variance: Decimal,
     #[serde(default)]
     pub total_discrepant_amount: Decimal,
+    /// Deprecated compatibility field. Since semantic variances must never be
+    /// netted, this is the non-negative gross discrepancy magnitude.
+    #[serde(default)]
     pub net_financial_variance: Decimal,
 }
 

@@ -309,6 +309,25 @@ export const PRECONFIGURED_SCENARIOS: PreconfiguredScenario[] = [
     enableAggregate: false,
   },
   {
+    id: "scenario_invoice_sales_register_ledger511",
+    name: "Kiểm soát ba nguồn Hóa đơn ↔ Bảng kê ↔ TK511",
+    description: "Mỗi hóa đơn phải có trên bảng kê và TK511; tiền hàng, VAT và phải thu HĐ ↔ bảng kê đều phải đúng.",
+    recommendedSources: [
+      { kind: "e_invoice", role: "PRIMARY", title: "Hóa đơn điện tử", description: "Nguồn hóa đơn theo kỳ", required: true },
+      { kind: "sales_register", role: "REQUIRED_SECONDARY", title: "Bảng kê bán hàng", description: "Đối chiếu tiền hàng, VAT và phải thu", required: true },
+      { kind: "ledger_511", role: "REQUIRED_SECONDARY", title: "Sổ cái TK511", description: "Kiểm soát ghi nhận doanh thu", required: true },
+    ],
+    rules: [
+      { semantic: "REVENUE", title: "Doanh thu HĐ ↔ Bảng kê", description: "Tiền chưa thuế phải khớp", primaryField: "pretaxAmount", secondarySourceKind: "sales_register", secondaryField: "pretaxAmount", dateToleranceDays: 3 },
+      { semantic: "VAT", title: "VAT HĐ ↔ Bảng kê", description: "Thuế GTGT phải khớp", primaryField: "vatAmount", secondarySourceKind: "sales_register", secondaryField: "vatAmount", dateToleranceDays: 3 },
+      { semantic: "RECEIVABLE", title: "Phải thu HĐ ↔ Bảng kê", description: "Tổng thanh toán phải khớp", primaryField: "totalAmount", secondarySourceKind: "sales_register", secondaryField: "totalAmount", dateToleranceDays: 3 },
+      { semantic: "REVENUE", title: "Doanh thu HĐ ↔ TK511", description: "Tiền chưa thuế phải được ghi nhận TK511", primaryField: "pretaxAmount", secondarySourceKind: "ledger_511", secondaryField: "creditAmount", dateToleranceDays: 3 },
+    ],
+    defaultToleranceVnd: "0",
+    defaultDateDays: 3,
+    enableAggregate: false,
+  },
+  {
     id: "scenario_ledger112_bank_statement",
     name: "Đối chiếu TK112 ↔ Sao kê ngân hàng",
     description: "Chỉ so khớp giao dịch cùng chiều tiền vào/ra, cùng số tiền và trong cửa sổ ngày được phép.",

@@ -57,3 +57,11 @@
 - Direction compatibility is checked before a candidate can enter exact, tolerance, fallback, or aggregate resolution.
 - Partner-master and sales-analysis one-source scenarios return typed reference-control results via the Tauri command and UI rather than transaction matches.
 - Mapped invoice lifecycles are typed and fail closed unless standard. The invoice/sales-register/TK511 control raises a high-priority review when the first two agree but TK511 is absent.
+
+## V15 Control-Plan Follow-up — 2026-08-25
+- `LedgerEntry` is an additive generic ledger view; legacy `Ledger511`, `Ledger112`, `Ledger131`, `Ledger133`, and `Ledger3331` kinds remain compatible adapters.
+- Matching compiles semantic controls against one physical `SourceIndex` per secondary source. Group target IDs are stable and de-duplicated for navigation.
+- TK112/bank uses an explicit deterministic policy: compatible money direction, rule amount, date window, then unique reference/counterparty evidence. Missing evidence is `NEEDS_REVIEW`; no fuzzy score and no document/MST precondition.
+- Reference-master and sales-analysis sources can coexist with transaction sources in IPC; they remain typed controls and are not passed to the transactional matcher.
+- Aggregate subset search has a 12-candidate cap and exits after the second solution. Summary/export use gross discrepancy magnitude so semantic variances cannot cancel to a false zero.
+- Verification before handoff: workspace Rust tests passed (54 baseline regression + 9 V15 blocker + 4 V15 support); frontend tests 18/18, TypeScript typecheck, formatting, and strict clippy passed. `npx tauri build` produced fresh ignored NSIS/MSI artifacts locally.

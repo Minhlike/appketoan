@@ -64,3 +64,8 @@
 - `cargo test --workspace`: SUCCESS; all 54 baseline regression tests, 7 new blocker regressions, and existing V15 tests passed.
 - `npm run test`: SUCCESS; 18/18 passed. `npm run typecheck`, `cargo fmt --all -- --check`, and strict workspace Clippy: SUCCESS.
 - `npx tauri build`: SUCCESS; generated artifacts remain ignored.
+
+### 8. V15 Control-Plan Follow-up (2026-08-25)
+- `cargo test --workspace`: SUCCESS; 54/54 baseline reconciliation regressions, 9 V15 blocker regressions, and 4 V15 dataset-support tests passed.
+- `npm run test`: SUCCESS; 18/18 passed. `npm run typecheck`, `cargo fmt --all -- --check`, and `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh NSIS/MSI build outputs remain ignored. The GNU linker emitted an existing `webview2-com-sys` `.drectve` warning during tests; strict clippy stayed clean.

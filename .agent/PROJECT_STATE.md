@@ -52,6 +52,13 @@ Reconciliation Core (crates/reconciliation-core/)
 - One-source partner-master and sales-analysis controls run through typed local normalization and return dedicated control results instead of transaction groups.
 - A mapped invoice lifecycle is typed at execution and non-standard/unknown values are fail-closed.
 
+## V15 Control-Plan Follow-up (2026-08-25)
+- Added the additive generic `LedgerEntry` view while retaining legacy account-kind adapters.
+- Each secondary source now builds one physical source index and compiles all of its semantic controls against it.
+- Bank candidates can be accepted without document number or tax ID only on deterministic direction/amount/date evidence; otherwise they fail closed to review.
+- Transactional and typed reference controls can run together through IPC. The new tri-source UI scenario covers invoice, sales register, and TK511.
+- Aggregate search is capped at 12 candidates and stops after the second valid subset; gross discrepancy reporting cannot net different semantics to zero.
+
 ## Latest Verification (2026-08-25)
 - GNU workspace test suite completed successfully after the v14 intake and packaging changes.
 - Frontend Vitest suite completed successfully.

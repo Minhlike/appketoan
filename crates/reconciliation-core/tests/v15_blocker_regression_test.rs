@@ -183,6 +183,97 @@ fn execute_reconciliation_rejects_opposite_bank_direction_for_exact_fallback_and
 }
 
 #[test]
+fn bank_statement_without_document_or_tax_id_matches_only_with_deterministic_evidence() {
+    let ledger = source("primary", DataSourceKind::Ledger112, SourceRole::Primary);
+    let bank = source(
+        "bank",
+        DataSourceKind::BankStatement,
+        SourceRole::RequiredSecondary,
+    );
+    let payment_rule = rule(
+        "bank",
+        ComparisonSemantic::BankPayment,
+        DataSourceKind::Ledger112,
+        DataSourceKind::BankStatement,
+        "directionalAmount",
+        "directionalAmount",
+    );
+    let mut ledger_record = record("ledger", "primary", None);
+    ledger_record.partner_tax_id = None;
+    ledger_record.debit_amount = Some(dec!(100));
+    ledger_record.voucher_no = Some("PAY-01".to_string());
+    let mut bank_record = record("bank", "bank", None);
+    bank_record.partner_tax_id = None;
+    bank_record.credit_amount = Some(dec!(100)); // bank credit = money in
+    bank_record.voucher_no = Some("PAY-01".to_string());
+
+    let result = execute_reconciliation(
+        &session(vec![ledger, bank], vec![payment_rule], false),
+        &HashMap::from([
+            ("primary".to_string(), vec![ledger_record]),
+            ("bank".to_string(), vec![bank_record]),
+        ]),
+    )
+    .expect("execution");
+    assert_eq!(result.summary.exact_matches_count, 1);
+}
+
+#[test]
+fn opposite_semantic_variances_are_reported_as_gross_discrepancy() {
+    let invoice = source("primary", DataSourceKind::EInvoice, SourceRole::Primary);
+    let register = source(
+        "register",
+        DataSourceKind::SalesRegister,
+        SourceRole::RequiredSecondary,
+    );
+    let mut register_record = record("register", "register", Some("netting"));
+    register_record.pretax_amount = Some(dec!(90));
+    register_record.vat_amount = Some(dec!(20));
+    let result = execute_reconciliation(
+        &session(
+            vec![invoice, register],
+            vec![
+                rule(
+                    "revenue",
+                    ComparisonSemantic::Revenue,
+                    DataSourceKind::EInvoice,
+                    DataSourceKind::SalesRegister,
+                    "pretaxAmount",
+                    "pretaxAmount",
+                ),
+                rule(
+                    "vat",
+                    ComparisonSemantic::Vat,
+                    DataSourceKind::EInvoice,
+                    DataSourceKind::SalesRegister,
+                    "vatAmount",
+                    "vatAmount",
+                ),
+            ],
+            false,
+        ),
+        &HashMap::from([
+            (
+                "primary".to_string(),
+                vec![record("invoice", "primary", Some("netting"))],
+            ),
+            ("register".to_string(), vec![register_record]),
+        ]),
+    )
+    .expect("execution");
+    assert_eq!(result.summary.revenue_variance, dec!(10));
+    assert_eq!(result.summary.vat_variance, dec!(-10));
+    assert!(
+        result.summary.total_discrepant_amount > Decimal::ZERO,
+        "opposite semantic variances must never net to a zero discrepancy"
+    );
+    assert_eq!(
+        result.summary.net_financial_variance,
+        result.summary.total_discrepant_amount
+    );
+}
+
+#[test]
 fn sales_register_requires_revenue_vat_and_receivable_to_pass() {
     let invoice = source("primary", DataSourceKind::EInvoice, SourceRole::Primary);
     let register = source(
@@ -235,6 +326,10 @@ fn sales_register_requires_revenue_vat_and_receivable_to_pass() {
         .expect("primary group");
     assert_eq!(primary_group.status, MatchStatus::MismatchAmount);
     assert_eq!(primary_group.semantic_comparisons.len(), 3);
+    assert_eq!(
+        primary_group.target_source_record_ids,
+        vec!["register".to_string()]
+    );
     assert!(primary_group
         .semantic_comparisons
         .iter()

@@ -112,7 +112,6 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
     (showVatVariance && !isZeroMoney(summary.vatVariance!)) ||
     (showReceivableVariance && !isZeroMoney(summary.receivableVariance!));
 
-  const isNetZero = isZeroMoney(summary.netFinancialVariance);
 
   return (
     <section className="dashboard-section">
@@ -175,17 +174,15 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
 
           {!hasAnyVariance && (
             <div className="net-variance-badge">
-              <span className="var-label">Chênh lệch tài chính:</span>
+              <span className="var-label">Tổng quy mô sai lệch:</span>
               <span
                 className={`var-value ${
-                  isNetZero
+                  isZeroMoney(summary.totalDiscrepantAmount)
                     ? "var-zero"
-                    : String(summary.netFinancialVariance).startsWith("-")
-                    ? "var-neg"
                     : "var-pos"
                 }`}
               >
-                {formatVND(summary.netFinancialVariance)}
+                {formatVND(summary.totalDiscrepantAmount)}
               </span>
             </div>
           )}
