@@ -33,14 +33,18 @@ fn legacy_account_hint(kind: &DataSourceKind) -> Option<&'static str> {
 pub fn ledger_entry_from_record(record: &CanonicalRecord, kind: &DataSourceKind) -> LedgerEntry {
     LedgerEntry {
         source_record_id: record.id.clone(),
-        account: record
-            .debit_account
-            .clone()
-            .or_else(|| record.credit_account.clone())
-            .or_else(|| legacy_account_hint(kind).map(str::to_string)),
+        // The source ledger account is source-level metadata, not whichever
+        // debit/credit column happened to be mapped on this row. Legacy kinds
+        // provide that metadata deterministically; a generic source can opt in
+        // through the explicit `ledgerAccount` provenance field.
+        account: legacy_account_hint(kind)
+            .map(str::to_string)
+            .or_else(|| record.raw_fields.get("ledgerAccount").cloned()),
         counter_account: record
-            .credit_account
-            .clone()
+            .raw_fields
+            .get("counterAccount")
+            .cloned()
+            .or_else(|| record.credit_account.clone())
             .or_else(|| record.debit_account.clone()),
         debit: record.debit_amount,
         credit: record.credit_amount,
@@ -48,5 +52,37 @@ pub fn ledger_entry_from_record(record: &CanonicalRecord, kind: &DataSourceKind)
         document: record.doc_no.clone().or_else(|| record.voucher_no.clone()),
         posting_date: record.date.clone(),
         description: record.description.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_ledger_account_is_not_inferred_from_counter_account_columns() {
+        let record = CanonicalRecord {
+            debit_account: Some("131".to_string()),
+            credit_account: Some("131".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            ledger_entry_from_record(&record, &DataSourceKind::Ledger511)
+                .account
+                .as_deref(),
+            Some("511")
+        );
+        assert_eq!(
+            ledger_entry_from_record(&record, &DataSourceKind::Ledger112)
+                .account
+                .as_deref(),
+            Some("112")
+        );
+        assert_eq!(
+            ledger_entry_from_record(&record, &DataSourceKind::Ledger511)
+                .counter_account
+                .as_deref(),
+            Some("131")
+        );
     }
 }

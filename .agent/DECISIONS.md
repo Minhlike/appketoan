@@ -35,3 +35,7 @@
 ## Decision 007: Generic Ledger Views and Compiled Controls
 - **Decision**: Preserve account-specific source kinds as adapters while exposing additive `LedgerEntry` views. Build one physical index per source and compile all semantic controls against it; bank candidates use deterministic evidence only; aggregate matching is bounded.
 - **Rationale**: This prevents per-rule index duplication, semantic overwrite/netting, false bank matches, and pathological aggregate runtime without breaking existing scenario contracts.
+
+## Decision 008: Source-Aware Presentation and Fail-Closed Aggregate Budget
+- **Decision**: `SemanticFieldComparison` is the presentation/export source of truth; labels always include its actual secondary source. Bank mappings are typed on canonical records. Aggregate matching either searches the full bounded candidate set or emits `COMPLEXITY_LIMIT`; disabled aggregate runs only full 1:1 scans.
+- **Rationale**: A semantic label alone cannot identify a control in a multi-source audit, and truncating candidates before acceptance can create false matches.

@@ -94,10 +94,13 @@ fn rule_metadata(
     };
 
     let display_name = match rule.semantic {
-        ComparisonSemantic::Revenue => "Doanh thu (Pretax ↔ TK511 Phát sinh Có)",
-        ComparisonSemantic::Vat => "Thuế GTGT (VAT ↔ TK3331/133 Phát sinh)",
-        ComparisonSemantic::Receivable => "Công nợ phải thu (Total ↔ TK131 Phát sinh Nợ)",
-        ComparisonSemantic::BankPayment => "Dòng tiền sao kê (Total ↔ Bank Phát sinh Có)",
+        // Source account/kind lives in SemanticFieldComparison.  These labels
+        // must stay semantic-only so SalesRegister controls never masquerade
+        // as TK511/TK3331/TK131 controls in UI or exports.
+        ComparisonSemantic::Revenue => "Doanh thu",
+        ComparisonSemantic::Vat => "Thuế GTGT",
+        ComparisonSemantic::Receivable => "Phải thu",
+        ComparisonSemantic::BankPayment => "Dòng tiền ngân hàng",
         ComparisonSemantic::Other => "Đối chiếu số tiền",
     };
 
@@ -574,13 +577,34 @@ pub fn execute_reconciliation(
                     rule_tolerance_vnd,
                     rule_date_tol_days,
                 ) {
-                    crate::matcher::BankCandidateDecision::Accepted { record_id, .. } => sec_idx
-                        .all_records
-                        .iter()
-                        .filter(|candidate| candidate.id == record_id)
-                        .map(|candidate| candidate as &CanonicalRecord)
-                        .collect(),
-                    crate::matcher::BankCandidateDecision::NeedsReview { .. } => vec![],
+                    crate::matcher::BankCandidateDecision::Accepted {
+                        record_id,
+                        evidence,
+                    } => {
+                        group_discrepancies.push(FieldDiscrepancy {
+                            field_name: "matchEvidence".to_string(),
+                            source_value: Some(evidence.to_string()),
+                            target_value: Some(record_id.clone()),
+                            amount_diff: None,
+                            message: format!("BANK_MATCH_EVIDENCE: {evidence}"),
+                        });
+                        sec_idx
+                            .all_records
+                            .iter()
+                            .filter(|candidate| candidate.id == record_id)
+                            .map(|candidate| candidate as &CanonicalRecord)
+                            .collect()
+                    }
+                    crate::matcher::BankCandidateDecision::NeedsReview { reason } => {
+                        group_discrepancies.push(FieldDiscrepancy {
+                            field_name: "reviewReason".to_string(),
+                            source_value: Some(reason.to_string()),
+                            target_value: None,
+                            amount_diff: None,
+                            message: format!("BANK_REVIEW_REASON: {reason}"),
+                        });
+                        vec![]
+                    }
                 }
             } else if !primary_series.is_empty() {
                 if let Some(list) = sec_idx
@@ -714,7 +738,13 @@ pub fn execute_reconciliation(
             // 12 candidates are explored (4,095 non-empty subsets); a second
             // valid result is already enough to classify it as ambiguous.
             const MAX_AGGREGATE_CANDIDATES: usize = 12;
-            let subset_n = available.len().min(MAX_AGGREGATE_CANDIDATES);
+            let aggregate_complexity_limited =
+                allow_aggregate && available.len() > MAX_AGGREGATE_CANDIDATES;
+            let subset_n = if allow_aggregate && !aggregate_complexity_limited {
+                available.len()
+            } else {
+                0
+            };
             let total_combos = 1usize << subset_n;
 
             for mask in 1..total_combos {
@@ -763,6 +793,71 @@ pub fn execute_reconciliation(
                         }
                     }
                 }
+            }
+
+            // With aggregate disabled we still scan every 1:1 candidate. This
+            // detects duplicate exact candidates as ambiguous without ever
+            // enumerating multi-record subsets.
+            if !allow_aggregate {
+                matching_subsets = cand_amount_results
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, amount)| {
+                        amount
+                            .as_ref()
+                            .ok()
+                            .filter(|amount| (**amount - pri_comp).abs() <= rule_tolerance_vnd)
+                            .map(|_| vec![index])
+                    })
+                    .collect();
+            }
+
+            if aggregate_complexity_limited {
+                all_secondaries_exact = false;
+                has_unsupported_rule = true;
+                let disc = FieldDiscrepancy {
+                    field_name: "aggregateComplexity".to_string(),
+                    source_value: Some(available.len().to_string()),
+                    target_value: Some(MAX_AGGREGATE_CANDIDATES.to_string()),
+                    amount_diff: None,
+                    message: format!(
+                        "COMPLEXITY_LIMIT: {} ứng viên vượt ngân sách khớp gộp {}; không cắt cụt để tự động chấp nhận.",
+                        available.len(), MAX_AGGREGATE_CANDIDATES
+                    ),
+                };
+                group_discrepancies.push(disc.clone());
+                group_semantic_comparisons.push(SemanticFieldComparison {
+                    semantic,
+                    semantic_name: semantic_name.to_string(),
+                    primary_source_id: primary_source_id.to_string(),
+                    primary_source_name: primary_source_name.to_string(),
+                    secondary_source_id: sec_idx.source_id.clone(),
+                    secondary_source_name: sec_idx.source_name.clone(),
+                    secondary_source_kind: sec_idx.source_kind.clone(),
+                    semantic_field: semantic_name.to_string(),
+                    expected_amount: pri_comp,
+                    actual_amount: Decimal::ZERO,
+                    variance: pri_comp,
+                    status: MatchStatus::NeedsReview,
+                    primary_record_ids: vec![primary.id.clone()],
+                    secondary_record_ids: available
+                        .iter()
+                        .map(|record| record.id.clone())
+                        .collect(),
+                    discrepancies: vec![disc.clone()],
+                });
+                group_source_breakdowns.insert(
+                    sec_idx.source_id.clone(),
+                    SourceMatchBreakdown {
+                        source_id: sec_idx.source_id.clone(),
+                        source_name: sec_idx.source_name.clone(),
+                        record_ids: available.iter().map(|record| record.id.clone()).collect(),
+                        compared_amount: Decimal::ZERO,
+                        status: MatchStatus::NeedsReview,
+                        discrepancies: vec![disc],
+                    },
+                );
+                continue;
             }
 
             if available.len() == 1 {

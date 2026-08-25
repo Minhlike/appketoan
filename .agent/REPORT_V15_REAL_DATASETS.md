@@ -33,6 +33,8 @@
 - Enforced all-rule evaluation per source pair, typed invoice lifecycle gating, and a typed IPC/UI control path for one-source partner/sales-analysis scenarios.
 - Added a generic `LedgerEntry` compatibility view, one physical index per source with compiled semantic controls, deterministic bank candidate evidence, bounded aggregate search, and gross (non-netted) discrepancy reporting.
 - Partner-master and sales-analysis controls can now accompany transactional sources through IPC; they remain typed controls instead of empty transactional datasets.
+- UI semantic labels now include the actual evaluated secondary source, so Sales Register controls are never rendered as TK511/TK3331/TK131 controls. Typed bank fields retain transaction/reference, dates, counterparties and balance while source provenance remains intact.
+- Aggregate matching is fail-closed above the configured candidate budget; it never accepts a partial candidate scan.
 
 ## Tests
 

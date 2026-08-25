@@ -267,6 +267,7 @@ pub fn normalize_data_source_rows(
     let idx_buyer_tax_id = col_index(&mapping.buyer_tax_id_column);
     let idx_seller_tax_id = col_index(&mapping.seller_tax_id_column);
     let idx_partner_name = col_index(&mapping.partner_name_column);
+    let idx_partner_code = col_index(&mapping.partner_code_column);
     let idx_pretax_amount = col_index(&mapping.pretax_amount_column);
     let idx_vat_amount = col_index(&mapping.vat_amount_column);
     let idx_discount_amount = col_index(&mapping.discount_amount_column);
@@ -280,6 +281,12 @@ pub fn normalize_data_source_rows(
     let idx_voucher_no = col_index(&mapping.voucher_no_column);
     let idx_description = col_index(&mapping.description_column);
     let idx_bank_account = col_index(&mapping.bank_account_column);
+    let idx_transaction_number = col_index(&mapping.transaction_number_column);
+    let idx_accounting_date = col_index(&mapping.accounting_date_column);
+    let idx_transaction_date = col_index(&mapping.transaction_date_column);
+    let idx_counterparty_account = col_index(&mapping.counterparty_account_column);
+    let idx_counterparty_name = col_index(&mapping.counterparty_name_column);
+    let idx_balance = col_index(&mapping.balance_column);
 
     let mut canonical_records = Vec::new();
 
@@ -317,6 +324,7 @@ pub fn normalize_data_source_rows(
             .or_else(|| buyer_tax_id.clone());
 
         let partner_name = get_val(idx_partner_name);
+        let partner_code = get_val(idx_partner_code);
 
         let pretax_amount = get_val(idx_pretax_amount).and_then(|a| parse_amount(&a));
         let vat_amount = get_val(idx_vat_amount).and_then(|a| parse_amount(&a));
@@ -349,6 +357,14 @@ pub fn normalize_data_source_rows(
         let voucher_no = get_val(idx_voucher_no);
         let description = get_val(idx_description);
         let bank_account = get_val(idx_bank_account);
+        let transaction_number = get_val(idx_transaction_number);
+        let accounting_date =
+            get_val(idx_accounting_date).and_then(|value| parse_excel_date(&value));
+        let transaction_date =
+            get_val(idx_transaction_date).and_then(|value| parse_excel_date(&value));
+        let counterparty_account = get_val(idx_counterparty_account);
+        let counterparty_name = get_val(idx_counterparty_name);
+        let balance = get_val(idx_balance).and_then(|value| parse_amount(&value));
 
         let mut raw_fields = HashMap::new();
         for (i, col_name) in header_columns.iter().enumerate() {
@@ -372,6 +388,7 @@ pub fn normalize_data_source_rows(
             buyer_tax_id,
             seller_tax_id,
             partner_name,
+            partner_code,
             pretax_amount,
             vat_amount,
             discount_amount,
@@ -386,6 +403,12 @@ pub fn normalize_data_source_rows(
             voucher_no,
             description,
             bank_account,
+            transaction_number,
+            accounting_date,
+            transaction_date,
+            counterparty_account,
+            counterparty_name,
+            balance,
             raw_fields,
         };
 

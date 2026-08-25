@@ -213,6 +213,65 @@ pub fn resolve_partner_by_tax_id(
     }
 }
 
+/// Cross-source identity control. It is intentionally read-only: no canonical
+/// record is mutated or silently merged. MST is authoritative, partner code is
+/// the deterministic fallback, and names are never used for auto-resolution.
+pub fn evaluate_partner_identity_cross_source<'a>(
+    master_source_id: String,
+    masters: &[PartnerRecord],
+    transactional_records: impl Iterator<Item = &'a CanonicalRecord>,
+) -> ReferenceControlResult {
+    let mut unresolved_or_ambiguous = 0usize;
+    let mut checked = 0usize;
+    for record in transactional_records {
+        let resolution = if let Some(tax_id) = record
+            .partner_tax_id
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            resolve_partner_by_tax_id(masters, tax_id)
+        } else if let Some(code) = record
+            .partner_code
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            let matches: Vec<String> = masters
+                .iter()
+                .filter(|master| master.partner_code.as_deref() == Some(code))
+                .map(|master| master.id.clone())
+                .collect();
+            match matches.len() {
+                0 => PartnerIdentityResolution::NotFound,
+                1 => PartnerIdentityResolution::Unique(matches[0].clone()),
+                _ => PartnerIdentityResolution::AmbiguousMasterIdentity(matches),
+            }
+        } else {
+            // Name is supporting evidence only and must never auto-merge.
+            PartnerIdentityResolution::NotFound
+        };
+        checked += 1;
+        if !matches!(resolution, PartnerIdentityResolution::Unique(_)) {
+            unresolved_or_ambiguous += 1;
+        }
+    }
+    let status = if unresolved_or_ambiguous == 0 {
+        MatchStatus::MatchedExact
+    } else {
+        MatchStatus::NeedsReview
+    };
+    ReferenceControlResult {
+        source_id: master_source_id,
+        source_kind: DataSourceKind::PartnerMaster,
+        record_count: checked,
+        status,
+        message: if unresolved_or_ambiguous == 0 {
+            "PARTNER_IDENTITY: MST hoặc mã đối tác định danh duy nhất; không thay đổi bản ghi nguồn.".to_string()
+        } else {
+            format!("PARTNER_IDENTITY_NEEDS_REVIEW: {} bản ghi không định danh duy nhất theo MST/mã đối tác.", unresolved_or_ambiguous)
+        },
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SalesAnalysisControlTotals {
     pub row_level: AnalyticalRowLevel,

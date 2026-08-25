@@ -23,6 +23,7 @@ fn generate_synthetic_dataset(count: usize, source_id: &str) -> Vec<CanonicalRec
             buyer_tax_id: Some(format!("010{:07}", i % 500)),
             seller_tax_id: None,
             partner_name: Some(format!("Công ty Thử Nghiệm {}", i % 500)),
+            partner_code: None,
             pretax_amount: Some(pretax),
             vat_amount: Some(vat),
             discount_amount: None,
@@ -37,6 +38,12 @@ fn generate_synthetic_dataset(count: usize, source_id: &str) -> Vec<CanonicalRec
             voucher_no: Some(format!("PKT-{:06}", i)),
             description: Some(format!("Giao dịch số {}", i)),
             bank_account: None,
+            transaction_number: None,
+            accounting_date: None,
+            transaction_date: None,
+            counterparty_account: None,
+            counterparty_name: None,
+            balance: None,
             raw_fields: HashMap::new(),
         });
     }

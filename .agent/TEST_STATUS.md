@@ -69,3 +69,8 @@
 - `cargo test --workspace`: SUCCESS; 54/54 baseline reconciliation regressions, 9 V15 blocker regressions, and 4 V15 dataset-support tests passed.
 - `npm run test`: SUCCESS; 18/18 passed. `npm run typecheck`, `cargo fmt --all -- --check`, and `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
 - `npx tauri build`: SUCCESS; fresh NSIS/MSI build outputs remain ignored. The GNU linker emitted an existing `webview2-com-sys` `.drectve` warning during tests; strict clippy stayed clean.
+
+### 9. V15 Semantic Closure (2026-08-25)
+- `cargo test -p reconciliation-core --test reconciliation_correctness_regression_test`: SUCCESS; 54/54 baseline regressions passed after aggregate-policy changes.
+- `cargo test -p reconciliation-core --test v15_blocker_regression_test`: SUCCESS; 11/11 blocker regressions passed.
+- `npm run test`: SUCCESS; 19/19 passed. `npm run typecheck`, formatting, and strict workspace Clippy: SUCCESS.

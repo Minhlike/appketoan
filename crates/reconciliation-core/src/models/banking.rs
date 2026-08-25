@@ -2,6 +2,45 @@ use rust_decimal::Decimal;
 
 use crate::models::{CanonicalRecord, DataSourceKind};
 
+/// Additive, auditable projection for bank transactions. It intentionally
+/// keeps source provenance in CanonicalRecord while exposing matching evidence
+/// as typed fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BankTransaction {
+    pub source_record_id: String,
+    pub transaction_number: Option<String>,
+    pub accounting_date: Option<String>,
+    pub transaction_date: Option<String>,
+    pub counterparty_account: Option<String>,
+    pub counterparty_name: Option<String>,
+    pub balance: Option<Decimal>,
+    pub bank_account: Option<String>,
+    pub description: Option<String>,
+}
+
+pub fn bank_transaction_from_record(record: &CanonicalRecord) -> BankTransaction {
+    BankTransaction {
+        source_record_id: record.id.clone(),
+        transaction_number: record
+            .transaction_number
+            .clone()
+            .or_else(|| record.voucher_no.clone()),
+        accounting_date: record
+            .accounting_date
+            .clone()
+            .or_else(|| record.date.clone()),
+        transaction_date: record.transaction_date.clone(),
+        counterparty_account: record.counterparty_account.clone(),
+        counterparty_name: record
+            .counterparty_name
+            .clone()
+            .or_else(|| record.partner_name.clone()),
+        balance: record.balance,
+        bank_account: record.bank_account.clone(),
+        description: record.description.clone(),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MoneyDirection {
     MoneyIn,

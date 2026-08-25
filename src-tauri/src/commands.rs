@@ -50,6 +50,7 @@ pub fn cmd_run_reconciliation(
     let mut source_records_map: HashMap<String, Vec<CanonicalRecord>> = HashMap::new();
     let mut raw_file_hashes: HashMap<String, String> = HashMap::new();
     let mut reference_controls = Vec::new();
+    let mut partner_masters = Vec::new();
     let bytes_map = file_bytes_map.unwrap_or_default();
 
     for source in &session.data_sources {
@@ -135,6 +136,7 @@ pub fn cmd_run_reconciliation(
                 let records = normalize_partner_master_rows(source, &header_cols, &raw_rows);
                 reference_controls
                     .push(evaluate_partner_master_control(source.id.clone(), &records));
+                partner_masters.push((source.id.clone(), records));
             }
             DataSourceKind::SalesAnalysisReport => {
                 let records = normalize_sales_analysis_rows(source, &header_cols, &raw_rows);
@@ -145,6 +147,21 @@ pub fn cmd_run_reconciliation(
                 let records = normalize_data_source_rows(source, &header_cols, &raw_rows);
                 source_records_map.insert(source.id.clone(), records);
             }
+        }
+    }
+
+    // Cross-source partner identity is a read-only control. It does not merge
+    // or rewrite canonical transaction records and therefore preserves source
+    // provenance while allowing master + transaction audit sessions.
+    if !source_records_map.is_empty() {
+        for (master_source_id, masters) in &partner_masters {
+            reference_controls.push(reconciliation_core::evaluate_partner_identity_cross_source(
+                master_source_id.clone(),
+                masters,
+                source_records_map
+                    .values()
+                    .flat_map(|records| records.iter()),
+            ));
         }
     }
 

@@ -90,7 +90,7 @@ describe("Data Contract & Comprehensive Fixtures", () => {
 });
 
 import { normalizeMoneyInput, parseVietnameseMoneyInput } from "../utils/money";
-import { formatDetailReason } from "../components/ResultTable";
+import { comparisonLabel, formatDetailReason } from "../components/ResultTable";
 import type { MatchGroup, IntakeAnalysisResult } from "./dataContract";
 
 describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
@@ -203,8 +203,8 @@ describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
     };
 
     const detail = formatDetailReason(group);
-    expect(detail).toContain("Doanh thu TK511 khớp");
-    expect(detail).toContain("Thuế GTGT và Công nợ chưa đối chiếu");
+    expect(detail).toContain("Doanh thu ↔ Sổ cái TK 511 khớp");
+    expect(detail).toContain("Thuế GTGT ↔ Sổ cái TK 3331 và Công nợ ↔ Sổ cái TK 131 chưa đối chiếu");
     expect(detail).not.toContain("Khớp hoàn toàn tất cả");
   });
 
@@ -286,8 +286,8 @@ describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
     };
 
     const detail = formatDetailReason(group);
-    expect(detail).toContain("Thiếu TK511: 105.000.000 đ");
-    expect(detail).toContain("Thuế GTGT và Công nợ chưa đối chiếu");
+    expect(detail).toContain("Thiếu Doanh thu ↔ Sổ cái TK 511: 105.000.000 đ");
+    expect(detail).toContain("Thuế GTGT ↔ Sổ cái TK 3331 và Công nợ ↔ Sổ cái TK 131 chưa đối chiếu");
     expect(detail).not.toContain("Khớp hoàn toàn");
   });
 
@@ -365,5 +365,15 @@ describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
     const detail = formatDetailReason(group);
     expect(detail).toBe("✓ Khớp hoàn toàn tất cả các tiêu chí đã đối chiếu");
   });
-});
 
+  it("keeps the same semantic separate for Sales Register and TK511 controls", () => {
+    expect(comparisonLabel({ semantic: "REVENUE", semanticName: "Doanh thu", secondarySourceName: "Bảng kê bán hàng" }))
+      .toBe("Doanh thu ↔ Bảng kê bán hàng");
+    expect(comparisonLabel({ semantic: "REVENUE", semanticName: "Doanh thu", secondarySourceName: "Sổ cái TK 511" }))
+      .toBe("Doanh thu ↔ Sổ cái TK 511");
+    expect(comparisonLabel({ semantic: "VAT", semanticName: "Thuế GTGT", secondarySourceName: "Bảng kê bán hàng" }))
+      .not.toContain("3331");
+    expect(comparisonLabel({ semantic: "RECEIVABLE", semanticName: "Phải thu", secondarySourceName: "Bảng kê bán hàng" }))
+      .not.toContain("131");
+  });
+});

@@ -9,6 +9,16 @@ interface ResultTableProps {
   onOpenDetail: (group: MatchGroup) => void;
 }
 
+/** A semantic has meaning only together with its evaluated secondary source. */
+export function comparisonLabel(comparison: {
+  semantic: string;
+  semanticName: string;
+  secondarySourceName: string;
+}): string {
+  const label = comparison.semanticName?.trim() || comparison.semantic;
+  return `${label} ↔ ${comparison.secondarySourceName}`;
+}
+
 export function formatDetailReason(group: MatchGroup): string {
   const discrepancies = group.discrepancies || [];
   const comparisons = group.semanticComparisons || [];
@@ -22,15 +32,8 @@ export function formatDetailReason(group: MatchGroup): string {
 
   const uncheckedLabels: string[] = [];
   uncheckedComparisons.forEach((c) => {
-    if (c.semantic === "VAT" && !uncheckedLabels.includes("Thuế GTGT")) {
-      uncheckedLabels.push("Thuế GTGT");
-    } else if (c.semantic === "RECEIVABLE" && !uncheckedLabels.includes("Công nợ")) {
-      uncheckedLabels.push("Công nợ");
-    } else if (c.semantic === "BANK_PAYMENT" && !uncheckedLabels.includes("Dòng tiền")) {
-      uncheckedLabels.push("Dòng tiền");
-    } else if (c.semantic === "OTHER" && !uncheckedLabels.includes(c.semanticName)) {
-      uncheckedLabels.push(c.semanticName);
-    }
+    const label = comparisonLabel(c);
+    if (!uncheckedLabels.includes(label)) uncheckedLabels.push(label);
   });
 
   const uncheckedSuffix =
@@ -44,10 +47,9 @@ export function formatDetailReason(group: MatchGroup): string {
       discrepancies.some((d) => d.message.includes("không tìm thấy bản ghi"));
     
     if (isMissingInTarget) {
-      const missingAmount = group.amountVariance || group.revenueVariance || group.totalSourceAmount;
-      const secName = comparisons.find((c) => c.status === "UNMATCHED_MISSING_IN_TARGET")?.secondarySourceName || "TK511";
-      const targetLabel = secName.includes("511") ? "TK511" : secName;
-      const msg = `Thiếu ${targetLabel}: ${formatVND(missingAmount)}`;
+      const missing = comparisons.find((c) => c.status === "UNMATCHED_MISSING_IN_TARGET");
+      const missingAmount = missing?.expectedAmount || group.totalSourceAmount;
+      const msg = `Thiếu ${missing ? comparisonLabel(missing) : "nguồn đối chiếu"}: ${formatVND(missingAmount)}`;
       return uncheckedSuffix ? `${msg}; ${uncheckedSuffix}.` : `${msg}.`;
     }
 
@@ -60,10 +62,9 @@ export function formatDetailReason(group: MatchGroup): string {
 
   // 2. Unmatched Missing in Target
   if (group.status === "UNMATCHED_MISSING_IN_TARGET") {
-    const missingAmount = group.amountVariance || group.revenueVariance || group.totalSourceAmount;
-    const secName = comparisons.find((c) => c.status === "UNMATCHED_MISSING_IN_TARGET")?.secondarySourceName || "TK511";
-    const targetLabel = secName.includes("511") ? "TK511" : secName;
-    const msg = `Thiếu ${targetLabel}: ${formatVND(missingAmount)}`;
+    const missing = comparisons.find((c) => c.status === "UNMATCHED_MISSING_IN_TARGET");
+    const missingAmount = missing?.expectedAmount || group.totalSourceAmount;
+    const msg = `Thiếu ${missing ? comparisonLabel(missing) : "nguồn đối chiếu"}: ${formatVND(missingAmount)}`;
     return uncheckedSuffix ? `${msg}; ${uncheckedSuffix}.` : `${msg}.`;
   }
 
@@ -103,17 +104,7 @@ export function formatDetailReason(group: MatchGroup): string {
 
     const checkedSummary: string[] = [];
     checkedComparisons.forEach((c) => {
-      if (c.semantic === "REVENUE") {
-        checkedSummary.push("Doanh thu TK511 khớp");
-      } else if (c.semantic === "VAT") {
-        checkedSummary.push("Thuế GTGT khớp");
-      } else if (c.semantic === "RECEIVABLE") {
-        checkedSummary.push("Công nợ khớp");
-      } else if (c.semantic === "BANK_PAYMENT") {
-        checkedSummary.push("Dòng tiền khớp");
-      } else {
-        checkedSummary.push(`${c.semanticName} khớp`);
-      }
+      checkedSummary.push(`${comparisonLabel(c)} khớp`);
     });
 
     const prefix = checkedSummary.length > 0 ? checkedSummary.join(", ") : "Khớp";
@@ -210,11 +201,10 @@ export const ResultTable: React.FC<ResultTableProps> = ({
 
   const renderSemanticCell = (
     group: MatchGroup,
-    semantic: "REVENUE" | "VAT" | "RECEIVABLE",
-    missingLabel: string
+    semantic: "REVENUE" | "VAT" | "RECEIVABLE"
   ) => {
-    const comp = group.semanticComparisons?.find((c) => c.semantic === semantic);
-    if (!comp || comp.status === "NOT_CHECKED") {
+    const comparisons = group.semanticComparisons?.filter((c) => c.semantic === semantic && c.status !== "NOT_CHECKED") || [];
+    if (comparisons.length === 0) {
       return (
         <span style={{ color: "#94a3b8", fontSize: "0.75rem", fontStyle: "italic" }}>
           Chưa đối chiếu
@@ -222,23 +212,20 @@ export const ResultTable: React.FC<ResultTableProps> = ({
       );
     }
 
-    if (comp.status === "MATCHED_EXACT" || (isZeroMoney(comp.variance) && (comp.status === "MATCHED_WITH_TOLERANCE" || comp.status === "MATCHED_AGGREGATE"))) {
-      return <span style={{ color: "#16a34a", fontSize: "0.85rem", fontWeight: 600 }}>✓ Khớp</span>;
-    }
-
-    if (comp.status === "UNMATCHED_MISSING_IN_TARGET") {
-      return (
-        <span style={{ color: "#dc2626", fontWeight: 600, fontSize: "0.85rem" }}>
-          ✕ {missingLabel}: {formatVND(comp.expectedAmount || comp.variance)}
-        </span>
-      );
-    }
-
-    const isNeg = String(comp.variance).startsWith("-");
     return (
-      <span style={{ color: isNeg ? "#dc2626" : "#d97706", fontWeight: 600, fontSize: "0.85rem" }}>
-        {formatVND(comp.variance)}
-      </span>
+      <div style={{ display: "grid", gap: "0.25rem" }}>
+        {comparisons.map((comp, index) => {
+          const label = comparisonLabel(comp);
+          if (comp.status === "MATCHED_EXACT" || (isZeroMoney(comp.variance) && (comp.status === "MATCHED_WITH_TOLERANCE" || comp.status === "MATCHED_AGGREGATE"))) {
+            return <span key={`${comp.secondarySourceId}-${index}`} style={{ color: "#16a34a", fontSize: "0.78rem", fontWeight: 600 }}>✓ {label}</span>;
+          }
+          if (comp.status === "UNMATCHED_MISSING_IN_TARGET") {
+            return <span key={`${comp.secondarySourceId}-${index}`} style={{ color: "#dc2626", fontWeight: 600, fontSize: "0.78rem" }}>✕ {label}: {formatVND(comp.expectedAmount || comp.variance)}</span>;
+          }
+          const isNeg = String(comp.variance).startsWith("-");
+          return <span key={`${comp.secondarySourceId}-${index}`} style={{ color: isNeg ? "#dc2626" : "#d97706", fontWeight: 600, fontSize: "0.78rem" }}>{label}: {formatVND(comp.variance)}</span>;
+        })}
+      </div>
     );
   };
 
@@ -305,9 +292,9 @@ export const ResultTable: React.FC<ResultTableProps> = ({
               <th style={{ width: "135px" }}>Trạng thái</th>
               <th style={{ width: "150px" }}>Số CT / Ký hiệu</th>
               <th style={{ width: "100px" }}>Ngày</th>
-              <th style={{ width: "130px", textAlign: "right" }}>Doanh thu (511)</th>
-              <th style={{ width: "130px", textAlign: "right" }}>Thuế GTGT (3331)</th>
-              <th style={{ width: "130px", textAlign: "right" }}>Công nợ (131)</th>
+              <th style={{ width: "175px", textAlign: "right" }}>Doanh thu (theo nguồn)</th>
+              <th style={{ width: "175px", textAlign: "right" }}>Thuế GTGT (theo nguồn)</th>
+              <th style={{ width: "175px", textAlign: "right" }}>Phải thu (theo nguồn)</th>
               <th>Chi tiết & Lý do sai lệch</th>
               <th style={{ width: "70px", textAlign: "center" }}>Xem</th>
             </tr>
@@ -334,13 +321,13 @@ export const ResultTable: React.FC<ResultTableProps> = ({
                     </td>
                     <td>{g.date || "-"}</td>
                     <td className="cell-num" style={{ textAlign: "right" }}>
-                      {renderSemanticCell(g, "REVENUE", "Thiếu TK511")}
+                      {renderSemanticCell(g, "REVENUE")}
                     </td>
                     <td className="cell-num" style={{ textAlign: "right" }}>
-                      {renderSemanticCell(g, "VAT", "Thiếu TK3331")}
+                      {renderSemanticCell(g, "VAT")}
                     </td>
                     <td className="cell-num" style={{ textAlign: "right" }}>
-                      {renderSemanticCell(g, "RECEIVABLE", "Thiếu TK131")}
+                      {renderSemanticCell(g, "RECEIVABLE")}
                     </td>
                     <td className="cell-reason" title={reasonText}>
                       {reasonText}

@@ -65,3 +65,9 @@
 - Reference-master and sales-analysis sources can coexist with transaction sources in IPC; they remain typed controls and are not passed to the transactional matcher.
 - Aggregate subset search has a 12-candidate cap and exits after the second solution. Summary/export use gross discrepancy magnitude so semantic variances cannot cancel to a false zero.
 - Verification before handoff: workspace Rust tests passed (54 baseline regression + 9 V15 blocker + 4 V15 support); frontend tests 18/18, TypeScript typecheck, formatting, and strict clippy passed. `npx tauri build` produced fresh ignored NSIS/MSI artifacts locally.
+
+## V15 Semantic Closure — 2026-08-25
+- `SemanticFieldComparison` drives UI wording per evaluated source; Sales Register revenue/VAT/receivable controls are separate from TK511 controls.
+- Bank properties used for evidence are now typed on `CanonicalRecord`; audit evidence/review reason is retained in group discrepancies. Candidate policy remains deterministic.
+- Partner identity is a read-only cross-source control with MST first, partner code fallback, and no name-based auto-merge.
+- Aggregate matching never accepts a truncated candidate set. Under budget it searches bounded aggregate candidates; over budget it returns `COMPLEXITY_LIMIT`; when disabled it scans only 1:1 candidates.

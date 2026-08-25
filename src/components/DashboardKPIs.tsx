@@ -120,7 +120,7 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
         <div className="variance-badges-container" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
 
           {showRevenueVariance ? (
-            <div className="net-variance-badge" title="Chênh lệch Doanh thu (Pretax ↔ TK 511)">
+            <div className="net-variance-badge" title="Chênh lệch doanh thu trên các control đã chạy">
               <span className="var-label">Lệch Doanh thu:</span>
               <span
                 className={`var-value ${
@@ -134,7 +134,7 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
 
           {vatChecked ? (
             showVatVariance ? (
-              <div className="net-variance-badge" title="Chênh lệch Thuế GTGT (VAT ↔ TK 3331)">
+              <div className="net-variance-badge" title="Chênh lệch thuế GTGT trên các control đã chạy">
                 <span className="var-label">Lệch Thuế GTGT:</span>
                 <span
                   className={`var-value ${
@@ -154,7 +154,7 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
 
           {receivableChecked ? (
             showReceivableVariance ? (
-              <div className="net-variance-badge" title="Chênh lệch Công nợ (Total ↔ TK 131)">
+              <div className="net-variance-badge" title="Chênh lệch phải thu trên các control đã chạy">
                 <span className="var-label">Lệch Công nợ:</span>
                 <span
                   className={`var-value ${

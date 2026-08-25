@@ -59,6 +59,11 @@ Reconciliation Core (crates/reconciliation-core/)
 - Transactional and typed reference controls can run together through IPC. The new tri-source UI scenario covers invoice, sales register, and TK511.
 - Aggregate search is capped at 12 candidates and stops after the second valid subset; gross discrepancy reporting cannot net different semantics to zero.
 
+## V15 Semantic Closure (2026-08-25)
+- Result presentation is source-aware: semantic labels include their actual secondary source and no longer imply fixed ledger accounts.
+- Canonical bank fields and a read-only cross-source partner identity control are additive; they preserve source provenance and never auto-merge by fuzzy name.
+- Aggregate controls are fail-closed over the candidate budget; aggregate-disabled paths scan all 1:1 candidates without subset enumeration.
+
 ## Latest Verification (2026-08-25)
 - GNU workspace test suite completed successfully after the v14 intake and packaging changes.
 - Frontend Vitest suite completed successfully.

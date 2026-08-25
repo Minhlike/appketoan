@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use reconciliation_core::{
-    evaluate_partner_master_control, evaluate_sales_analysis_control, execute_reconciliation,
-    execute_reference_controls, invoice_lifecycle_for_record, CanonicalRecord, ColumnMapping,
-    ComparisonRule, ComparisonSemantic, DataSource, DataSourceKind, InvoiceLifecycle, MatchStatus,
-    PartnerRecord, ReconciliationSession, SalesAnalysisRecord, SourceRole,
+    evaluate_partner_identity_cross_source, evaluate_partner_master_control,
+    evaluate_sales_analysis_control, execute_reconciliation, execute_reference_controls,
+    invoice_lifecycle_for_record, CanonicalRecord, ColumnMapping, ComparisonRule,
+    ComparisonSemantic, DataSource, DataSourceKind, InvoiceLifecycle, MatchStatus, PartnerRecord,
+    ReconciliationSession, SalesAnalysisRecord, SourceRole,
 };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -274,6 +275,52 @@ fn opposite_semantic_variances_are_reported_as_gross_discrepancy() {
 }
 
 #[test]
+fn aggregate_over_budget_fails_closed_instead_of_truncating_candidates() {
+    let invoice = source("primary", DataSourceKind::EInvoice, SourceRole::Primary);
+    let ledger = source(
+        "ledger",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+    );
+    let mut primary = record("invoice", "primary", Some("aggregate"));
+    primary.pretax_amount = Some(dec!(100));
+    let mut candidates = Vec::new();
+    for index in 0..13 {
+        let mut candidate = record(&format!("ledger_{index}"), "ledger", Some("aggregate"));
+        candidate.credit_amount = Some(if index == 0 || index == 12 {
+            dec!(100)
+        } else {
+            dec!(1000)
+        });
+        candidates.push(candidate);
+    }
+    let result = execute_reconciliation(
+        &session(
+            vec![invoice, ledger],
+            vec![rule(
+                "revenue",
+                ComparisonSemantic::Revenue,
+                DataSourceKind::EInvoice,
+                DataSourceKind::Ledger511,
+                "pretaxAmount",
+                "creditAmount",
+            )],
+            true,
+        ),
+        &HashMap::from([
+            ("primary".to_string(), vec![primary]),
+            ("ledger".to_string(), candidates),
+        ]),
+    )
+    .expect("execution");
+    assert_eq!(result.groups[0].status, MatchStatus::NeedsReview);
+    assert!(result.groups[0]
+        .discrepancies
+        .iter()
+        .any(|discrepancy| discrepancy.message.contains("COMPLEXITY_LIMIT")));
+}
+
+#[test]
 fn sales_register_requires_revenue_vat_and_receivable_to_pass() {
     let invoice = source("primary", DataSourceKind::EInvoice, SourceRole::Primary);
     let register = source(
@@ -426,6 +473,33 @@ fn partner_master_runs_as_one_source_typed_control() {
         result.reference_controls[0].status,
         MatchStatus::MatchedExact
     );
+}
+
+#[test]
+fn partner_identity_uses_mst_then_code_without_mutating_transactions() {
+    let master = PartnerRecord {
+        id: "partner_0502".to_string(),
+        source_id: "master".to_string(),
+        source_row: 2,
+        partner_code: Some("0502".to_string()),
+        partner_name: Some("Synthetic".to_string()),
+        partner_tax_id: Some("0100000000".to_string()),
+        address: None,
+        is_customer: Some(true),
+        is_supplier: Some(false),
+        status: None,
+        raw_fields: HashMap::new(),
+    };
+    let mut invoice = record("invoice", "invoice", Some("partner"));
+    invoice.partner_code = Some("0502".to_string());
+    let before = invoice.clone();
+    let control = evaluate_partner_identity_cross_source(
+        "master".to_string(),
+        &[master],
+        std::iter::once(&invoice),
+    );
+    assert_eq!(control.status, MatchStatus::MatchedExact);
+    assert_eq!(invoice, before);
 }
 
 #[test]

@@ -64,8 +64,16 @@ pub fn select_bank_candidate(
         .filter(|candidate| {
             directions_are_compatible(primary, primary_kind, candidate, secondary_kind)
                 && same_day_or_within(
-                    primary.date.as_deref(),
-                    candidate.date.as_deref(),
+                    primary
+                        .accounting_date
+                        .as_deref()
+                        .or(primary.transaction_date.as_deref())
+                        .or(primary.date.as_deref()),
+                    candidate
+                        .accounting_date
+                        .as_deref()
+                        .or(candidate.transaction_date.as_deref())
+                        .or(candidate.date.as_deref()),
                     date_tolerance_days,
                 )
                 && extract_rule_amount(candidate, &rule.secondary_field)
@@ -85,14 +93,16 @@ pub fn select_bank_candidate(
         };
     }
 
-    let primary_reference = normalized_text(primary.voucher_no.as_deref())
+    let primary_reference = normalized_text(primary.transaction_number.as_deref())
+        .or_else(|| normalized_text(primary.voucher_no.as_deref()))
         .or_else(|| normalized_text(primary.doc_no.as_deref()));
     if !primary_reference.is_empty() {
         let reference_matches: Vec<&CanonicalRecord> = compatible
             .iter()
             .copied()
             .filter(|candidate| {
-                primary_reference == normalized_text(candidate.voucher_no.as_deref())
+                primary_reference == normalized_text(candidate.transaction_number.as_deref())
+                    || primary_reference == normalized_text(candidate.voucher_no.as_deref())
                     || primary_reference == normalized_text(candidate.doc_no.as_deref())
             })
             .collect();
@@ -104,19 +114,41 @@ pub fn select_bank_candidate(
         }
     }
 
-    let primary_counterparty = normalized_text(primary.partner_name.as_deref());
+    let primary_counterparty = normalized_text(primary.counterparty_account.as_deref())
+        .or_else(|| normalized_text(primary.counterparty_name.as_deref()))
+        .or_else(|| normalized_text(primary.partner_name.as_deref()));
     if !primary_counterparty.is_empty() {
         let partner_matches: Vec<&CanonicalRecord> = compatible
             .iter()
             .copied()
             .filter(|candidate| {
-                primary_counterparty == normalized_text(candidate.partner_name.as_deref())
+                primary_counterparty == normalized_text(candidate.counterparty_account.as_deref())
+                    || primary_counterparty
+                        == normalized_text(candidate.counterparty_name.as_deref())
+                    || primary_counterparty == normalized_text(candidate.partner_name.as_deref())
             })
             .collect();
         if partner_matches.len() == 1 {
             return BankCandidateDecision::Accepted {
                 record_id: partner_matches[0].id.clone(),
                 evidence: "UNIQUE_COUNTERPARTY",
+            };
+        }
+    }
+
+    let primary_description = normalized_text(primary.description.as_deref());
+    if !primary_description.is_empty() {
+        let description_matches: Vec<&CanonicalRecord> = compatible
+            .iter()
+            .copied()
+            .filter(|candidate| {
+                primary_description == normalized_text(candidate.description.as_deref())
+            })
+            .collect();
+        if description_matches.len() == 1 {
+            return BankCandidateDecision::Accepted {
+                record_id: description_matches[0].id.clone(),
+                evidence: "UNIQUE_EXACT_DESCRIPTION",
             };
         }
     }

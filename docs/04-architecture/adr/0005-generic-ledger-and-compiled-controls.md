@@ -21,11 +21,13 @@ for every semantic control. A source may participate in several semantics.
 - Store control evidence per semantic comparison. Group-level target IDs are
   de-duplicated only for navigation and candidate consumption.
 - Bank matching uses a separate deterministic candidate policy: direction,
-  rule amount, date, then unique reference or counterparty evidence. It never
+  rule amount, typed bank date, then unique reference, counterparty, or exact
+  description evidence. It never
   requires an invoice number or tax code and never uses fuzzy scoring.
 - Aggregate subset evaluation is capped at twelve candidates and stops after
-  the second valid subset, returning an ambiguous/review result rather than
-  spending unbounded CPU.
+  the second valid subset. A candidate set over the cap returns
+  `COMPLEXITY_LIMIT` review; it is never truncated then accepted. With aggregate
+  disabled, all candidates are scanned only for 1:1 exact ambiguity.
 - Summary/export discrepancy magnitude is gross absolute discrepancy; opposite
   semantic variances must never net to a false zero.
 
