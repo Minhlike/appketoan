@@ -78,4 +78,4 @@
 - Cross-source partner identity is restricted to explicitly compatible invoice, sales-register, and ledger kinds. Reference controls no longer determine the transactional primary after typed datasets are split.
 - Aggregate matching first checks the full O(n) direct candidate set; subset search starts only when no direct match exists and fails closed above the budget.
 - `local_real_acceptance_test` is ignored by default and reads only the local ignored dataset directory. It reports sanitized aggregates, confirms the tri-source review condition, and does not persist workbook values. A running balance equation is reported as unavailable rather than inferred when the normalized data lacks balance values.
-- Final workspace/build/smoke verification completed successfully, including a five-second release executable smoke launch. The V15.4 commit is ready to push to the feature branch; do not merge PR #1.
+- Final workspace/build/smoke verification completed successfully, including a five-second release executable smoke launch. The V15.4 commit was pushed to the feature branch; do not merge PR #1.
