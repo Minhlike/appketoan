@@ -101,6 +101,38 @@ fn detects_v15_source_types_and_adaptive_legacy_header() {
 }
 
 #[test]
+fn bank_correspondent_aliases_map_to_typed_counterparty_fields() {
+    let rows = vec![vec![
+        "Accounting date".into(),
+        "Correspondent account".into(),
+        "Correspondent name".into(),
+        "Transaction number".into(),
+        "Credit".into(),
+    ]];
+    let (_, _, _, mapping, _, _) = detect_header_and_mapping(&rows);
+    assert_eq!(
+        mapping.counterparty_account_column.as_deref(),
+        Some("Correspondent account")
+    );
+    assert_eq!(
+        mapping.counterparty_name_column.as_deref(),
+        Some("Correspondent name")
+    );
+}
+
+#[test]
+fn vietnamese_balance_header_is_mapped_for_balance_equation_checks() {
+    let rows = vec![vec![
+        "Ngày hạch toán".into(),
+        "Số dư".into(),
+        "Phát sinh nợ".into(),
+        "Phát sinh có".into(),
+    ]];
+    let (_, _, _, mapping, _, _) = detect_header_and_mapping(&rows);
+    assert_eq!(mapping.balance_column.as_deref(), Some("Số dư"));
+}
+
+#[test]
 fn preserves_invoice_lifecycle_provenance_and_sales_register_amounts() {
     let rows = vec![
         vec![

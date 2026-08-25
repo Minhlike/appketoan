@@ -605,6 +605,16 @@ pub fn execute_reconciliation(
                         });
                         vec![]
                     }
+                    crate::matcher::BankCandidateDecision::Suggested { record_id, reason } => {
+                        group_discrepancies.push(FieldDiscrepancy {
+                            field_name: "reviewReason".to_string(),
+                            source_value: Some(reason.to_string()),
+                            target_value: Some(record_id),
+                            amount_diff: None,
+                            message: format!("BANK_REVIEW_REASON: {reason}"),
+                        });
+                        vec![]
+                    }
                 }
             } else if !primary_series.is_empty() {
                 if let Some(list) = sec_idx
@@ -733,13 +743,34 @@ pub fn execute_reconciliation(
                 .map(|res| res.as_ref().copied().unwrap_or(Decimal::ZERO))
                 .collect();
 
+            // Always scan the complete candidate set for deterministic 1:1
+            // evidence before considering aggregate complexity. This is O(n)
+            // and prevents a large set with one clear direct match from being
+            // rejected, while duplicate direct matches remain ambiguous.
+            let direct_matches: Vec<Vec<usize>> = cand_amount_results
+                .iter()
+                .enumerate()
+                .filter_map(|(index, amount)| {
+                    amount
+                        .as_ref()
+                        .ok()
+                        .filter(|amount| (**amount - pri_comp).abs() <= rule_tolerance_vnd)
+                        .map(|_| vec![index])
+                })
+                .collect();
             let mut matching_subsets: Vec<Vec<usize>> = Vec::new();
             // Aggregate matching is an explicitly bounded slow path.  At most
             // 12 candidates are explored (4,095 non-empty subsets); a second
             // valid result is already enough to classify it as ambiguous.
             const MAX_AGGREGATE_CANDIDATES: usize = 12;
-            let aggregate_complexity_limited =
-                allow_aggregate && available.len() > MAX_AGGREGATE_CANDIDATES;
+            let aggregate_complexity_limited = allow_aggregate
+                && direct_matches.len() != 1
+                && available.len() > MAX_AGGREGATE_CANDIDATES;
+            // A bounded scan also proves that a seemingly unique direct match
+            // has no competing aggregate solution. Without that proof, a
+            // direct candidate such as 100 can still be ambiguous with 40+60.
+            // Above the budget a direct 1:1 result is already complete O(n)
+            // evidence and is never rejected merely for candidate volume.
             let subset_n = if allow_aggregate && !aggregate_complexity_limited {
                 available.len()
             } else {
@@ -795,21 +826,11 @@ pub fn execute_reconciliation(
                 }
             }
 
-            // With aggregate disabled we still scan every 1:1 candidate. This
-            // detects duplicate exact candidates as ambiguous without ever
-            // enumerating multi-record subsets.
-            if !allow_aggregate {
-                matching_subsets = cand_amount_results
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, amount)| {
-                        amount
-                            .as_ref()
-                            .ok()
-                            .filter(|amount| (**amount - pri_comp).abs() <= rule_tolerance_vnd)
-                            .map(|_| vec![index])
-                    })
-                    .collect();
+            // With aggregate disabled we use the O(n) direct scan. With it
+            // enabled, the bounded scan above can downgrade a direct hit only
+            // when an alternative valid aggregate proves ambiguity.
+            if !allow_aggregate && !direct_matches.is_empty() {
+                matching_subsets = direct_matches;
             }
 
             if aggregate_complexity_limited {

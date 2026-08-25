@@ -70,3 +70,10 @@ Reconciliation Core (crates/reconciliation-core/)
 - Repository source changes were committed as `b2e8658`.
 - Root `Cargo.lock` is tracked to make the Rust dependency graph reproducible for repository handoff.
 - The `main` branch has been published to the configured GitHub `origin`.
+
+## V15.4 Final Acceptance In Progress (2026-08-25)
+- The feature branch remains unmerged. Bank candidate policy now requires unique strong evidence for acceptance; a unique direction/amount/date candidate is review-only and remains unconsumed.
+- Transactional execution derives its primary only after typed reference controls are removed. Partner identity evaluates declared transactional kinds only.
+- Direct 1:1 candidates are scanned across the full set before aggregate subset search. Aggregate search remains fail-closed above its candidate budget.
+- The local acceptance harness is ignored, path-based, and does not retain workbook content. It completed against the required local workbook set; running-balance validation is unavailable when normalized balance values are absent.
+- Final V15.4 workspace checks, frontend checks, formatting, strict Clippy, Tauri build, and release executable smoke all completed. The branch is ready for source/diff review only and remains unmerged.

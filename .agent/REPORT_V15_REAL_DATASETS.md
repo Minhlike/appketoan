@@ -52,3 +52,18 @@
 ## Local RC
 
 - Release artifacts were built locally and deliberately remain ignored.
+
+## V15.4 Final Acceptance (2026-08-25)
+
+This section supersedes earlier release-gate assertions where it differs. The
+local harness reads the seven ignored workbooks directly and prints only
+sanitized runtime aggregates; workbook contents and financial amounts are not
+persisted in agent memory.
+
+- Baseline control: PASS; the established Invoice/TK511 acceptance shape was reproduced.
+- TK112/bank: the bank reader parsed records and the ledger reader produced transactional records. Amount/direction/date-only candidates were reported as suggestions and were not consumed; the run produced no strong-evidence auto-accepts.
+- TK112 balance equation: NOT_VERIFIED. The local ledger workbook did not expose two or more normalized running-balance values, so no equation is inferred.
+- Tri-source control document: `NEEDS_REVIEW` (high priority) when the ledger evidence is absent.
+- Partner identity and sales-analysis layer controls both completed locally; the analytical report selected one verified layer and did not double-count group plus detail rows.
+- Benchmark coverage: PASS for 100k one-semantic, three-semantic, and four-control tri-source synthetic runs. Elapsed values are terminal-only runtime evidence, not persisted here.
+- Native ingestion: path-first is used whenever the Tauri source path exists; byte ingestion remains only for explicitly supplied IPC bytes and is not represented as an optimization.

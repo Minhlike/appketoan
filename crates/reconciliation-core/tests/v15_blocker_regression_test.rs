@@ -9,6 +9,7 @@ use reconciliation_core::{
 };
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::collections::HashSet;
 
 fn source(id: &str, kind: DataSourceKind, role: SourceRole) -> DataSource {
     DataSource {
@@ -220,6 +221,72 @@ fn bank_statement_without_document_or_tax_id_matches_only_with_deterministic_evi
 }
 
 #[test]
+fn bank_coincidental_direction_amount_and_date_is_suggested_not_consumed() {
+    let ledger = source("primary", DataSourceKind::Ledger112, SourceRole::Primary);
+    let bank = source(
+        "bank",
+        DataSourceKind::BankStatement,
+        SourceRole::RequiredSecondary,
+    );
+    let payment_rule = rule(
+        "bank",
+        ComparisonSemantic::BankPayment,
+        DataSourceKind::Ledger112,
+        DataSourceKind::BankStatement,
+        "directionalAmount",
+        "directionalAmount",
+    );
+    let mut ledger_record = record("ledger", "primary", None);
+    ledger_record.partner_tax_id = None;
+    ledger_record.debit_amount = Some(dec!(100));
+    let mut bank_record = record("bank", "bank", None);
+    bank_record.partner_tax_id = None;
+    bank_record.credit_amount = Some(dec!(100));
+    let result = execute_reconciliation(
+        &session(vec![ledger, bank], vec![payment_rule], false),
+        &HashMap::from([
+            ("primary".to_string(), vec![ledger_record]),
+            ("bank".to_string(), vec![bank_record]),
+        ]),
+    )
+    .expect("execution");
+    let group = &result.groups[0];
+    assert_eq!(group.status, MatchStatus::NeedsReview);
+    assert!(group.discrepancies.iter().any(|discrepancy| {
+        discrepancy
+            .message
+            .contains("SUGGESTED_DIRECTION_AMOUNT_DATE")
+    }));
+}
+
+#[test]
+fn reference_master_loaded_first_does_not_become_transactional_primary() {
+    let sources = vec![
+        source("master", DataSourceKind::PartnerMaster, SourceRole::Primary),
+        source(
+            "invoice",
+            DataSourceKind::EInvoice,
+            SourceRole::RequiredSecondary,
+        ),
+        source(
+            "register",
+            DataSourceKind::SalesRegister,
+            SourceRole::RequiredSecondary,
+        ),
+    ];
+    let mut mixed = session(sources, vec![], false);
+    mixed.primary_source_id = Some("master".to_string());
+    mixed.expected_primary_kind = Some(DataSourceKind::PartnerMaster);
+    let transactional_ids = HashSet::from(["invoice", "register"]);
+
+    let transactional = reconciliation_core::transactional_session_from(&mixed, &transactional_ids);
+
+    assert_eq!(transactional.primary_source_id.as_deref(), Some("invoice"));
+    assert_eq!(transactional.expected_primary_kind, None);
+    assert_eq!(transactional.data_sources.len(), 2);
+}
+
+#[test]
 fn opposite_semantic_variances_are_reported_as_gross_discrepancy() {
     let invoice = source("primary", DataSourceKind::EInvoice, SourceRole::Primary);
     let register = source(
@@ -318,6 +385,44 @@ fn aggregate_over_budget_fails_closed_instead_of_truncating_candidates() {
         .discrepancies
         .iter()
         .any(|discrepancy| discrepancy.message.contains("COMPLEXITY_LIMIT")));
+}
+
+#[test]
+fn aggregate_over_budget_keeps_a_unique_direct_match() {
+    let invoice = source("primary", DataSourceKind::EInvoice, SourceRole::Primary);
+    let ledger = source(
+        "ledger",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+    );
+    let mut primary = record("invoice", "primary", Some("direct"));
+    primary.pretax_amount = Some(dec!(100));
+    let mut candidates = Vec::new();
+    for index in 0..13 {
+        let mut candidate = record(&format!("ledger_{index}"), "ledger", Some("direct"));
+        candidate.credit_amount = Some(if index == 0 { dec!(100) } else { dec!(1000) });
+        candidates.push(candidate);
+    }
+    let result = execute_reconciliation(
+        &session(
+            vec![invoice, ledger],
+            vec![rule(
+                "revenue",
+                ComparisonSemantic::Revenue,
+                DataSourceKind::EInvoice,
+                DataSourceKind::Ledger511,
+                "pretaxAmount",
+                "creditAmount",
+            )],
+            true,
+        ),
+        &HashMap::from([
+            ("primary".to_string(), vec![primary]),
+            ("ledger".to_string(), candidates),
+        ]),
+    )
+    .expect("execution");
+    assert_eq!(result.groups[0].status, MatchStatus::MatchedExact);
 }
 
 #[test]

@@ -282,14 +282,16 @@ const TRANSACTION_DATE_KEYWORDS: &[&str] =
 const COUNTERPARTY_ACCOUNT_KEYWORDS: &[&str] = &[
     "so tai khoan doi ung",
     "corresponsive account",
+    "correspondent account",
     "counterparty account",
 ];
 const COUNTERPARTY_NAME_KEYWORDS: &[&str] = &[
     "ten tai khoan doi ung",
     "corresponsive name",
+    "correspondent name",
     "counterparty name",
 ];
-const BALANCE_KEYWORDS: &[&str] = &["so du tk", "account balance", "balance"];
+const BALANCE_KEYWORDS: &[&str] = &["so du tk", "so du", "account balance", "balance"];
 const PRODUCT_CODE_KEYWORDS: &[&str] = &["mat hang", "ma hang", "product code"];
 const PRODUCT_NAME_KEYWORDS: &[&str] = &["ten mat hang", "product name"];
 const QUANTITY_KEYWORDS: &[&str] = &["so luong", "quantity"];

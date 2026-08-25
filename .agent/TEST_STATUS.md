@@ -74,3 +74,10 @@
 - `cargo test -p reconciliation-core --test reconciliation_correctness_regression_test`: SUCCESS; 54/54 baseline regressions passed after aggregate-policy changes.
 - `cargo test -p reconciliation-core --test v15_blocker_regression_test`: SUCCESS; 11/11 blocker regressions passed.
 - `npm run test`: SUCCESS; 19/19 passed. `npm run typecheck`, formatting, and strict workspace Clippy: SUCCESS.
+
+### 10. V15.4 Final Acceptance (2026-08-25)
+- Local confidential-workbook harness: SUCCESS. It read the required ignored workbook set directly using `APPKETOAN_LOCAL_TESTDATA` and emitted only sanitized aggregate runtime metrics.
+- `cargo test -p reconciliation-core --test performance_benchmark_test -- --nocapture`: SUCCESS; one-, three-, and four-control 100k workloads completed with exact match counts.
+- `cargo test --workspace`: SUCCESS; all baseline regression, V15 blocker, support, end-to-end, golden, IPC, and performance targets passed. The confidential local harness remains ignored by default and was run explicitly.
+- `npm run test`: SUCCESS (19 tests). `npm run typecheck`, `cargo fmt --all -- --check`, and `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh ignored Windows installer artifacts were generated. The fresh release executable passed a five-second hidden smoke launch.

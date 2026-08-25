@@ -58,6 +58,53 @@ pub struct IntakeAnalysisResult {
     pub requires_user_confirmation: bool,
 }
 
+/// Removes typed reference-control sources before transactional reconciliation
+/// and re-resolves a primary from the remaining physical datasets. This keeps
+/// a partner master loaded first from becoming the transactional primary.
+pub fn transactional_session_from(
+    session: &ReconciliationSession,
+    transactional_source_ids: &HashSet<&str>,
+) -> ReconciliationSession {
+    let mut transactional_session = session.clone();
+    transactional_session
+        .data_sources
+        .retain(|source| transactional_source_ids.contains(source.id.as_str()));
+    transactional_session.primary_source_id = transactional_session
+        .data_sources
+        .iter()
+        .find(|source| source.role == SourceRole::Primary)
+        .or_else(|| {
+            transactional_session
+                .data_sources
+                .iter()
+                .find(|source| source.kind == DataSourceKind::EInvoice)
+        })
+        .or_else(|| transactional_session.data_sources.first())
+        .map(|source| source.id.clone());
+    if transactional_session
+        .expected_primary_kind
+        .as_ref()
+        .is_some_and(|kind| {
+            *kind == DataSourceKind::PartnerMaster || *kind == DataSourceKind::SalesAnalysisReport
+        })
+    {
+        transactional_session.expected_primary_kind = None;
+    }
+    transactional_session.required_source_ids = session.required_source_ids.as_ref().map(|ids| {
+        ids.iter()
+            .filter(|id| transactional_source_ids.contains(id.as_str()))
+            .cloned()
+            .collect()
+    });
+    transactional_session.optional_source_ids = session.optional_source_ids.as_ref().map(|ids| {
+        ids.iter()
+            .filter(|id| transactional_source_ids.contains(id.as_str()))
+            .cloned()
+            .collect()
+    });
+    transactional_session
+}
+
 /// Computes a stable canonical fingerprint for an individual accounting record
 pub fn compute_record_fingerprint(r: &CanonicalRecord, kind: &DataSourceKind) -> String {
     let mut hasher = Sha256::new();

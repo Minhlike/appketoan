@@ -39,3 +39,7 @@
 ## Decision 008: Source-Aware Presentation and Fail-Closed Aggregate Budget
 - **Decision**: `SemanticFieldComparison` is the presentation/export source of truth; labels always include its actual secondary source. Bank mappings are typed on canonical records. Aggregate matching either searches the full bounded candidate set or emits `COMPLEXITY_LIMIT`; disabled aggregate runs only full 1:1 scans.
 - **Rationale**: A semantic label alone cannot identify a control in a multi-source audit, and truncating candidates before acceptance can create false matches.
+
+## Decision 009: Evidence-Gated Bank Matching and Transactional Primary Derivation
+- **Decision**: A bank candidate is accepted only with unique strong evidence after direction/amount/date compatibility. A unique compatible amount/date candidate is a non-consuming review suggestion. Before matching, remove typed reference controls and resolve the primary from remaining transactional sources, preferring an explicit transactional primary then E-Invoice.
+- **Rationale**: Coincidental cash movements must not be consumed as accounting evidence, and source load order must not turn reference data into a transactional primary.

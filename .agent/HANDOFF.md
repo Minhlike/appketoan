@@ -71,3 +71,11 @@
 - Bank properties used for evidence are now typed on `CanonicalRecord`; audit evidence/review reason is retained in group discrepancies. Candidate policy remains deterministic.
 - Partner identity is a read-only cross-source control with MST first, partner code fallback, and no name-based auto-merge.
 - Aggregate matching never accepts a truncated candidate set. Under budget it searches bounded aggregate candidates; over budget it returns `COMPLEXITY_LIMIT`; when disabled it scans only 1:1 candidates.
+
+## V15.4 Final Acceptance (2026-08-25)
+- Bank auto-pass is evidence-gated: unique reference/transaction identity or unique strong counterparty evidence may be accepted; direction/amount/date alone is a non-consuming `SUGGESTED_DIRECTION_AMOUNT_DATE` review result. Opposite-direction amount/date candidates return a directional conflict.
+- The header detector recognizes both historical `corresponsive` aliases and standard `correspondent account/name` aliases. A generic Vietnamese balance header is also mapped when present.
+- Cross-source partner identity is restricted to explicitly compatible invoice, sales-register, and ledger kinds. Reference controls no longer determine the transactional primary after typed datasets are split.
+- Aggregate matching first checks the full O(n) direct candidate set; subset search starts only when no direct match exists and fails closed above the budget.
+- `local_real_acceptance_test` is ignored by default and reads only the local ignored dataset directory. It reports sanitized aggregates, confirms the tri-source review condition, and does not persist workbook values. A running balance equation is reported as unavailable rather than inferred when the normalized data lacks balance values.
+- Final workspace/build/smoke verification completed successfully, including a five-second release executable smoke launch. The V15.4 commit is ready to push to the feature branch; do not merge PR #1.

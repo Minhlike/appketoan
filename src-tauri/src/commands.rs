@@ -154,13 +154,33 @@ pub fn cmd_run_reconciliation(
     // or rewrite canonical transaction records and therefore preserves source
     // provenance while allowing master + transaction audit sessions.
     if !source_records_map.is_empty() {
+        let partner_identity_source_ids: std::collections::HashSet<&str> = session
+            .data_sources
+            .iter()
+            .filter(|source| {
+                matches!(
+                    source.kind,
+                    DataSourceKind::EInvoice
+                        | DataSourceKind::SalesRegister
+                        | DataSourceKind::Ledger511
+                        | DataSourceKind::Ledger112
+                        | DataSourceKind::Ledger131
+                        | DataSourceKind::Ledger133
+                        | DataSourceKind::Ledger3331
+                )
+            })
+            .map(|source| source.id.as_str())
+            .collect();
         for (master_source_id, masters) in &partner_masters {
             reference_controls.push(reconciliation_core::evaluate_partner_identity_cross_source(
                 master_source_id.clone(),
                 masters,
                 source_records_map
-                    .values()
-                    .flat_map(|records| records.iter()),
+                    .iter()
+                    .filter(|(source_id, _)| {
+                        partner_identity_source_ids.contains(source_id.as_str())
+                    })
+                    .flat_map(|(_, records)| records.iter()),
             ));
         }
     }
@@ -174,22 +194,8 @@ pub fn cmd_run_reconciliation(
     // injected into the transaction matcher as empty pseudo-datasets.
     let transactional_source_ids: std::collections::HashSet<&str> =
         source_records_map.keys().map(String::as_str).collect();
-    let mut transactional_session = session.clone();
-    transactional_session
-        .data_sources
-        .retain(|source| transactional_source_ids.contains(source.id.as_str()));
-    transactional_session.required_source_ids = session.required_source_ids.as_ref().map(|ids| {
-        ids.iter()
-            .filter(|id| transactional_source_ids.contains(id.as_str()))
-            .cloned()
-            .collect()
-    });
-    transactional_session.optional_source_ids = session.optional_source_ids.as_ref().map(|ids| {
-        ids.iter()
-            .filter(|id| transactional_source_ids.contains(id.as_str()))
-            .cloned()
-            .collect()
-    });
+    let transactional_session =
+        reconciliation_core::transactional_session_from(&session, &transactional_source_ids);
 
     // 1. Pass through intake dedup & dataset identity gate
     let (filtered_session, filtered_records_map, intake_analysis) =

@@ -36,4 +36,4 @@ FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V15 semantic closure is implemented on `feature/v15-real-accounting-datasets` and is awaiting source/diff review. The branch must not be merged to `main`; local acceptance workbooks remain untracked and ignored. Native-path UI ingestion and a workbook-backed cross-source partner fixture remain review items.
+V15.4 final release acceptance is complete on `feature/v15-real-accounting-datasets`. Do not merge PR #1. The branch is awaiting ChatGPT source/diff review; local acceptance workbooks remain untracked and ignored.

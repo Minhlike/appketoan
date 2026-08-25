@@ -15,6 +15,10 @@ pub enum BankCandidateDecision {
     NeedsReview {
         reason: &'static str,
     },
+    Suggested {
+        record_id: String,
+        reason: &'static str,
+    },
 }
 
 fn normalized_text(value: Option<&str>) -> String {
@@ -82,17 +86,32 @@ pub fn select_bank_candidate(
         .collect();
 
     if compatible.is_empty() {
+        let has_direction_conflict = candidates.iter().copied().any(|candidate| {
+            !directions_are_compatible(primary, primary_kind, candidate, secondary_kind)
+                && same_day_or_within(
+                    primary
+                        .accounting_date
+                        .as_deref()
+                        .or(primary.transaction_date.as_deref())
+                        .or(primary.date.as_deref()),
+                    candidate
+                        .accounting_date
+                        .as_deref()
+                        .or(candidate.transaction_date.as_deref())
+                        .or(candidate.date.as_deref()),
+                    date_tolerance_days,
+                )
+                && extract_rule_amount(candidate, &rule.secondary_field)
+                    .is_ok_and(|amount| (amount - primary_amount).abs() <= amount_tolerance)
+        });
         return BankCandidateDecision::NeedsReview {
-            reason: "NO_DIRECTION_AMOUNT_DATE_CANDIDATE",
+            reason: if has_direction_conflict {
+                "DIRECTION_CONFLICT"
+            } else {
+                "INSUFFICIENT_BANK_EVIDENCE"
+            },
         };
     }
-    if compatible.len() == 1 {
-        return BankCandidateDecision::Accepted {
-            record_id: compatible[0].id.clone(),
-            evidence: "UNIQUE_DIRECTION_AMOUNT_DATE",
-        };
-    }
-
     let primary_reference = normalized_text(primary.transaction_number.as_deref())
         .or_else(|| normalized_text(primary.voucher_no.as_deref()))
         .or_else(|| normalized_text(primary.doc_no.as_deref()));
@@ -151,6 +170,13 @@ pub fn select_bank_candidate(
                 evidence: "UNIQUE_EXACT_DESCRIPTION",
             };
         }
+    }
+
+    if compatible.len() == 1 {
+        return BankCandidateDecision::Suggested {
+            record_id: compatible[0].id.clone(),
+            reason: "SUGGESTED_DIRECTION_AMOUNT_DATE",
+        };
     }
 
     BankCandidateDecision::NeedsReview {
