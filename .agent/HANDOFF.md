@@ -40,3 +40,8 @@
 - Committed inherited v14 source, test, handoff, and GNU WebView2 patch changes: `b2e8658` (`fix(v14): harden multi-source intake and GNU packaging`).
 - The generated portable distribution is intentionally ignored and was not committed.
 - No release build or portable smoke test was run in this continuation; those require their corresponding release gate when a release is requested.
+
+## Repository Publication Verification — 2026-08-25
+- Root `Cargo.lock` is intentionally tracked for reproducible Rust workspace resolution; nested and generated lockfiles remain ignored.
+- The full pre-push gate completed successfully: Rust workspace tests, frontend tests, TypeScript typecheck, Rust formatting, and Clippy with warnings denied.
+- No product behavior was changed during this repository-publication task.

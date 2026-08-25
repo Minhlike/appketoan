@@ -45,3 +45,10 @@
 - **Frontend Command**: `npm run test`
 - **Frontend Result**: `SUCCESS`; 18 tests across 3 files passed with zero failures.
 - **Scope Note**: Typecheck, formatting, clippy, release build, and portable smoke test were not requested or rerun in this continuation.
+
+### 5. Pre-Push Release Gate (2026-08-25)
+- `cargo test --workspace`: SUCCESS; reconciliation regression suite 54/54 PASS.
+- `npm run test`: SUCCESS; 18/18 PASS.
+- `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS.
+- `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.

@@ -45,3 +45,4 @@ Reconciliation Core (crates/reconciliation-core/)
 - GNU workspace test suite completed successfully after the v14 intake and packaging changes.
 - Frontend Vitest suite completed successfully.
 - Repository source changes were committed as `b2e8658`.
+- Root `Cargo.lock` is tracked to make the Rust dependency graph reproducible for repository handoff.

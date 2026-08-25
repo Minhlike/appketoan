@@ -36,4 +36,4 @@ FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-Await user-directed product work. Any new feature must define workflow, failure modes, evidence/provenance requirements, and regression coverage before implementation.
+Repository publication is being finalized. No product feature is in scope for this task.
