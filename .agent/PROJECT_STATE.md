@@ -83,3 +83,10 @@ Reconciliation Core (crates/reconciliation-core/)
 - Bank secondary records have disjoint final classifications for accepted, review-linked, and truly unlinked state. Suggested/ambiguous links remain review evidence but no longer produce duplicate bank-only residual groups.
 - The ignored real-local harness asserts every known oracle and proves bank-record classification conservation. Running-balance verification remains unavailable only because normalized balance evidence is insufficient.
 - Full release gate and executable smoke passed. The feature branch remains unmerged and is ready for final diff review.
+
+## V15 Merge Freeze (2026-08-25)
+- Status: **MERGED / FROZEN**. PR #1 was squash-merged into `main` as `c5b03da4ed44eb9f5c88886256698beeafc7b4f9` after its head was locked to the approved revision.
+- Post-merge gate on `main`: Rust workspace tests, frontend tests, TypeScript typecheck, Rust format check, strict workspace Clippy, Tauri release build, and release executable smoke all passed.
+- The fresh ignored NSIS release candidate is under `target/release/bundle/nsis/`; its SHA256 is `936B775D65BD7D3BF5FD08CF60DCCC6CF2E9328D8331D2D2E7E4D413BE981E76`.
+- Official limitations remain: TK112 running balance is `NOT_VERIFIED`; the real-data bank run has no strong auto-accepted match; Suggested/Ambiguous bank evidence is review-only; tri-source benchmark performance remains a follow-up rather than a correctness blocker.
+- No V15 feature, account-kind expansion, architecture rewrite, or performance refactor is authorized during the freeze.

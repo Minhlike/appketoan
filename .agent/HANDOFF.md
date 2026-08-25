@@ -85,3 +85,10 @@
 - Bank matching maintains accepted and review-linked secondary ID sets separately. Residual output is generated only for IDs in neither set, so Suggested/Ambiguous evidence cannot also appear as bank-only.
 - The local acceptance harness now asserts all approved oracles and validates classification conservation across all parsed bank records. Bank classification counts are observed, not hard-coded expectations.
 - Workspace tests, explicit local acceptance, frontend tests, typecheck, format, strict Clippy, release build, and executable smoke all passed. The micro-fix is scoped to the existing feature branch only; do not merge PR #1.
+
+## V15 Merge and Freeze — 2026-08-25
+- ChatGPT approved the reviewed feature head. PR #1 was squash-merged into `main` with title `feat(v15): generalize real accounting dataset controls`; merge commit: `c5b03da4ed44eb9f5c88886256698beeafc7b4f9`.
+- Before merge, the PR head, remote feature head, and local head were identical; the worktree was clean and no workbook, build directory, installer, or binary was tracked.
+- Post-merge on `main`, the full Rust/TS/type/format/Clippy gate passed. A fresh Tauri build produced ignored MSI/NSIS artifacts; the release executable passed a five-second hidden smoke run.
+- The NSIS RC is local-only under `target/release/bundle/nsis/` with SHA256 `936B775D65BD7D3BF5FD08CF60DCCC6CF2E9328D8331D2D2E7E4D413BE981E76`.
+- V15 is **MERGED / FROZEN**. Preserve the official limitations and wait for ChatGPT product direction before starting any new phase.

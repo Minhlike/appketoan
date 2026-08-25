@@ -36,4 +36,4 @@ FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V15 final micro-fix is complete on `feature/v15-real-accounting-datasets`. Do not merge PR #1. Aggregate complexity, asserted local acceptance, and bank review conservation are verified; the branch is awaiting final ChatGPT source/diff review. Local acceptance workbooks remain ignored.
+V15 is merged and frozen on `main`. Awaiting ChatGPT product direction. Do not begin a new account kind, feature, architecture rewrite, or performance refactor without explicit direction. Local acceptance workbooks and release artifacts remain ignored.

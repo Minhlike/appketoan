@@ -89,3 +89,11 @@
 - Synthetic benchmark: 100k one-control 4.15s, three-control 7.41s, four-control tri-source 13.25s; exactly 100,000 matches in each run.
 - `npm run test`: SUCCESS (19/19). TypeScript typecheck, Rust format check, and strict workspace Clippy: SUCCESS.
 - `npx tauri build`: SUCCESS; fresh ignored MSI/NSIS and release executable were generated. Five-second hidden executable smoke: SUCCESS.
+
+### 12. V15 Post-Merge Gate and Freeze (2026-08-25)
+- Merge commit on `main`: `c5b03da4ed44eb9f5c88886256698beeafc7b4f9`.
+- `cargo test --workspace`: SUCCESS; all workspace unit, integration, correctness, V15 blocker/support, benchmark, and doc-test targets passed. The known GNU WebView2 `.drectve` linker warning remained non-fatal.
+- `npm run test`: SUCCESS (19/19). `npm run typecheck`, `cargo fmt --all -- --check`, and strict workspace Clippy: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh ignored MSI/NSIS and release executable generated from merged `main`.
+- Release executable smoke: SUCCESS after five seconds. NSIS SHA256: `936B775D65BD7D3BF5FD08CF60DCCC6CF2E9328D8331D2D2E7E4D413BE981E76`.
+- Result: V15 RC gate passed; V15 is frozen pending product direction.
