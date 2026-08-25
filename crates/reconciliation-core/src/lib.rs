@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod audit_resilience;
 pub mod audit_workspace;
 pub mod exporter;
 pub mod intake;
@@ -8,6 +9,7 @@ pub mod normalizer;
 pub mod reader;
 
 pub use analyzer::*;
+pub use audit_resilience::*;
 pub use audit_workspace::*;
 pub use exporter::*;
 pub use intake::*;

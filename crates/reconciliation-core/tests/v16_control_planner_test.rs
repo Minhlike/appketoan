@@ -365,3 +365,100 @@ fn duplicate_required_capability_needs_review_instead_of_picking_first() {
         ControlPlanStatus::NeedsReview
     );
 }
+
+#[test]
+fn planner_is_invariant_to_transactional_source_order() {
+    let base_sources = [
+        source("invoice", DataSourceKind::EInvoice),
+        source("register", DataSourceKind::SalesRegister),
+        source("ledger", DataSourceKind::Ledger511),
+    ];
+    let records = HashMap::from([
+        (
+            "invoice".to_string(),
+            vec![record("i", "invoice", Some("2026-07-10"))],
+        ),
+        (
+            "register".to_string(),
+            vec![record("r", "register", Some("2026-07-10"))],
+        ),
+        (
+            "ledger".to_string(),
+            vec![CanonicalRecord {
+                credit_amount: Some(dec!(100)),
+                ..record("l", "ledger", Some("2026-07-10"))
+            }],
+        ),
+    ]);
+    let permutations = [
+        [0_usize, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ];
+    for order in permutations {
+        let audit = prepare_audit_session(
+            format!("order-{order:?}"),
+            period(),
+            order
+                .iter()
+                .map(|index| base_sources[*index].clone())
+                .collect(),
+            records.clone(),
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        )
+        .expect("prepare permutation");
+        let revenue = plan(&audit.control_plans, REVENUE_CONTROL_ID);
+        assert_eq!(revenue.status, ControlPlanStatus::Ready, "{order:?}");
+        let mut source_ids = revenue.source_ids.clone();
+        source_ids.sort();
+        assert_eq!(source_ids, ["invoice", "ledger", "register"], "{order:?}");
+    }
+}
+
+#[test]
+fn unparseable_required_date_is_fail_closed() {
+    let sources = vec![
+        source("invoice", DataSourceKind::EInvoice),
+        source("register", DataSourceKind::SalesRegister),
+        source("ledger", DataSourceKind::Ledger511),
+    ];
+    let records = HashMap::from([
+        (
+            "invoice".to_string(),
+            vec![record("i", "invoice", Some("not-a-date"))],
+        ),
+        (
+            "register".to_string(),
+            vec![record("r", "register", Some("2026-07-10"))],
+        ),
+        (
+            "ledger".to_string(),
+            vec![record("l", "ledger", Some("2026-07-10"))],
+        ),
+    ]);
+    let audit = prepare_audit_session(
+        "invalid-date".to_string(),
+        period(),
+        sources,
+        records,
+        HashMap::new(),
+        HashMap::new(),
+        HashMap::new(),
+    )
+    .expect("prepare");
+    assert_eq!(
+        plan(&audit.control_plans, REVENUE_CONTROL_ID).status,
+        ControlPlanStatus::NeedsReview
+    );
+    assert_eq!(
+        audit.source_catalog.sources[0]
+            .period_evidence
+            .missing_or_unparseable_dates,
+        1
+    );
+}
