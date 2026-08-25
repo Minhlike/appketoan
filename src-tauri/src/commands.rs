@@ -40,17 +40,24 @@ pub fn cmd_run_reconciliation(
             let hash = format!("{:x}", Sha256::digest(bytes));
             let meta = inspect_excel_bytes(bytes, &source.name)
                 .map_err(|e| format!("Lỗi kiểm tra file {}: {}", source.name, e))?;
-            let sheet_meta = meta
-                .sheets
-                .iter()
-                .find(|s| s.name == source.sheet_name)
-                .or_else(|| meta.sheets.first())
-                .ok_or_else(|| {
+            let sheet_meta = if source.sheet_name.trim().is_empty() {
+                meta.sheets.first().ok_or_else(|| {
                     format!(
-                        "Không tìm thấy sheet '{}' trong file {}",
-                        source.sheet_name, source.name
+                        "SHEET_NOT_FOUND: File {} không chứa bất kỳ sheet nào",
+                        source.name
                     )
-                })?;
+                })?
+            } else {
+                meta.sheets
+                    .iter()
+                    .find(|s| s.name.trim().eq_ignore_ascii_case(source.sheet_name.trim()))
+                    .ok_or_else(|| {
+                        format!(
+                            "SHEET_NOT_FOUND: Không tìm thấy sheet '{}' trong file {}",
+                            source.sheet_name, source.name
+                        )
+                    })?
+            };
 
             let rows = read_sheet_rows_from_bytes(bytes, &sheet_meta.name).map_err(|e| {
                 format!(
@@ -66,17 +73,24 @@ pub fn cmd_run_reconciliation(
             let hash = format!("{:x}", Sha256::digest(&file_bytes));
             let meta = inspect_excel_file(&source.file_path)
                 .map_err(|e| format!("Lỗi kiểm tra file {}: {}", source.name, e))?;
-            let sheet_meta = meta
-                .sheets
-                .iter()
-                .find(|s| s.name == source.sheet_name)
-                .or_else(|| meta.sheets.first())
-                .ok_or_else(|| {
+            let sheet_meta = if source.sheet_name.trim().is_empty() {
+                meta.sheets.first().ok_or_else(|| {
                     format!(
-                        "Không tìm thấy sheet '{}' trong file {}",
-                        source.sheet_name, source.name
+                        "SHEET_NOT_FOUND: File {} không chứa bất kỳ sheet nào",
+                        source.name
                     )
-                })?;
+                })?
+            } else {
+                meta.sheets
+                    .iter()
+                    .find(|s| s.name.trim().eq_ignore_ascii_case(source.sheet_name.trim()))
+                    .ok_or_else(|| {
+                        format!(
+                            "SHEET_NOT_FOUND: Không tìm thấy sheet '{}' trong file {}",
+                            source.sheet_name, source.name
+                        )
+                    })?
+            };
 
             let rows = read_sheet_rows(&source.file_path, &sheet_meta.name).map_err(|e| {
                 format!(

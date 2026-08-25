@@ -46,6 +46,14 @@ releases/*.exe
 releases/*.msi
 releases/*.zip
 !releases/.gitkeep
+appketoan-standalone-dist/
+
+# Generated files inside the vendored GNU WebView2 linker patch
+crates/webview2-com-sys/.cargo-ok
+crates/webview2-com-sys/.cargo_vcs_info.json
+crates/webview2-com-sys/Cargo.lock
+crates/webview2-com-sys/msvc_compat.o
+crates/webview2-com-sys/x64/libmsvc_compat.a
 
 # Environment variables & secrets
 .env

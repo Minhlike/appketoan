@@ -160,33 +160,46 @@ export function parseVietnameseMoneyInput(val: string | number | undefined | nul
     return { success: false, error: "Chỉ được chứa tối đa một dấu phẩy phân cách thập phân" };
   }
 
-  // If there is a comma, it separates integer and fraction
-  if (commaCount === 1) {
-    const [intPart, fracPart] = trimmed.split(",");
-    const rawInt = intPart.replace(/\./g, "").replace(/^0+/, "") || "0";
-    if (!/^[0-9]+$/.test(rawInt) || (fracPart !== undefined && fracPart !== "" && !/^[0-9]+$/.test(fracPart))) {
-      return { success: false, error: "Phần nguyên hoặc phần thập phân chứa ký tự không hợp lệ" };
+  const [intPart, fracPart] = commaCount === 1 ? trimmed.split(",") : [trimmed, undefined];
+
+  // Validate integer part and thousand dot grouping
+  if (intPart.includes(".")) {
+    // If dots are present, they MUST strictly follow standard grouping: 1-3 digits followed by groups of 3 digits
+    if (!/^[0-9]{1,3}(\.[0-9]{3})+$/.test(intPart)) {
+      return {
+        success: false,
+        error: "Định dạng dấu chấm phân cách hàng nghìn không hợp lệ (mỗi cụm sau dấu chấm phải gồm đúng 3 chữ số)",
+      };
     }
-    if (fracPart && fracPart.length > 4) {
+  } else {
+    if (!/^[0-9]+$/.test(intPart)) {
+      return { success: false, error: "Phần nguyên chứa ký tự không hợp lệ" };
+    }
+  }
+
+  // Validate fraction part if present
+  if (fracPart !== undefined) {
+    if (fracPart === "") {
+      return { success: false, error: "Phần thập phân sau dấu phẩy không được để trống" };
+    }
+    if (!/^[0-9]+$/.test(fracPart)) {
+      return { success: false, error: "Phần thập phân chứa ký tự không hợp lệ" };
+    }
+    if (fracPart.length > 4) {
       return {
         success: false,
         error: "Độ chính xác thập phân vượt quá giới hạn cho phép (tối đa 4 chữ số thập phân)",
       };
     }
-    const cleanFrac = fracPart || "";
-    const res = cleanFrac === "" || /^0+$/.test(cleanFrac)
-      ? rawInt
-      : `${rawInt}.${cleanFrac}`;
-    return { success: true, value: res };
   }
 
-  // No comma: dots are thousand separators
-  const rawDigits = trimmed.replace(/\./g, "");
-  if (!/^[0-9]+$/.test(rawDigits)) {
-    return { success: false, error: "Định dạng số không hợp lệ" };
+  const rawIntDigits = intPart.replace(/\./g, "");
+  const withoutLeadingZeros = rawIntDigits.replace(/^0+/, "") || "0";
+
+  if (fracPart && fracPart.length > 0 && !/^0+$/.test(fracPart)) {
+    return { success: true, value: `${withoutLeadingZeros}.${fracPart}` };
   }
-  const withoutLeadingZeros = rawDigits.replace(/^0+/, "");
-  return { success: true, value: withoutLeadingZeros === "" ? "0" : withoutLeadingZeros };
+  return { success: true, value: withoutLeadingZeros };
 }
 
 /**

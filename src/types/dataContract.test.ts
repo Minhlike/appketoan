@@ -95,28 +95,39 @@ import type { MatchGroup, IntakeAnalysisResult } from "./dataContract";
 
 describe("Vietnamese Money Tolerance & Semantic Detail Explanations", () => {
   it("parses and normalizes Vietnamese money input formats exactly without float loss", () => {
+    // Valid test cases per V14 policy
     expect(parseVietnameseMoneyInput("0")).toEqual({ success: true, value: "0" });
     expect(parseVietnameseMoneyInput("500")).toEqual({ success: true, value: "500" });
+    expect(parseVietnameseMoneyInput("1.000")).toEqual({ success: true, value: "1000" });
     expect(parseVietnameseMoneyInput("10.000")).toEqual({ success: true, value: "10000" });
     expect(parseVietnameseMoneyInput("1.000.000")).toEqual({ success: true, value: "1000000" });
     expect(parseVietnameseMoneyInput("10.000,50")).toEqual({ success: true, value: "10000.50" });
-    expect(parseVietnameseMoneyInput("10.000,5000")).toEqual({ success: true, value: "10000.5000" });
+    expect(parseVietnameseMoneyInput("1.000.000,1234")).toEqual({ success: true, value: "1000000.1234" });
 
     // normalizeMoneyInput helper works on valid inputs
+    expect(normalizeMoneyInput("1.000")).toBe("1000");
     expect(normalizeMoneyInput("10.000")).toBe("10000");
     expect(normalizeMoneyInput("1.000.000")).toBe("1000000");
     expect(normalizeMoneyInput("10.000,50")).toBe("10000.50");
+    expect(normalizeMoneyInput("1.000.000,1234")).toBe("1000000.1234");
 
-    // Invalid & negative inputs rejected with clear error (NOT converted to 0)
-    expect(parseVietnameseMoneyInput("-500").success).toBe(false);
-    expect(parseVietnameseMoneyInput("1..000").success).toBe(false);
-    expect(parseVietnameseMoneyInput("10,2,3").success).toBe(false);
-    expect(parseVietnameseMoneyInput("abc").success).toBe(false);
-    // Excess precision (> 4 decimals) rejected without silent truncation
-    expect(parseVietnameseMoneyInput("10.000,12345").success).toBe(false);
-    expect(() => normalizeMoneyInput("-500")).toThrow();
+    // Invalid thousands grouping & malformed inputs rejected strictly (NOT converted to 0)
+    expect(parseVietnameseMoneyInput("1.00").success).toBe(false); // only 2 digits after dot
+    expect(parseVietnameseMoneyInput("10.00.0").success).toBe(false); // malformed grouping
+    expect(parseVietnameseMoneyInput("1..000").success).toBe(false); // consecutive dots
+    expect(parseVietnameseMoneyInput("1.0000").success).toBe(false); // 4 digits after dot
+    expect(parseVietnameseMoneyInput("10,2,3").success).toBe(false); // multiple commas
+    expect(parseVietnameseMoneyInput("abc").success).toBe(false); // non-numeric
+    expect(parseVietnameseMoneyInput("-500").success).toBe(false); // negative
+    expect(parseVietnameseMoneyInput("10.000,12345").success).toBe(false); // > 4 decimals
+
+    expect(() => normalizeMoneyInput("1.00")).toThrow();
+    expect(() => normalizeMoneyInput("10.00.0")).toThrow();
     expect(() => normalizeMoneyInput("1..000")).toThrow();
+    expect(() => normalizeMoneyInput("1.0000")).toThrow();
+    expect(() => normalizeMoneyInput("10,2,3")).toThrow();
     expect(() => normalizeMoneyInput("abc")).toThrow();
+    expect(() => normalizeMoneyInput("-500")).toThrow();
     expect(() => normalizeMoneyInput("10.000,12345")).toThrow();
   });
 

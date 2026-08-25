@@ -46,6 +46,20 @@ pub enum DataSourceKind {
 }
 
 impl DataSourceKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::EInvoice => "e_invoice",
+            Self::Ledger511 => "ledger_511",
+            Self::Ledger3331 => "ledger_3331",
+            Self::Ledger133 => "ledger_133",
+            Self::Ledger131 => "ledger_131",
+            Self::BankStatement => "bank_statement",
+            Self::CashBook => "cash_book",
+            Self::BranchLedger => "branch_ledger",
+            Self::Custom => "custom",
+        }
+    }
+
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::EInvoice => "Hóa đơn điện tử",

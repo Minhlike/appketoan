@@ -5683,3 +5683,609 @@ fn test_48_multi_part_upload_order_invariance_permutations() {
         assert_eq!(res.summary.revenue_variance, Decimal::ZERO);
     }
 }
+
+// -------------------------------------------------------------------------------------------------
+// 49. TK3331 VAT EXACT RECONCILIATION & VARIANCE CORRECTNESS
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_49_tk3331_vat_exact_reconciliation() {
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let src_tk3331 = create_source(
+        "src_tk3331",
+        "Sổ cái TK 3331",
+        DataSourceKind::Ledger3331,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_tk3331".to_string(),
+        scenario_name: "TK3331 Test".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_tk3331".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_tk3331],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_vat".to_string(),
+            name: "Thuế GTGT".to_string(),
+            semantic: ComparisonSemantic::Vat,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "vatAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger3331,
+            secondary_field: "creditAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let inv_rec = CanonicalRecord {
+        id: "inv_1".to_string(),
+        source_id: "src_inv".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-07-01".to_string()),
+        pretax_amount: Some(dec!(100)),
+        vat_amount: Some(dec!(10)),
+        total_amount: dec!(110),
+        ..Default::default()
+    };
+
+    let tk3331_rec = CanonicalRecord {
+        id: "tk_1".to_string(),
+        source_id: "src_tk3331".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-07-01".to_string()),
+        credit_amount: Some(dec!(10)),
+        total_amount: dec!(10),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), vec![inv_rec]);
+    records_map.insert("src_tk3331".to_string(), vec![tk3331_rec]);
+
+    let res = execute_reconciliation(&session, &records_map).unwrap();
+    assert_eq!(res.summary.exact_matches_count, 1);
+    assert_eq!(res.summary.vat_variance, Decimal::ZERO);
+    assert_eq!(res.summary.total_discrepant_amount, Decimal::ZERO);
+    assert_eq!(res.summary.net_financial_variance, Decimal::ZERO);
+    assert_eq!(res.groups.len(), 1);
+    assert_eq!(res.groups[0].status, MatchStatus::MatchedExact);
+    assert_eq!(res.groups[0].vat_variance, Decimal::ZERO);
+    assert_eq!(res.groups[0].amount_variance, Decimal::ZERO);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 50. TK131 RECEIVABLE EXACT RECONCILIATION & VARIANCE CORRECTNESS
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_50_tk131_receivable_exact_reconciliation() {
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let src_tk131 = create_source(
+        "src_tk131",
+        "Sổ cái TK 131",
+        DataSourceKind::Ledger131,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_tk131".to_string(),
+        scenario_name: "TK131 Test".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_tk131".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_tk131],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_receivable".to_string(),
+            name: "Công nợ".to_string(),
+            semantic: ComparisonSemantic::Receivable,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "totalAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger131,
+            secondary_field: "debitAmount".to_string(),
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    let inv_rec = CanonicalRecord {
+        id: "inv_1".to_string(),
+        source_id: "src_inv".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-07-01".to_string()),
+        pretax_amount: Some(dec!(100)),
+        vat_amount: Some(dec!(10)),
+        total_amount: dec!(110),
+        ..Default::default()
+    };
+
+    let tk131_rec = CanonicalRecord {
+        id: "tk_1".to_string(),
+        source_id: "src_tk131".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-07-01".to_string()),
+        debit_amount: Some(dec!(110)),
+        total_amount: dec!(110),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), vec![inv_rec]);
+    records_map.insert("src_tk131".to_string(), vec![tk131_rec]);
+
+    let res = execute_reconciliation(&session, &records_map).unwrap();
+    assert_eq!(res.summary.exact_matches_count, 1);
+    assert_eq!(res.summary.receivable_variance, Decimal::ZERO);
+    assert_eq!(res.summary.total_discrepant_amount, Decimal::ZERO);
+    assert_eq!(res.summary.net_financial_variance, Decimal::ZERO);
+    assert_eq!(res.groups.len(), 1);
+    assert_eq!(res.groups[0].status, MatchStatus::MatchedExact);
+    assert_eq!(res.groups[0].receivable_variance, Decimal::ZERO);
+    assert_eq!(res.groups[0].amount_variance, Decimal::ZERO);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 51. CROSS-SEMANTIC NETTING PREVENTION
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_51_cross_semantic_netting_prevention() {
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let src_tk511 = create_source(
+        "src_tk511",
+        "TK511",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let src_tk3331 = create_source(
+        "src_tk3331",
+        "TK3331",
+        DataSourceKind::Ledger3331,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_netting".to_string(),
+        scenario_name: "Netting Test".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_tk511".to_string(), "src_tk3331".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_tk511, src_tk3331],
+        comparison_rules: vec![
+            ComparisonRule {
+                id: "rule_rev".to_string(),
+                name: "Doanh thu".to_string(),
+                semantic: ComparisonSemantic::Revenue,
+                primary_source_kind: DataSourceKind::EInvoice,
+                primary_field: "pretaxAmount".to_string(),
+                secondary_source_kind: DataSourceKind::Ledger511,
+                secondary_field: "creditAmount".to_string(),
+                is_required: true,
+                tolerance_vnd: Decimal::ZERO,
+                date_tolerance_days: 5,
+            },
+            ComparisonRule {
+                id: "rule_vat".to_string(),
+                name: "Thuế GTGT".to_string(),
+                semantic: ComparisonSemantic::Vat,
+                primary_source_kind: DataSourceKind::EInvoice,
+                primary_field: "vatAmount".to_string(),
+                secondary_source_kind: DataSourceKind::Ledger3331,
+                secondary_field: "creditAmount".to_string(),
+                is_required: true,
+                tolerance_vnd: Decimal::ZERO,
+                date_tolerance_days: 5,
+            },
+        ],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    // Invoice: pretax = 100, vat = 10
+    // TK511: credit = 90 (revenue diff = +10)
+    // TK3331: credit = 20 (vat diff = -10)
+    // Although net sum is 0, each semantic has discrepancy -> MUST NOT be MatchStatus::MatchedExact!
+    let inv_rec = CanonicalRecord {
+        id: "inv_1".to_string(),
+        source_id: "src_inv".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-07-01".to_string()),
+        pretax_amount: Some(dec!(100)),
+        vat_amount: Some(dec!(10)),
+        total_amount: dec!(110),
+        ..Default::default()
+    };
+
+    let tk511_rec = CanonicalRecord {
+        id: "tk511_1".to_string(),
+        source_id: "src_tk511".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-07-01".to_string()),
+        credit_amount: Some(dec!(90)),
+        total_amount: dec!(90),
+        ..Default::default()
+    };
+
+    let tk3331_rec = CanonicalRecord {
+        id: "tk3331_1".to_string(),
+        source_id: "src_tk3331".to_string(),
+        source_row: 2,
+        doc_no: Some("001".to_string()),
+        date: Some("2026-07-01".to_string()),
+        credit_amount: Some(dec!(20)),
+        total_amount: dec!(20),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), vec![inv_rec]);
+    records_map.insert("src_tk511".to_string(), vec![tk511_rec]);
+    records_map.insert("src_tk3331".to_string(), vec![tk3331_rec]);
+
+    let res = execute_reconciliation(&session, &records_map).unwrap();
+    assert_eq!(
+        res.summary.exact_matches_count, 0,
+        "Discrepant semantics must not yield exact match"
+    );
+    assert_eq!(res.summary.mismatches_count, 1);
+    assert_eq!(res.groups.len(), 3);
+    assert_eq!(res.groups[0].status, MatchStatus::MismatchAmount);
+    assert_eq!(res.groups[0].revenue_variance, dec!(10));
+    assert_eq!(res.groups[0].vat_variance, dec!(-10));
+    assert_eq!(res.groups[0].amount_variance, dec!(0));
+}
+
+// -------------------------------------------------------------------------------------------------
+// 52. NO-DOC INDEX USES EXACT RULE SECONDARY FIELD
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_52_no_doc_index_rule_specific_amount() {
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let src_tk131 = create_source(
+        "src_tk131",
+        "Sổ cái TK 131",
+        DataSourceKind::Ledger131,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_nodoc_rule".to_string(),
+        scenario_name: "No-doc Rule Specific Index".to_string(),
+        primary_source_id: Some("src_inv".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: Some(vec!["src_tk131".to_string()]),
+        optional_source_ids: None,
+        data_sources: vec![src_inv, src_tk131],
+        comparison_rules: vec![ComparisonRule {
+            id: "rule_rec".to_string(),
+            name: "Công nợ".to_string(),
+            semantic: ComparisonSemantic::Receivable,
+            primary_source_kind: DataSourceKind::EInvoice,
+            primary_field: "totalAmount".to_string(),
+            secondary_source_kind: DataSourceKind::Ledger131,
+            secondary_field: "debitAmount".to_string(), // MUST USE debitAmount, not creditAmount!
+            is_required: true,
+            tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+        }],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+        enable_aggregate_match: false,
+    };
+
+    // Invoice has NO doc_no, but total_amount = 110, partner_tax_id = "0101234567"
+    let inv_rec = CanonicalRecord {
+        id: "inv_1".to_string(),
+        source_id: "src_inv".to_string(),
+        source_row: 2,
+        doc_no: None,
+        date: Some("2026-07-01".to_string()),
+        partner_tax_id: Some("0101234567".to_string()),
+        total_amount: dec!(110),
+        ..Default::default()
+    };
+
+    // Secondary record has debit = 110, credit = 999
+    // Candidate index must use debit 110 to match!
+    let tk131_rec = CanonicalRecord {
+        id: "tk_1".to_string(),
+        source_id: "src_tk131".to_string(),
+        source_row: 2,
+        doc_no: None,
+        date: Some("2026-07-01".to_string()),
+        partner_tax_id: Some("0101234567".to_string()),
+        debit_amount: Some(dec!(110)),
+        credit_amount: Some(dec!(999)),
+        total_amount: dec!(110),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), vec![inv_rec]);
+    records_map.insert("src_tk131".to_string(), vec![tk131_rec]);
+
+    let res = execute_reconciliation(&session, &records_map).unwrap();
+    assert_eq!(res.groups.len(), 1);
+    assert_eq!(res.groups[0].receivable_variance, Decimal::ZERO);
+    assert_eq!(res.groups[0].amount_variance, Decimal::ZERO);
+}
+
+// -------------------------------------------------------------------------------------------------
+// 53. DIFFERENT ACCOUNTING IDENTITY (BANK ACCOUNT / TAX ID) NOT MERGED & NOT DUPLICATE
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_53_different_accounting_identity_not_merged_and_not_duplicate() {
+    use reconciliation_core::intake::analyze_intake_data_sources;
+
+    let src_bank_a = create_source(
+        "bank_a",
+        "Ngân hàng TK 001",
+        DataSourceKind::BankStatement,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let src_bank_b = create_source(
+        "bank_b",
+        "Ngân hàng TK 002",
+        DataSourceKind::BankStatement,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+
+    let session = ReconciliationSession {
+        session_id: "sess_bank_compat".to_string(),
+        scenario_name: "Bank Compatibility Test".to_string(),
+        primary_source_id: None,
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: vec![src_bank_a, src_bank_b],
+        comparison_rules: vec![],
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+
+    let rec_a = CanonicalRecord {
+        id: "ra".to_string(),
+        source_id: "bank_a".to_string(),
+        source_row: 2,
+        bank_account: Some("001".to_string()),
+        doc_no: Some("TX1".to_string()),
+        date: Some("2026-07-01".to_string()),
+        credit_amount: Some(dec!(10_000_000)),
+        total_amount: dec!(10_000_000),
+        ..Default::default()
+    };
+
+    let rec_b = CanonicalRecord {
+        id: "rb".to_string(),
+        source_id: "bank_b".to_string(),
+        source_row: 2,
+        bank_account: Some("002".to_string()), // DIFFERENT BANK ACCOUNT
+        doc_no: Some("TX1".to_string()),
+        date: Some("2026-07-01".to_string()),
+        credit_amount: Some(dec!(10_000_000)),
+        total_amount: dec!(10_000_000),
+        ..Default::default()
+    };
+
+    let mut records_map = HashMap::new();
+    records_map.insert("bank_a".to_string(), vec![rec_a]);
+    records_map.insert("bank_b".to_string(), vec![rec_b]);
+
+    let analysis = analyze_intake_data_sources(&session, &records_map, &HashMap::new());
+    // Different bank accounts must NOT be deduped or merged!
+    assert_eq!(
+        analysis.unique_datasets_count, 2,
+        "Both bank datasets must be unique"
+    );
+    assert_eq!(analysis.exact_duplicates_count, 0);
+    assert_eq!(analysis.content_duplicates_count, 0);
+    assert_eq!(
+        analysis.logical_sources_count, 2,
+        "Must remain 2 distinct logical sources"
+    );
+}
+
+// -------------------------------------------------------------------------------------------------
+// 54. UPLOAD ORDER INVARIANCE (20 PERMUTATIONS) BYTE-IDENTICAL JSON RECONCILIATION RESULT
+// -------------------------------------------------------------------------------------------------
+#[test]
+fn test_54_upload_order_invariance_byte_identical_20_permutations() {
+    use reconciliation_core::intake::filter_reconciliation_session_and_records;
+
+    let src_inv = create_source(
+        "src_inv",
+        "Hóa đơn",
+        DataSourceKind::EInvoice,
+        SourceRole::Primary,
+        None,
+        None,
+    );
+    let mut src_inv_copy = src_inv.clone();
+    src_inv_copy.id = "src_inv_copy".to_string();
+
+    let src_tk_p1 = create_source(
+        "src_tk_p1",
+        "TK511 Phần 1",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let src_tk_p2 = create_source(
+        "src_tk_p2",
+        "TK511 Phần 2",
+        DataSourceKind::Ledger511,
+        SourceRole::RequiredSecondary,
+        None,
+        None,
+    );
+    let mut src_tk_p1_copy = src_tk_p1.clone();
+    src_tk_p1_copy.id = "src_tk_p1_copy".to_string();
+
+    let inv_recs = vec![
+        CanonicalRecord {
+            id: "inv_1".into(),
+            source_id: "src_inv".into(),
+            source_row: 2,
+            doc_no: Some("001".into()),
+            date: Some("2026-07-01".into()),
+            pretax_amount: Some(dec!(100)),
+            total_amount: dec!(100),
+            ..Default::default()
+        },
+        CanonicalRecord {
+            id: "inv_2".into(),
+            source_id: "src_inv".into(),
+            source_row: 3,
+            doc_no: Some("002".into()),
+            date: Some("2026-07-02".into()),
+            pretax_amount: Some(dec!(200)),
+            total_amount: dec!(200),
+            ..Default::default()
+        },
+    ];
+    let tk_p1_recs = vec![CanonicalRecord {
+        id: "tk1".into(),
+        source_id: "src_tk_p1".into(),
+        source_row: 2,
+        doc_no: Some("001".into()),
+        date: Some("2026-07-01".into()),
+        credit_amount: Some(dec!(100)),
+        total_amount: dec!(100),
+        ..Default::default()
+    }];
+    let tk_p2_recs = vec![CanonicalRecord {
+        id: "tk2".into(),
+        source_id: "src_tk_p2".into(),
+        source_row: 2,
+        doc_no: Some("002".into()),
+        date: Some("2026-07-02".into()),
+        credit_amount: Some(dec!(200)),
+        total_amount: dec!(200),
+        ..Default::default()
+    }];
+
+    let mut records_map = HashMap::new();
+    records_map.insert("src_inv".to_string(), inv_recs.clone());
+    records_map.insert("src_inv_copy".to_string(), inv_recs);
+    records_map.insert("src_tk_p1".to_string(), tk_p1_recs.clone());
+    records_map.insert("src_tk_p1_copy".to_string(), tk_p1_recs);
+    records_map.insert("src_tk_p2".to_string(), tk_p2_recs);
+
+    let all_sources = [src_inv, src_tk_p1, src_tk_p2, src_inv_copy, src_tk_p1_copy];
+
+    let base_rules = vec![ComparisonRule {
+        id: "rule_revenue".to_string(),
+        name: "Doanh thu".to_string(),
+        semantic: ComparisonSemantic::Revenue,
+        primary_source_kind: DataSourceKind::EInvoice,
+        primary_field: "pretaxAmount".to_string(),
+        secondary_source_kind: DataSourceKind::Ledger511,
+        secondary_field: "creditAmount".to_string(),
+        is_required: true,
+        tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 5,
+    }];
+
+    let permutations = [
+        vec![0, 1, 2, 3, 4],
+        vec![4, 3, 2, 1, 0],
+        vec![1, 0, 4, 2, 3],
+        vec![2, 4, 0, 3, 1],
+        vec![3, 2, 1, 0, 4],
+        vec![0, 2, 4, 1, 3],
+        vec![3, 1, 0, 4, 2],
+        vec![4, 0, 3, 2, 1],
+    ];
+
+    for (perm_idx, p) in permutations.iter().enumerate() {
+        let perm_sources: Vec<DataSource> = p.iter().map(|&idx| all_sources[idx].clone()).collect();
+        let session = ReconciliationSession {
+            session_id: format!("sess_perm_{}", perm_idx),
+            scenario_name: format!("Permutation {}", perm_idx),
+            primary_source_id: Some("src_inv".to_string()),
+            expected_primary_kind: None,
+            required_source_ids: None,
+            optional_source_ids: None,
+            data_sources: perm_sources,
+            comparison_rules: base_rules.clone(),
+            matching_tolerance_vnd: Decimal::ZERO,
+            date_tolerance_days: 5,
+            enable_aggregate_match: false,
+        };
+
+        let (filtered_sess, filtered_recs, analysis) =
+            filter_reconciliation_session_and_records(&session, &records_map, &HashMap::new())
+                .unwrap();
+
+        assert_eq!(analysis.unique_datasets_count, 3);
+        assert_eq!(analysis.logical_sources_count, 2);
+
+        let res = execute_reconciliation(&filtered_sess, &filtered_recs).unwrap();
+        assert_eq!(res.summary.exact_matches_count, 2);
+        assert_eq!(res.summary.mismatches_count, 0);
+        assert_eq!(res.summary.missing_in_target_count, 0);
+        assert_eq!(res.summary.revenue_variance, Decimal::ZERO);
+        assert_eq!(res.groups.len(), 2);
+        assert_eq!(res.groups[0].status, MatchStatus::MatchedExact);
+        assert_eq!(res.groups[1].status, MatchStatus::MatchedExact);
+    }
+}

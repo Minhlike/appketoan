@@ -289,6 +289,14 @@ pub fn execute_reconciliation(
         let mut by_doc_no_only: HashMap<String, Vec<&CanonicalRecord>> = HashMap::new();
         let mut by_tax_amount: HashMap<(String, i64), Vec<&CanonicalRecord>> = HashMap::new();
 
+        let resolved_rule = resolve_rule_for_pair(
+            primary_kind,
+            &sec_source.kind,
+            &session.comparison_rules,
+            default_tolerance_vnd,
+            default_date_tolerance_days,
+        );
+
         for rec in sec_records {
             if let Some(doc) = &rec.doc_no {
                 let clean_doc = CanonicalRecord::normalize_doc_no(doc);
@@ -304,16 +312,15 @@ pub fn execute_reconciliation(
             if let Some(tax_id) = &rec.partner_tax_id {
                 let clean_tax = CanonicalRecord::normalize_tax_id(tax_id);
                 if !clean_tax.is_empty() {
-                    let comp_amt = rec
-                        .credit_amount
-                        .or(rec.debit_amount)
-                        .or(rec.pretax_amount)
-                        .unwrap_or(rec.total_amount);
-                    let rounded = comp_amt.round().to_i64().unwrap_or(0);
-                    by_tax_amount
-                        .entry((clean_tax, rounded))
-                        .or_default()
-                        .push(rec);
+                    if let Some((rule, _, _, _)) = resolved_rule {
+                        if let Ok(comp_amt) = extract_rule_amount(rec, &rule.secondary_field) {
+                            let rounded = comp_amt.round().to_i64().unwrap_or(0);
+                            by_tax_amount
+                                .entry((clean_tax, rounded))
+                                .or_default()
+                                .push(rec);
+                        }
+                    }
                 }
             }
         }
@@ -1037,10 +1044,14 @@ pub fn execute_reconciliation(
             }
         }
 
-        let amount_variance = if secondary_indexes.len() == 1 {
-            primary_display_amount - total_target_amount
+        let amount_variance = grp_revenue_var + grp_vat_var + grp_receivable_var + grp_other_var;
+        let total_source_amount = if secondary_indexes.len() == 1 {
+            group_semantic_comparisons
+                .first()
+                .map(|c| c.expected_amount)
+                .unwrap_or(primary_display_amount)
         } else {
-            grp_revenue_var + grp_vat_var + grp_receivable_var + grp_other_var
+            primary_display_amount
         };
 
         groups.push(MatchGroup {
@@ -1059,7 +1070,7 @@ pub fn execute_reconciliation(
             vat_variance: grp_vat_var,
             receivable_variance: grp_receivable_var,
             other_variance: grp_other_var,
-            total_source_amount: primary_display_amount,
+            total_source_amount,
             total_target_amount,
             amount_variance,
         });
@@ -1241,6 +1252,17 @@ pub fn execute_reconciliation(
                         MatchStatus::MatchedWithTolerance
                     };
 
+                    let amount_variance =
+                        grp_revenue_var + grp_vat_var + grp_receivable_var + grp_other_var;
+                    let total_source_amount = if secondary_indexes.len() == 1 {
+                        group_comparisons
+                            .first()
+                            .map(|c| c.expected_amount)
+                            .unwrap_or(primary_display_amount)
+                    } else {
+                        primary_display_amount
+                    };
+
                     groups.push(MatchGroup {
                         id: format!("grp_fallback_{}", primary.id),
                         status,
@@ -1257,12 +1279,9 @@ pub fn execute_reconciliation(
                         vat_variance: grp_vat_var,
                         receivable_variance: grp_receivable_var,
                         other_variance: grp_other_var,
-                        total_source_amount: primary_display_amount,
+                        total_source_amount,
                         total_target_amount,
-                        amount_variance: grp_revenue_var
-                            + grp_vat_var
-                            + grp_receivable_var
-                            + grp_other_var,
+                        amount_variance,
                     });
                 }
             }
@@ -1316,14 +1335,14 @@ pub fn execute_reconciliation(
         };
 
         for sec_idx in &secondary_indexes {
-            let (rule, semantic_name, _, _) = match resolve_rule_for_pair(
+            let (rule, semantic_name) = match resolve_rule_for_pair(
                 primary_kind,
                 &sec_idx.source_kind,
                 &session.comparison_rules,
                 default_tolerance_vnd,
                 default_date_tolerance_days,
             ) {
-                Some(v) => v,
+                Some((r, s, _, _)) => (r, s),
                 None => continue,
             };
 
@@ -1391,10 +1410,14 @@ pub fn execute_reconciliation(
             );
         }
 
-        let amount_variance = if secondary_indexes.len() == 1 {
-            primary_display_amount
+        let amount_variance = grp_revenue_var + grp_vat_var + grp_receivable_var + grp_other_var;
+        let total_source_amount = if secondary_indexes.len() == 1 {
+            group_comparisons
+                .first()
+                .map(|c| c.expected_amount)
+                .unwrap_or(primary_display_amount)
         } else {
-            grp_revenue_var + grp_vat_var + grp_receivable_var + grp_other_var
+            primary_display_amount
         };
 
         groups.push(MatchGroup {
@@ -1413,7 +1436,7 @@ pub fn execute_reconciliation(
             vat_variance: grp_vat_var,
             receivable_variance: grp_receivable_var,
             other_variance: grp_other_var,
-            total_source_amount: primary_display_amount,
+            total_source_amount,
             total_target_amount: Decimal::ZERO,
             amount_variance,
         });
