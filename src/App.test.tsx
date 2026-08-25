@@ -3,6 +3,10 @@ import { describe, it, expect } from "vitest";
 import App from "./App";
 
 describe("AppKetoan UI End-to-End Workflow", () => {
+  const openAdvancedWorkflow = () => {
+    fireEvent.click(screen.getByText(/Thiết lập nâng cao theo kịch bản/i));
+  };
+
   it("renders main header, offline security badge, and scenario selector", () => {
     render(<App />);
     expect(
@@ -13,7 +17,7 @@ describe("AppKetoan UI End-to-End Workflow", () => {
     expect(screen.getByText(/📁 Nạp dữ liệu mẫu/i)).toBeDefined();
   });
 
-  it("loads demo data and enables the 'CHẠY ĐỐI CHIẾU' button", () => {
+  it("loads demo data, shows the audit workspace, and keeps legacy execution advanced", () => {
     render(<App />);
     const demoBtn = screen.getByText(/📁 Nạp dữ liệu mẫu/i);
     fireEvent.click(demoBtn);
@@ -23,6 +27,12 @@ describe("AppKetoan UI End-to-End Workflow", () => {
     expect(screen.getByText(/Nguồn #2/i)).toBeDefined();
     expect(screen.getByText(/2 nguồn/i)).toBeDefined();
 
+    expect(screen.getByRole("heading", { name: /Bộ hồ sơ kế toán/i })).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: /Chạy tất cả kiểm tra có thể/i }).hasAttribute("disabled")
+    ).toBe(true);
+
+    openAdvancedWorkflow();
     const runBtn = screen.getByRole("button", { name: /▶ CHẠY ĐỐI CHIẾU/i });
     expect(runBtn.hasAttribute("disabled")).toBe(false);
   });
@@ -34,6 +44,7 @@ describe("AppKetoan UI End-to-End Workflow", () => {
     fireEvent.click(demoBtn);
 
     // 2. Click run reconciliation
+    openAdvancedWorkflow();
     const runBtn = screen.getByRole("button", { name: /▶ CHẠY ĐỐI CHIẾU/i });
     fireEvent.click(runBtn);
 
@@ -60,6 +71,7 @@ describe("AppKetoan UI End-to-End Workflow", () => {
   it("opens Detail Inspector modal when clicking 'Xem' on a row", async () => {
     render(<App />);
     fireEvent.click(screen.getByText(/📁 Nạp dữ liệu mẫu/i));
+    openAdvancedWorkflow();
     fireEvent.click(screen.getByRole("button", { name: /▶ CHẠY ĐỐI CHIẾU/i }));
 
     await waitFor(() => {

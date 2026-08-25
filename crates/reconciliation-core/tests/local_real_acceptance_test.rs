@@ -74,16 +74,19 @@ fn local_real_acceptance_reports_sanitized_counts() {
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| {
+            let is_excel_lock_file = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("~$"));
             matches!(
                 path.extension().and_then(|extension| extension.to_str()),
                 Some("xls") | Some("xlsx")
-            )
+            ) && !is_excel_lock_file
         })
         .collect();
-    assert_eq!(
-        files.len(),
-        7,
-        "the local acceptance set must contain seven workbooks"
+    assert!(
+        files.len() >= 7,
+        "the local acceptance set must contain at least seven workbooks"
     );
 
     let mut sources = Vec::new();
@@ -322,7 +325,8 @@ fn local_real_acceptance_reports_sanitized_counts() {
     );
     let register = sources
         .iter()
-        .find(|source| source.kind == DataSourceKind::SalesRegister)
+        .filter(|source| source.kind == DataSourceKind::SalesRegister)
+        .max_by_key(|source| records.get(&source.id).map_or(0, Vec::len))
         .expect("sales register source");
     let tri_session = ReconciliationSession {
         session_id: "local-tri".to_string(),

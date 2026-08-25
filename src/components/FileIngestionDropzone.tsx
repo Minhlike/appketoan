@@ -18,7 +18,25 @@ interface FileIngestionDropzoneProps {
   onUpdateRole?: (id: string, newRole: SourceRole) => void;
   onOpenMapping: (item: IngestedSourceItem) => void;
   disabled?: boolean;
+  advancedMode?: boolean;
 }
+
+const sourceKindLabel = (kind: DataSourceKind): string =>
+  ({
+    e_invoice: "Hóa đơn điện tử",
+    ledger_511: "Sổ doanh thu (TK 511)",
+    ledger_3331: "Sổ thuế GTGT (TK 3331)",
+    ledger_133: "Sổ thuế đầu vào (TK 133)",
+    ledger_131: "Sổ công nợ phải thu (TK 131)",
+    ledger_112: "Sổ tiền gửi ngân hàng (TK 112)",
+    partner_master: "Danh mục khách hàng / nhà cung cấp",
+    sales_register: "Bảng kê bán hàng",
+    sales_analysis_report: "Báo cáo phân tích bán hàng",
+    bank_statement: "Sao kê ngân hàng",
+    cash_book: "Sổ quỹ tiền mặt",
+    branch_ledger: "Sổ chi nhánh",
+    custom: "Chưa xác định",
+  })[kind];
 
 export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
   sources,
@@ -29,6 +47,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
   onUpdateRole,
   onOpenMapping,
   disabled = false,
+  advancedMode = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -208,7 +227,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                 </div>
 
                 <div className="source-card-body">
-                  <div className="source-field-row">
+                  {advancedMode && <div className="source-field-row">
                     <label className="field-label">Tên phân loại:</label>
                     <input
                       type="text"
@@ -219,11 +238,11 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                         item.source.name = e.target.value;
                       }}
                     />
-                  </div>
+                  </div>}
 
                   <div className="source-field-row">
                     <label className="field-label">Vai trò trong kịch bản:</label>
-                    <select
+                    {advancedMode ? <select
                       className="select-control"
                       value={role}
                       disabled={disabled}
@@ -240,7 +259,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                       <option value="REQUIRED_SECONDARY">🟠 Nguồn bắt buộc (REQUIRED)</option>
                       <option value="OPTIONAL_SECONDARY">⚪ Nguồn bổ trợ (OPTIONAL)</option>
                       <option value="REFERENCE_MASTER">🟣 Danh mục tham chiếu</option>
-                    </select>
+                    </select> : <strong>{sourceKindLabel(item.source.kind)}</strong>}
                   </div>
 
                   <div className="source-field-row">
@@ -316,7 +335,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                     onClick={() => onOpenMapping(item)}
                     disabled={disabled}
                   >
-                    ⚙️ Cấu hình cột ({Object.values(item.source.columnMapping).filter(Boolean).length} cột đã gán)
+                    ⚙️ Thiết lập nâng cao ({Object.values(item.source.columnMapping).filter(Boolean).length} cột đã gán)
                   </button>
                 </div>
               </div>

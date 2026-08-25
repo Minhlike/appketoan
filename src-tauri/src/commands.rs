@@ -3,13 +3,15 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use reconciliation_core::{
-    evaluate_partner_master_control, evaluate_sales_analysis_control, execute_reconciliation,
-    execute_reference_controls, export_reconciliation_to_excel,
+    evaluate_partner_master_control, evaluate_sales_analysis_control, execute_audit_session,
+    execute_reconciliation, execute_reference_controls, export_reconciliation_to_excel,
     filter_reconciliation_session_and_records, inspect_excel_bytes, inspect_excel_file,
     normalize_data_source_rows, normalize_partner_master_rows, normalize_sales_analysis_rows,
-    read_sheet_rows, read_sheet_rows_from_bytes, CanonicalRecord, DataSourceKind,
-    ExcelFileMetadata, ExportSummary, ReconciliationResult, ReconciliationSession,
+    prepare_audit_session, read_sheet_rows, read_sheet_rows_from_bytes, AccountingPeriod,
+    AuditWorkspaceReport, CanonicalRecord, DataSource, DataSourceKind, ExcelFileMetadata,
+    ExportSummary, PartnerRecord, ReconciliationResult, ReconciliationSession, SalesAnalysisRecord,
 };
+use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 
 fn sha256_file_streaming(path: &Path) -> Result<String, String> {
@@ -211,6 +213,102 @@ pub fn cmd_run_reconciliation(
     result.reference_controls = reference_controls;
 
     Ok(result)
+}
+
+#[tauri::command]
+pub fn cmd_run_audit_workspace(
+    session_id: String,
+    accounting_period: AccountingPeriod,
+    data_sources: Vec<DataSource>,
+    matching_tolerance_vnd: Decimal,
+    date_tolerance_days: u32,
+    file_bytes_map: Option<HashMap<String, Vec<u8>>>,
+) -> Result<AuditWorkspaceReport, String> {
+    let bytes_map = file_bytes_map.unwrap_or_default();
+    let mut transactional: HashMap<String, Vec<CanonicalRecord>> = HashMap::new();
+    let mut partner_masters: HashMap<String, Vec<PartnerRecord>> = HashMap::new();
+    let mut sales_analysis: HashMap<String, Vec<SalesAnalysisRecord>> = HashMap::new();
+    let mut provenance = HashMap::new();
+    let header_columns =
+        |source: &DataSource, rows: &[Vec<String>]| -> Result<Vec<String>, String> {
+            rows.get(source.header_row.saturating_sub(1) as usize)
+                .cloned()
+                .ok_or_else(|| {
+                    format!(
+                        "HEADER_ROW_NOT_FOUND: dòng tiêu đề {} không tồn tại trong {}",
+                        source.header_row, source.name
+                    )
+                })
+        };
+
+    // This is the only physical ingestion loop for the audit workspace. Every
+    // normalized dataset is retained in AuditSession and reused by all plans.
+    for source in &data_sources {
+        let (raw_rows, header_cols, raw_hash) = if let Some(bytes) = bytes_map
+            .get(&source.id)
+            .or_else(|| bytes_map.get(&source.file_path))
+        {
+            let rows = read_sheet_rows_from_bytes(bytes, &source.sheet_name).map_err(|error| {
+                format!(
+                    "Lỗi đọc sheet '{}' trong {}: {error}",
+                    source.sheet_name, source.name
+                )
+            })?;
+            let columns = header_columns(source, &rows)?;
+            (rows, columns, format!("{:x}", Sha256::digest(bytes)))
+        } else if Path::new(&source.file_path).exists() {
+            let rows = read_sheet_rows(&source.file_path, &source.sheet_name).map_err(|error| {
+                format!(
+                    "Lỗi đọc sheet '{}' trong {}: {error}",
+                    source.sheet_name, source.name
+                )
+            })?;
+            let columns = header_columns(source, &rows)?;
+            (
+                rows,
+                columns,
+                sha256_file_streaming(Path::new(&source.file_path))?,
+            )
+        } else {
+            return Err(format!(
+                "Không tìm thấy file nguồn '{}' tại '{}'",
+                source.name, source.file_path
+            ));
+        };
+
+        provenance.insert(source.id.clone(), raw_hash);
+        match source.kind {
+            DataSourceKind::PartnerMaster => {
+                partner_masters.insert(
+                    source.id.clone(),
+                    normalize_partner_master_rows(source, &header_cols, &raw_rows),
+                );
+            }
+            DataSourceKind::SalesAnalysisReport => {
+                sales_analysis.insert(
+                    source.id.clone(),
+                    normalize_sales_analysis_rows(source, &header_cols, &raw_rows),
+                );
+            }
+            _ => {
+                transactional.insert(
+                    source.id.clone(),
+                    normalize_data_source_rows(source, &header_cols, &raw_rows),
+                );
+            }
+        }
+    }
+
+    let audit = prepare_audit_session(
+        session_id,
+        accounting_period,
+        data_sources,
+        transactional,
+        partner_masters,
+        sales_analysis,
+        provenance,
+    )?;
+    execute_audit_session(audit, matching_tolerance_vnd, date_tolerance_days)
 }
 
 #[tauri::command]

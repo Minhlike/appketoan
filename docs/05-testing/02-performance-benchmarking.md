@@ -21,4 +21,12 @@
 ---
 
 ## 3. Benchmark Harness Setup
-The project includes a benchmark suite in `crates/reconciliation-core/benches/` using Criterion to continuously monitor performance regressions during development.
+
+The executable regression benchmarks live under `crates/reconciliation-core/tests/` and run with the standard Rust test harness. The capacity table above is an aspirational target, not a measured release claim.
+
+V16 adds `v16_reuse_benchmark_test.rs`, which compares:
+
+- the V15 100k tri-source/four-semantic reconciliation; and
+- V16 session preparation plus three READY controls over the same 100k transactional sources.
+
+The benchmark asserts exact result counts and one read/normalization/index preparation per logical source. It prints elapsed wall time with `--nocapture`. The V16 workload includes period filtering, catalog/planner construction, revenue matching, partner identity, and sales-analysis control, so its elapsed time must not be presented as a like-for-like matcher speedup.

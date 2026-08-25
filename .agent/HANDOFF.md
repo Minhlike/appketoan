@@ -92,3 +92,14 @@
 - Post-merge on `main`, the full Rust/TS/type/format/Clippy gate passed. A fresh Tauri build produced ignored MSI/NSIS artifacts; the release executable passed a five-second hidden smoke run.
 - The NSIS RC is local-only under `target/release/bundle/nsis/` with SHA256 `936B775D65BD7D3BF5FD08CF60DCCC6CF2E9328D8331D2D2E7E4D413BE981E76`.
 - V15 is **MERGED / FROZEN**. Preserve the official limitations and wait for ChatGPT product direction before starting any new phase.
+
+## V16 Audit Workspace / Control Planner — 2026-08-25
+- Branch: `codex/v16-control-planner`, based exactly on the approved V15 main baseline. It remains unmerged.
+- `crates/reconciliation-core/src/audit_workspace.rs` owns the additive session, capability catalog, declarative definitions, planner, period filtering, prepared indexes, executor, independent findings, and data-reuse evidence.
+- Required transactional sources are bounded by the explicit session period and then by their common date intersection per control. Missing dates, no overlap, or duplicate required capabilities prevent automatic execution.
+- Legacy ledger kinds are adapters only. Generic journal capabilities are derived from normalized account content and projected to the requested account before matching; a corresponding account in a legacy ledger does not imply a second ledger capability.
+- `cmd_run_audit_workspace` reads and normalizes every selected source once in one ingestion loop, then runs every READY control against retained datasets. Raw workbook content is never persisted.
+- The React default path is “Bộ hồ sơ kế toán”; `SourceRole`, manual kind selection, scenario selection, and legacy execution are under advanced settings.
+- Local acceptance produced four READY implemented controls and two missing future controls. The immutable V15 oracle and bank evidence policy remain unchanged.
+- The 100k comparison benchmark completed with exact result counts; V16 intentionally includes session preparation plus three independent controls and is not presented as a speedup over the V15 tri-source-only run.
+- Full workspace tests, frontend tests, typecheck, format check, strict Clippy, and Tauri release build passed. Generated installers and confidential workbooks remain ignored.

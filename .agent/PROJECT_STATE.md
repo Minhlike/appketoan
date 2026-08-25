@@ -90,3 +90,11 @@ Reconciliation Core (crates/reconciliation-core/)
 - The fresh ignored NSIS release candidate is under `target/release/bundle/nsis/`; its SHA256 is `936B775D65BD7D3BF5FD08CF60DCCC6CF2E9328D8331D2D2E7E4D413BE981E76`.
 - Official limitations remain: TK112 running balance is `NOT_VERIFIED`; the real-data bank run has no strong auto-accepted match; Suggested/Ambiguous bank evidence is review-only; tri-source benchmark performance remains a follow-up rather than a correctness blocker.
 - No V15 feature, account-kind expansion, architecture rewrite, or performance refactor is authorized during the freeze.
+
+## V16 Audit Workspace / Control Planner (2026-08-25)
+- Status: implementation complete on `codex/v16-control-planner`; not merged.
+- The default workflow is now an additive “Bộ hồ sơ kế toán” workspace with a mandatory accounting period, capability-based source catalog, declarative control plans, and independent control results. Scenario execution remains available under advanced settings.
+- Implemented control definitions: revenue invoice/register/ledger, bank/ledger, partner identity, and sales analysis. TK131 receivable and TK3331 VAT accounting are planning definitions only; no new account feature was implemented.
+- Transactional data is bounded by the session period and then by each control's required-source date intersection. Missing dates, empty intersections, and duplicate required capabilities fail closed to review.
+- Each source is read, normalized, and prepared once per audit execution; controls reuse the retained typed datasets and preserve provenance.
+- The real-local V15 and V16 acceptance harnesses passed without persisting workbook data. The full Rust/frontend/type/format/Clippy/Tauri gate passed; the known GNU WebView2 linker warning remains non-fatal.

@@ -5,6 +5,10 @@ import type {
   ReconciliationSession,
   ExportSummary,
   PreconfiguredScenario,
+  AccountingPeriod,
+  AuditWorkspaceReport,
+  DataSource,
+  MoneyValue,
 } from "../types/dataContract";
 
 import eInvoicesSynthetic from "../../fixtures/synthetic/einvoices_comprehensive_synthetic.json";
@@ -96,6 +100,27 @@ export async function runReconciliation(
   // Web / dev mode simulation
   await new Promise((r) => setTimeout(r, 400));
   return goldenResult as unknown as ReconciliationResult;
+}
+
+export async function runAuditWorkspace(
+  sessionId: string,
+  accountingPeriod: AccountingPeriod,
+  dataSources: DataSource[],
+  matchingToleranceVnd: MoneyValue,
+  dateToleranceDays: number,
+  fileBytesMap?: Record<string, number[]>
+): Promise<AuditWorkspaceReport> {
+  if (!isTauriRuntime()) {
+    throw new Error("Bộ hồ sơ kế toán chỉ chạy trong ứng dụng desktop.");
+  }
+  return await invoke<AuditWorkspaceReport>("cmd_run_audit_workspace", {
+    sessionId,
+    accountingPeriod,
+    dataSources,
+    matchingToleranceVnd,
+    dateToleranceDays,
+    fileBytesMap,
+  });
 }
 
 /**

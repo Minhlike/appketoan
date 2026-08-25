@@ -97,3 +97,12 @@
 - `npx tauri build`: SUCCESS; fresh ignored MSI/NSIS and release executable generated from merged `main`.
 - Release executable smoke: SUCCESS after five seconds. NSIS SHA256: `936B775D65BD7D3BF5FD08CF60DCCC6CF2E9328D8331D2D2E7E4D413BE981E76`.
 - Result: V15 RC gate passed; V15 is frozen pending product direction.
+
+### 13. V16 Audit Workspace / Control Planner Gate (2026-08-25)
+- Synthetic planner suite: SUCCESS; capability planning, period fail-closed behavior, generic ledger adapters, duplicate capability review, data reuse, and independent execution passed.
+- Local V15 acceptance: SUCCESS against ignored local workbooks; the immutable baseline and bank classification conservation remain unchanged.
+- Local V16 acceptance: SUCCESS; four implemented controls planned READY, two future account controls planned MISSING_SOURCE, per-control periods were bounded safely, and every logical source reported one read/normalize/index.
+- Performance comparison: SUCCESS with 100,000 records per transactional source. V15 tri-source completed in 9.07s; V16 preparation plus three READY controls completed in 20.09s; both produced exactly 100,000 matches.
+- `cargo test --workspace`: SUCCESS; all unit, integration, 54-test correctness, V15, V16, benchmark, and doc-test targets passed. Local confidential harnesses are ignored by the default command and were run explicitly.
+- `npm run test`: SUCCESS (20/20). `npm run typecheck`, `cargo fmt --all -- --check`, and strict workspace Clippy: SUCCESS.
+- `npx tauri build`: SUCCESS; generated MSI/NSIS artifacts remain ignored. The known GNU WebView2 `.drectve` warning remained non-fatal.

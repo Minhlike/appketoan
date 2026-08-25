@@ -138,6 +138,91 @@ export interface ReconciliationSession {
   enableAggregateMatch: boolean;
 }
 
+export interface AccountingPeriod {
+  startDate: string;
+  endDate: string;
+}
+
+export type SourceCapability =
+  | { kind: "LEDGER_ENTRY"; account: string }
+  | { kind: "INVOICE" }
+  | { kind: "BANK_TRANSACTION" }
+  | { kind: "PARTNER_MASTER" }
+  | { kind: "SALES_TRANSACTION" }
+  | { kind: "ANALYTICAL_SALES_REPORT" };
+
+export type ControlPlanStatus =
+  | "READY"
+  | "MISSING_SOURCE"
+  | "NEEDS_MAPPING"
+  | "NEEDS_REVIEW"
+  | "NOT_APPLICABLE";
+
+export interface PeriodEvidence {
+  earliestDate?: string;
+  latestDate?: string;
+  recordsInPeriod: number;
+  recordsOutsidePeriod: number;
+  missingOrUnparseableDates: number;
+}
+
+export interface SourceCatalogEntry {
+  sourceId: string;
+  sourceName: string;
+  sourceKind: DataSourceKind;
+  capabilities: SourceCapability[];
+  recordCount: number;
+  mappingComplete: boolean;
+  periodEvidence: PeriodEvidence;
+  warnings: string[];
+  provenanceSha256?: string;
+}
+
+export interface ControlPlan {
+  controlId: string;
+  title: string;
+  status: ControlPlanStatus;
+  sourceIds: string[];
+  missingCapabilities: SourceCapability[];
+  warnings: string[];
+  effectivePeriod?: AccountingPeriod;
+}
+
+export type ControlExecutionStatus = "PASS" | "NEEDS_REVIEW" | "NOT_RUN";
+
+export interface ControlFinding {
+  code: string;
+  severity: string;
+  message: string;
+}
+
+export interface ControlResult {
+  controlId: string;
+  status: ControlExecutionStatus;
+  evidence: string[];
+  findings: ControlFinding[];
+  sourceIds: string[];
+  missingCapabilities: SourceCapability[];
+  reconciliationResult?: ReconciliationResult;
+}
+
+export interface SourceReuseEvidence {
+  sourceId: string;
+  readCount: number;
+  normalizeCount: number;
+  indexCount: number;
+  normalizedRecordCount: number;
+}
+
+export interface AuditWorkspaceReport {
+  sessionId: string;
+  accountingPeriod: AccountingPeriod;
+  sourceCatalog: { sources: SourceCatalogEntry[] };
+  controlPlans: ControlPlan[];
+  controlResults: ControlResult[];
+  sourceReuse: SourceReuseEvidence[];
+}
+
 export type ValueOrigin = "SOURCE" | "DERIVED";
 
 export interface CanonicalRecord {
