@@ -2233,8 +2233,8 @@ fn test_18_false_positive_adversarial_suite() {
 // -------------------------------------------------------------------------------------------------
 #[test]
 fn test_19_real_2_file_baseline_46_45_missing_233() {
-    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
-    let tk_path = "D:\\appketoan\\T7.2026.xlsx";
+    let inv_path = "D:\\appketoan\\.local-testdata\\T7.2026 Thuế.xlsx";
+    let tk_path = "D:\\appketoan\\.local-testdata\\T7.2026.xlsx";
 
     if !Path::new(inv_path).exists() || !Path::new(tk_path).exists() {
         println!("Skipping real 2-file test as files are not present in current env");
@@ -2341,8 +2341,8 @@ fn test_19_real_2_file_baseline_46_45_missing_233() {
 // -------------------------------------------------------------------------------------------------
 #[test]
 fn test_20_independent_oracle_verification() {
-    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
-    let tk_path = "D:\\appketoan\\T7.2026.xlsx";
+    let inv_path = "D:\\appketoan\\.local-testdata\\T7.2026 Thuế.xlsx";
+    let tk_path = "D:\\appketoan\\.local-testdata\\T7.2026.xlsx";
 
     if !Path::new(inv_path).exists() || !Path::new(tk_path).exists() {
         return;
@@ -4482,8 +4482,8 @@ fn test_37_n_file_intake_deduplication_4_files_exact_baseline() {
         analyze_intake_data_sources, filter_reconciliation_session_and_records, DatasetRelation,
     };
 
-    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
-    let tk511_path = "D:\\appketoan\\T7.2026.xlsx";
+    let inv_path = "D:\\appketoan\\.local-testdata\\T7.2026 Thuế.xlsx";
+    let tk511_path = "D:\\appketoan\\.local-testdata\\T7.2026.xlsx";
 
     let meta_inv = inspect_excel_file(inv_path).expect("Failed to inspect invoice file");
     let sheet_inv = &meta_inv.sheets[0];
@@ -4785,8 +4785,8 @@ fn test_39_partial_overlap_detection_fail_closed() {
 fn test_40_upload_order_invariance_and_remapping() {
     use reconciliation_core::intake::filter_reconciliation_session_and_records;
 
-    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
-    let tk511_path = "D:\\appketoan\\T7.2026.xlsx";
+    let inv_path = "D:\\appketoan\\.local-testdata\\T7.2026 Thuế.xlsx";
+    let tk511_path = "D:\\appketoan\\.local-testdata\\T7.2026.xlsx";
 
     if !Path::new(inv_path).exists() || !Path::new(tk511_path).exists() {
         return;

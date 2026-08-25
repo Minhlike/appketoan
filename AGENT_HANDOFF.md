@@ -33,6 +33,15 @@ AI, nếu bổ sung sau này, chỉ được dùng để:
 
 ---
 
+## V15 LOCAL DATASET EXPANSION — 2026-08-25
+
+- Branch review target: `feature/v15-real-accounting-datasets` (not merged to `main`).
+- The user confirmed the seven suffixless files in `.local-testdata/` are the local acceptance set. The directory is ignored; never commit or transmit those workbooks.
+- The engine now distinguishes ledger 112, partner masters, sales registers, sales-analysis reports, and bank statements; support evidence is sanitized in `docs/REAL_DATASET_SUPPORT_MATRIX.md`.
+- Preserve the baseline automated acceptance contract. V15 adds direction compatibility for ledger-112/bank comparisons and refuses to match equal amounts with contradictory directions.
+
+---
+
 ## 1. BASELINE BẤT BIẾN
 
 Dataset baseline:

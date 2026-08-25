@@ -112,6 +112,8 @@ pub fn compute_record_fingerprint(r: &CanonicalRecord, kind: &DataSourceKind) ->
         | DataSourceKind::Ledger3331
         | DataSourceKind::Ledger131
         | DataSourceKind::Ledger133
+        | DataSourceKind::Ledger112
+        | DataSourceKind::SalesRegister
         | DataSourceKind::CashBook
         | DataSourceKind::BranchLedger => {
             hasher.update(
@@ -191,7 +193,9 @@ pub fn compute_record_fingerprint(r: &CanonicalRecord, kind: &DataSourceKind) ->
             hasher.update(b"|");
             hasher.update(r.total_amount.to_string().as_bytes());
         }
-        DataSourceKind::Custom => {
+        DataSourceKind::PartnerMaster
+        | DataSourceKind::SalesAnalysisReport
+        | DataSourceKind::Custom => {
             hasher.update(
                 CanonicalRecord::normalize_doc_no(r.doc_no.as_deref().unwrap_or("")).as_bytes(),
             );

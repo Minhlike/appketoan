@@ -42,7 +42,9 @@ Reconciliation Core (crates/reconciliation-core/)
 - NONE.
 
 ## V15 Local Dataset Gate (2026-08-25)
-- BLOCKED: `.local-testdata/` exists, but none of the seven required filenames with the `(1)` suffix is present. Seven similarly named suffixless workbooks were found but were not inspected because their identity has not been confirmed.
+- COMPLETE: the user confirmed the seven suffixless workbooks in `.local-testdata/` are the authoritative local acceptance set. They were read only through the local Rust reader and remain ignored by Git.
+- V15 adds typed handling for partner masters and sales analysis, directional safeguards for TK112/bank matching, adaptive header detection, and additive UI mapping/source-kind support.
+- The immutable reconciliation baseline remains covered by the real-local regression suite.
 
 ## Latest Verification (2026-08-25)
 - GNU workspace test suite completed successfully after the v14 intake and packaging changes.

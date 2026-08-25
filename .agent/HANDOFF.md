@@ -48,6 +48,6 @@
 - The `main` branch was pushed successfully to the configured GitHub `origin`; verify the current commit before any follow-up work.
 
 ## V15 Real Dataset Gate — 2026-08-25
-- BLOCKED before Phase A: `.local-testdata/` exists, but none of the seven required `(1)`-suffix filenames is present. Similar suffixless workbooks were found and intentionally not assumed equivalent.
-- No source-detection, parser, matching, UI, or test code was changed for V15.
-- `.local-testdata/` is ignored to prevent confidential workbooks from entering version control.
+- The user confirmed that the suffixless workbooks in `.local-testdata/` are the acceptance set. They were processed locally only and are still ignored.
+- V15 source, parser, model, matching-safety, UI mapping, and test changes are on `feature/v15-real-accounting-datasets`; see `docs/REAL_DATASET_SUPPORT_MATRIX.md` for sanitized support evidence.
+- The feature branch passed workspace Rust tests, frontend tests, typecheck, formatting, clippy, release build, and executable smoke test. It has not been merged to `main`.

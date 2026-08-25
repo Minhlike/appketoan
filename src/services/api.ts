@@ -292,6 +292,62 @@ export const PRECONFIGURED_SCENARIOS: PreconfiguredScenario[] = [
     enableAggregate: false,
   },
   {
+    id: "scenario_invoice_sales_register",
+    name: "Đối chiếu Hóa đơn ↔ Bảng kê bán hàng",
+    description: "Kiểm tra hóa đơn theo kỳ với bảng kê bán hàng; thiếu TK511 vẫn phải được thể hiện là cần rà soát.",
+    recommendedSources: [
+      { kind: "e_invoice", role: "PRIMARY", title: "Hóa đơn điện tử", description: "Nguồn hóa đơn theo kỳ", required: true },
+      { kind: "sales_register", role: "REQUIRED_SECONDARY", title: "Bảng kê bán hàng", description: "Bảng kê giao dịch bán hàng", required: true },
+    ],
+    rules: [
+      { semantic: "REVENUE", title: "Doanh thu theo chứng từ", description: "Tiền hàng hóa đơn ↔ bảng kê trong cùng phạm vi ngày", primaryField: "pretaxAmount", secondarySourceKind: "sales_register", secondaryField: "pretaxAmount", dateToleranceDays: 3 },
+      { semantic: "VAT", title: "Thuế theo chứng từ", description: "VAT hóa đơn ↔ bảng kê", primaryField: "vatAmount", secondarySourceKind: "sales_register", secondaryField: "vatAmount", dateToleranceDays: 3 },
+      { semantic: "RECEIVABLE", title: "Phải thu theo chứng từ", description: "Tổng thanh toán hóa đơn ↔ phải thu bảng kê", primaryField: "totalAmount", secondarySourceKind: "sales_register", secondaryField: "totalAmount", dateToleranceDays: 3 },
+    ],
+    defaultToleranceVnd: "0",
+    defaultDateDays: 3,
+    enableAggregate: false,
+  },
+  {
+    id: "scenario_ledger112_bank_statement",
+    name: "Đối chiếu TK112 ↔ Sao kê ngân hàng",
+    description: "Chỉ so khớp giao dịch cùng chiều tiền vào/ra, cùng số tiền và trong cửa sổ ngày được phép.",
+    recommendedSources: [
+      { kind: "ledger_112", role: "PRIMARY", title: "Sổ cái TK112", description: "Dòng tiền gửi ngân hàng", required: true },
+      { kind: "bank_statement", role: "REQUIRED_SECONDARY", title: "Sao kê ngân hàng", description: "Giao dịch ngân hàng thực tế", required: true },
+    ],
+    rules: [
+      { semantic: "BANK_PAYMENT", title: "Dòng tiền cùng chiều", description: "Không match tiền vào với tiền ra chỉ vì cùng số tiền", primaryField: "directionalAmount", secondarySourceKind: "bank_statement", secondaryField: "directionalAmount", dateToleranceDays: 3 },
+    ],
+    defaultToleranceVnd: "0",
+    defaultDateDays: 3,
+    enableAggregate: false,
+  },
+  {
+    id: "scenario_partner_identity_control",
+    name: "Kiểm soát định danh khách hàng",
+    description: "Dùng MST và mã khách hàng; MST trùng nhiều dòng luôn cần rà soát.",
+    recommendedSources: [
+      { kind: "partner_master", role: "REFERENCE_MASTER", title: "Danh mục khách hàng/NCC", description: "Nguồn tham chiếu, không phải giao dịch", required: true },
+    ],
+    rules: [],
+    defaultToleranceVnd: "0",
+    defaultDateDays: 0,
+    enableAggregate: false,
+  },
+  {
+    id: "scenario_sales_analysis_report_control",
+    name: "Kiểm soát báo cáo bán hàng tổng hợp",
+    description: "Xác minh tầng nhóm và chi tiết bằng nhau; không cộng cả hai tầng.",
+    recommendedSources: [
+      { kind: "sales_analysis_report", role: "PRIMARY", title: "Báo cáo phân tích bán hàng", description: "Nguồn phân tích, không transaction-match", required: true },
+    ],
+    rules: [],
+    defaultToleranceVnd: "0",
+    defaultDateDays: 0,
+    enableAggregate: false,
+  },
+  {
     id: "scenario_custom_multi_source",
     name: "Đối chiếu Tùy biến N-nguồn",
     description: "Tự do cấu hình vai trò từng file và các cột đối chiếu",

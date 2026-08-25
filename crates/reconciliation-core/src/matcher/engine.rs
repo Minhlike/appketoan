@@ -57,6 +57,8 @@ pub fn extract_rule_amount(
         "creditAmount" | "credit_amount" => record
             .credit_amount
             .ok_or_else(|| RuleFieldError::MissingFieldValue("creditAmount".to_string())),
+        "directionalAmount" | "directional_amount" => crate::models::directional_amount(record)
+            .ok_or_else(|| RuleFieldError::MissingFieldValue("directionalAmount".to_string())),
         other => Err(RuleFieldError::UnknownField(other.to_string())),
     }
 }
@@ -123,6 +125,10 @@ pub fn resolve_pair_comparison_amounts(
 
     let pri_amt = extract_rule_amount(primary, &rule.primary_field).ok()?;
     let sec_amt = extract_rule_amount(secondary, &rule.secondary_field).ok()?;
+
+    if !crate::models::directions_are_compatible(primary, primary_kind, secondary, secondary_kind) {
+        return None;
+    }
 
     Some((
         pri_amt,

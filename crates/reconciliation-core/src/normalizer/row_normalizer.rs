@@ -3,7 +3,10 @@ use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::models::{CanonicalRecord, DataSource, ValueOrigin};
+use crate::models::{
+    AnalyticalRowLevel, CanonicalRecord, DataSource, PartnerRecord, SalesAnalysisRecord,
+    ValueOrigin,
+};
 use crate::reader::header_detector::remove_diacritics;
 
 /// Normalizes Excel serial date floats (e.g. 45300.0 -> "2024-01-09")
@@ -398,6 +401,210 @@ pub fn normalize_data_source_rows(
     }
 
     canonical_records
+}
+
+fn mapped_value(
+    row: &[String],
+    header_columns: &[String],
+    column: &Option<String>,
+) -> Option<String> {
+    let target = column.as_ref()?.trim();
+    let index = header_columns
+        .iter()
+        .position(|header| header.trim() == target)?;
+    row.get(index)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn parse_marker(value: Option<String>) -> Option<bool> {
+    let value = value?;
+    match remove_diacritics(&value)
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "1" | "x" | "yes" | "true" | "co" => Some(true),
+        "0" | "no" | "false" | "khong" => Some(false),
+        _ => None,
+    }
+}
+
+/// Normalizes master data without applying transactional monetary filters.
+pub fn normalize_partner_master_rows(
+    data_source: &DataSource,
+    header_columns: &[String],
+    raw_rows: &[Vec<String>],
+) -> Vec<PartnerRecord> {
+    let start = data_source.data_start_row.saturating_sub(1) as usize;
+    raw_rows
+        .iter()
+        .enumerate()
+        .skip(start)
+        .filter(|(_, row)| !is_garbage_or_subtotal_row(row))
+        .filter_map(|(index, row)| {
+            let partner_code = mapped_value(
+                row,
+                header_columns,
+                &data_source.column_mapping.partner_code_column,
+            );
+            let partner_name = mapped_value(
+                row,
+                header_columns,
+                &data_source.column_mapping.partner_name_column,
+            );
+            let partner_tax_id = mapped_value(
+                row,
+                header_columns,
+                &data_source.column_mapping.partner_tax_id_column,
+            )
+            .map(|value| CanonicalRecord::normalize_tax_id(&value))
+            .filter(|value| !value.is_empty());
+            if partner_code.is_none() && partner_name.is_none() && partner_tax_id.is_none() {
+                return None;
+            }
+            let raw_fields = header_columns
+                .iter()
+                .enumerate()
+                .filter_map(|(column_index, header)| {
+                    row.get(column_index)
+                        .map(|value| (header.clone(), value.clone()))
+                        .filter(|(_, value)| !value.trim().is_empty())
+                })
+                .collect();
+            Some(PartnerRecord {
+                id: format!("{}_row_{}", data_source.id, index + 1),
+                source_id: data_source.id.clone(),
+                source_row: (index + 1) as u32,
+                partner_code,
+                partner_name,
+                partner_tax_id,
+                address: mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.address_column,
+                ),
+                is_customer: parse_marker(mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.is_customer_column,
+                )),
+                is_supplier: parse_marker(mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.is_supplier_column,
+                )),
+                status: mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.status_column,
+                ),
+                raw_fields,
+            })
+        })
+        .collect()
+}
+
+/// Normalizes the grouped sales-analysis report without treating it as transactional data.
+pub fn normalize_sales_analysis_rows(
+    data_source: &DataSource,
+    header_columns: &[String],
+    raw_rows: &[Vec<String>],
+) -> Vec<SalesAnalysisRecord> {
+    let start = data_source.data_start_row.saturating_sub(1) as usize;
+    raw_rows
+        .iter()
+        .enumerate()
+        .skip(start)
+        .filter(|(_, row)| !is_garbage_or_subtotal_row(row))
+        .filter_map(|(index, row)| {
+            let product_code = mapped_value(
+                row,
+                header_columns,
+                &data_source.column_mapping.product_code_column,
+            );
+            let product_name = mapped_value(
+                row,
+                header_columns,
+                &data_source.column_mapping.product_name_column,
+            );
+            let revenue = mapped_value(
+                row,
+                header_columns,
+                &data_source.column_mapping.revenue_column,
+            )
+            .and_then(|value| parse_amount(&value));
+            if product_code.is_none() && product_name.is_none() && revenue.is_none() {
+                return None;
+            }
+            let row_level = if product_code.is_some() {
+                AnalyticalRowLevel::Detail
+            } else if product_name.is_some() {
+                AnalyticalRowLevel::Group
+            } else {
+                AnalyticalRowLevel::NeedsReview
+            };
+            let raw_fields = header_columns
+                .iter()
+                .enumerate()
+                .filter_map(|(column_index, header)| {
+                    row.get(column_index)
+                        .map(|value| (header.clone(), value.clone()))
+                        .filter(|(_, value)| !value.trim().is_empty())
+                })
+                .collect();
+            Some(SalesAnalysisRecord {
+                id: format!("{}_row_{}", data_source.id, index + 1),
+                source_id: data_source.id.clone(),
+                source_row: (index + 1) as u32,
+                row_level,
+                group_key: None,
+                product_code,
+                product_name,
+                quantity: mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.quantity_column,
+                )
+                .and_then(|value| parse_amount(&value)),
+                unit_price: mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.unit_price_column,
+                )
+                .and_then(|value| parse_amount(&value)),
+                revenue,
+                vat: mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.vat_amount_column,
+                )
+                .and_then(|value| parse_amount(&value)),
+                discount: mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.discount_amount_column,
+                )
+                .and_then(|value| parse_amount(&value)),
+                receivable: mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.total_amount_column,
+                )
+                .and_then(|value| parse_amount(&value)),
+                unit_cost: None,
+                cost: mapped_value(row, header_columns, &data_source.column_mapping.cost_column)
+                    .and_then(|value| parse_amount(&value)),
+                profit: mapped_value(
+                    row,
+                    header_columns,
+                    &data_source.column_mapping.profit_column,
+                )
+                .and_then(|value| parse_amount(&value)),
+                raw_fields,
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
