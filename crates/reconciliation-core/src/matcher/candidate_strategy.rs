@@ -14,6 +14,7 @@ pub enum BankCandidateDecision {
     },
     NeedsReview {
         reason: &'static str,
+        record_ids: Vec<String>,
     },
     Suggested {
         record_id: String,
@@ -59,6 +60,7 @@ pub fn select_bank_candidate(
     let Ok(primary_amount) = extract_rule_amount(primary, &rule.primary_field) else {
         return BankCandidateDecision::NeedsReview {
             reason: "PRIMARY_AMOUNT_MISSING",
+            record_ids: vec![],
         };
     };
 
@@ -110,6 +112,7 @@ pub fn select_bank_candidate(
             } else {
                 "INSUFFICIENT_BANK_EVIDENCE"
             },
+            record_ids: vec![],
         };
     }
     let primary_reference = normalized_text(primary.transaction_number.as_deref())
@@ -181,6 +184,10 @@ pub fn select_bank_candidate(
 
     BankCandidateDecision::NeedsReview {
         reason: "AMBIGUOUS_BANK_CANDIDATES",
+        record_ids: compatible
+            .into_iter()
+            .map(|candidate| candidate.id.clone())
+            .collect(),
     }
 }
 

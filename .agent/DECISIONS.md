@@ -43,3 +43,7 @@
 ## Decision 009: Evidence-Gated Bank Matching and Transactional Primary Derivation
 - **Decision**: A bank candidate is accepted only with unique strong evidence after direction/amount/date compatibility. A unique compatible amount/date candidate is a non-consuming review suggestion. Before matching, remove typed reference controls and resolve the primary from remaining transactional sources, preferring an explicit transactional primary then E-Invoice.
 - **Rationale**: Coincidental cash movements must not be consumed as accounting evidence, and source load order must not turn reference data into a transactional primary.
+
+## Decision 010: Direct-First Aggregate State Machine and Review Conservation
+- **Decision**: Scan all direct candidates in O(n). Multiple direct matches are ambiguous; one direct match is accepted without subset search. Only zero direct matches may enter aggregate search, and only within the fixed candidate budget. Track accepted, review-linked, and truly unlinked secondary IDs separately.
+- **Rationale**: This prevents exponential enumeration and integer-shift hazards, while preserving audit links without misreporting reviewed bank records as missing from the primary source.

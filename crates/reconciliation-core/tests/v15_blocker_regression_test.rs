@@ -257,6 +257,60 @@ fn bank_coincidental_direction_amount_and_date_is_suggested_not_consumed() {
             .message
             .contains("SUGGESTED_DIRECTION_AMOUNT_DATE")
     }));
+    assert_eq!(group.target_source_record_ids, ["bank".to_string()]);
+    assert!(result
+        .groups
+        .iter()
+        .all(|candidate| candidate.status != MatchStatus::UnmatchedMissingInSource));
+}
+
+#[test]
+fn ambiguous_bank_candidates_are_review_linked_not_bank_only() {
+    let ledger = source("primary", DataSourceKind::Ledger112, SourceRole::Primary);
+    let bank = source(
+        "bank",
+        DataSourceKind::BankStatement,
+        SourceRole::RequiredSecondary,
+    );
+    let payment_rule = rule(
+        "bank",
+        ComparisonSemantic::BankPayment,
+        DataSourceKind::Ledger112,
+        DataSourceKind::BankStatement,
+        "directionalAmount",
+        "directionalAmount",
+    );
+    let mut ledger_record = record("ledger", "primary", None);
+    ledger_record.partner_tax_id = None;
+    ledger_record.debit_amount = Some(dec!(100));
+    let bank_records = ["bank-a", "bank-b"]
+        .into_iter()
+        .map(|id| {
+            let mut bank_record = record(id, "bank", None);
+            bank_record.partner_tax_id = None;
+            bank_record.credit_amount = Some(dec!(100));
+            bank_record
+        })
+        .collect();
+    let result = execute_reconciliation(
+        &session(vec![ledger, bank], vec![payment_rule], false),
+        &HashMap::from([
+            ("primary".to_string(), vec![ledger_record]),
+            ("bank".to_string(), bank_records),
+        ]),
+    )
+    .expect("execution");
+    let group = &result.groups[0];
+    assert_eq!(group.status, MatchStatus::NeedsReview);
+    assert!(group
+        .discrepancies
+        .iter()
+        .any(|discrepancy| { discrepancy.message.contains("AMBIGUOUS_BANK_CANDIDATES") }));
+    assert_eq!(group.target_source_record_ids.len(), 2);
+    assert!(result
+        .groups
+        .iter()
+        .all(|candidate| candidate.status != MatchStatus::UnmatchedMissingInSource));
 }
 
 #[test]
@@ -341,8 +395,10 @@ fn opposite_semantic_variances_are_reported_as_gross_discrepancy() {
     );
 }
 
-#[test]
-fn aggregate_over_budget_fails_closed_instead_of_truncating_candidates() {
+fn aggregate_policy_result(
+    candidate_count: usize,
+    direct_match_count: usize,
+) -> reconciliation_core::ReconciliationResult {
     let invoice = source("primary", DataSourceKind::EInvoice, SourceRole::Primary);
     let ledger = source(
         "ledger",
@@ -352,16 +408,16 @@ fn aggregate_over_budget_fails_closed_instead_of_truncating_candidates() {
     let mut primary = record("invoice", "primary", Some("aggregate"));
     primary.pretax_amount = Some(dec!(100));
     let mut candidates = Vec::new();
-    for index in 0..13 {
+    for index in 0..candidate_count {
         let mut candidate = record(&format!("ledger_{index}"), "ledger", Some("aggregate"));
-        candidate.credit_amount = Some(if index == 0 || index == 12 {
+        candidate.credit_amount = Some(if index < direct_match_count {
             dec!(100)
         } else {
             dec!(1000)
         });
         candidates.push(candidate);
     }
-    let result = execute_reconciliation(
+    execute_reconciliation(
         &session(
             vec![invoice, ledger],
             vec![rule(
@@ -379,7 +435,12 @@ fn aggregate_over_budget_fails_closed_instead_of_truncating_candidates() {
             ("ledger".to_string(), candidates),
         ]),
     )
-    .expect("execution");
+    .expect("execution")
+}
+
+#[test]
+fn aggregate_32_candidates_without_direct_match_hits_complexity_limit() {
+    let result = aggregate_policy_result(32, 0);
     assert_eq!(result.groups[0].status, MatchStatus::NeedsReview);
     assert!(result.groups[0]
         .discrepancies
@@ -388,41 +449,23 @@ fn aggregate_over_budget_fails_closed_instead_of_truncating_candidates() {
 }
 
 #[test]
-fn aggregate_over_budget_keeps_a_unique_direct_match() {
-    let invoice = source("primary", DataSourceKind::EInvoice, SourceRole::Primary);
-    let ledger = source(
-        "ledger",
-        DataSourceKind::Ledger511,
-        SourceRole::RequiredSecondary,
-    );
-    let mut primary = record("invoice", "primary", Some("direct"));
-    primary.pretax_amount = Some(dec!(100));
-    let mut candidates = Vec::new();
-    for index in 0..13 {
-        let mut candidate = record(&format!("ledger_{index}"), "ledger", Some("direct"));
-        candidate.credit_amount = Some(if index == 0 { dec!(100) } else { dec!(1000) });
-        candidates.push(candidate);
-    }
-    let result = execute_reconciliation(
-        &session(
-            vec![invoice, ledger],
-            vec![rule(
-                "revenue",
-                ComparisonSemantic::Revenue,
-                DataSourceKind::EInvoice,
-                DataSourceKind::Ledger511,
-                "pretaxAmount",
-                "creditAmount",
-            )],
-            true,
-        ),
-        &HashMap::from([
-            ("primary".to_string(), vec![primary]),
-            ("ledger".to_string(), candidates),
-        ]),
-    )
-    .expect("execution");
+fn aggregate_32_candidates_with_one_direct_match_accepts_direct() {
+    let result = aggregate_policy_result(32, 1);
     assert_eq!(result.groups[0].status, MatchStatus::MatchedExact);
+    assert_eq!(result.groups[0].target_source_record_ids.len(), 1);
+}
+
+#[test]
+fn aggregate_64_candidates_with_one_direct_match_does_not_overflow_or_hang() {
+    let result = aggregate_policy_result(64, 1);
+    assert_eq!(result.groups[0].status, MatchStatus::MatchedExact);
+    assert_eq!(result.groups[0].target_source_record_ids.len(), 1);
+}
+
+#[test]
+fn aggregate_more_than_one_direct_match_is_ambiguous() {
+    let result = aggregate_policy_result(32, 2);
+    assert_eq!(result.groups[0].status, MatchStatus::AmbiguousMatch);
 }
 
 #[test]

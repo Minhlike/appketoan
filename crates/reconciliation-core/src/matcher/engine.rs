@@ -295,7 +295,8 @@ pub fn execute_reconciliation(
             .any(|source| source.kind == DataSourceKind::Ledger511);
 
     let mut consumed_primary_ids = HashSet::new();
-    let mut consumed_secondary_ids = HashSet::new();
+    let mut accepted_secondary_ids = HashSet::new();
+    let mut review_linked_secondary_ids = HashSet::new();
     let mut groups: Vec<MatchGroup> = Vec::new();
 
     // -------------------------------------------------------------
@@ -389,6 +390,11 @@ pub fn execute_reconciliation(
             }));
         }
     }
+    let bank_secondary_record_ids: HashSet<String> = secondary_indexes
+        .iter()
+        .filter(|index| index.source_kind == DataSourceKind::BankStatement)
+        .flat_map(|index| index.all_records.iter().map(|record| record.id.clone()))
+        .collect();
 
     // -------------------------------------------------------------
     // PASS 1: Series-Aware & Counterparty-Bounded Document Key Matching
@@ -559,6 +565,7 @@ pub fn execute_reconciliation(
 
             let is_bank_pair = primary_kind == &DataSourceKind::Ledger112
                 && sec_idx.source_kind == DataSourceKind::BankStatement;
+            let mut bank_review_linked_ids = Vec::new();
 
             // Bank statements frequently lack invoice number and tax id. Their
             // policy is deliberately separate from document-key matching.
@@ -569,7 +576,7 @@ pub fn execute_reconciliation(
                     &sec_idx
                         .all_records
                         .iter()
-                        .filter(|candidate| !consumed_secondary_ids.contains(&candidate.id))
+                        .filter(|candidate| !accepted_secondary_ids.contains(&candidate.id))
                         .map(|candidate| candidate as &CanonicalRecord)
                         .collect::<Vec<_>>(),
                     &sec_idx.source_kind,
@@ -595,17 +602,22 @@ pub fn execute_reconciliation(
                             .map(|candidate| candidate as &CanonicalRecord)
                             .collect()
                     }
-                    crate::matcher::BankCandidateDecision::NeedsReview { reason } => {
+                    crate::matcher::BankCandidateDecision::NeedsReview { reason, record_ids } => {
+                        review_linked_secondary_ids.extend(record_ids.iter().cloned());
+                        bank_review_linked_ids = record_ids;
                         group_discrepancies.push(FieldDiscrepancy {
                             field_name: "reviewReason".to_string(),
                             source_value: Some(reason.to_string()),
-                            target_value: None,
+                            target_value: (!bank_review_linked_ids.is_empty())
+                                .then(|| bank_review_linked_ids.join(",")),
                             amount_diff: None,
                             message: format!("BANK_REVIEW_REASON: {reason}"),
                         });
                         vec![]
                     }
                     crate::matcher::BankCandidateDecision::Suggested { record_id, reason } => {
+                        review_linked_secondary_ids.insert(record_id.clone());
+                        bank_review_linked_ids.push(record_id.clone());
                         group_discrepancies.push(FieldDiscrepancy {
                             field_name: "reviewReason".to_string(),
                             source_value: Some(reason.to_string()),
@@ -640,7 +652,7 @@ pub fn execute_reconciliation(
             let available: Vec<&&CanonicalRecord> = raw_candidates
                 .iter()
                 .filter(|c| {
-                    !consumed_secondary_ids.contains(&c.id)
+                    !accepted_secondary_ids.contains(&c.id)
                         && is_date_within_tolerance(
                             primary.date.as_deref(),
                             c.date.as_deref(),
@@ -678,12 +690,16 @@ pub fn execute_reconciliation(
                     _ => grp_other_var += pri_comp,
                 }
 
+                let is_bank_review_linked = is_bank_pair && !bank_review_linked_ids.is_empty();
+                group_target_ids.extend(bank_review_linked_ids.iter().cloned());
                 let disc = FieldDiscrepancy {
                     field_name: "docNo".to_string(),
                     source_value: Some(format!("{} (Ký hiệu {})", doc_key, primary_series)),
-                    target_value: None,
+                    target_value: is_bank_review_linked.then(|| bank_review_linked_ids.join(",")),
                     amount_diff: Some(pri_comp),
-                    message: if is_tri_source_invoice_control {
+                    message: if is_bank_review_linked {
+                        "BANK_REVIEW_LINKED: ứng viên ngân hàng đã được liên kết để kiểm tra thủ công; không được coi là thiếu ở nguồn chính.".to_string()
+                    } else if is_tri_source_invoice_control {
                         format!(
                             "HIGH: chứng từ #{} không tìm thấy trong nguồn {} của kiểm soát ba nguồn",
                             doc_key, sec_idx.source_name
@@ -701,9 +717,13 @@ pub fn execute_reconciliation(
                     SourceMatchBreakdown {
                         source_id: sec_idx.source_id.clone(),
                         source_name: sec_idx.source_name.clone(),
-                        record_ids: vec![],
+                        record_ids: bank_review_linked_ids.clone(),
                         compared_amount: Decimal::ZERO,
-                        status: MatchStatus::UnmatchedMissingInTarget,
+                        status: if is_bank_review_linked {
+                            MatchStatus::NeedsReview
+                        } else {
+                            MatchStatus::UnmatchedMissingInTarget
+                        },
                         discrepancies: vec![disc.clone()],
                     },
                 );
@@ -721,9 +741,13 @@ pub fn execute_reconciliation(
                     expected_amount: pri_comp,
                     actual_amount: Decimal::ZERO,
                     variance: pri_comp,
-                    status: MatchStatus::UnmatchedMissingInTarget,
+                    status: if is_bank_review_linked {
+                        MatchStatus::NeedsReview
+                    } else {
+                        MatchStatus::UnmatchedMissingInTarget
+                    },
                     primary_record_ids: vec![primary.id.clone()],
-                    secondary_record_ids: vec![],
+                    secondary_record_ids: bank_review_linked_ids,
                     discrepancies: vec![disc],
                 });
                 group_discrepancies.push(group_disc);
@@ -758,24 +782,23 @@ pub fn execute_reconciliation(
                         .map(|_| vec![index])
                 })
                 .collect();
-            let mut matching_subsets: Vec<Vec<usize>> = Vec::new();
+            let mut matching_subsets = direct_matches.clone();
             // Aggregate matching is an explicitly bounded slow path.  At most
             // 12 candidates are explored (4,095 non-empty subsets); a second
             // valid result is already enough to classify it as ambiguous.
             const MAX_AGGREGATE_CANDIDATES: usize = 12;
-            let aggregate_complexity_limited = allow_aggregate
-                && direct_matches.len() != 1
+            let aggregate_complexity_limited = direct_matches.is_empty()
+                && allow_aggregate
                 && available.len() > MAX_AGGREGATE_CANDIDATES;
-            // A bounded scan also proves that a seemingly unique direct match
-            // has no competing aggregate solution. Without that proof, a
-            // direct candidate such as 100 can still be ambiguous with 40+60.
-            // Above the budget a direct 1:1 result is already complete O(n)
-            // evidence and is never rejected merely for candidate volume.
-            let subset_n = if allow_aggregate && !aggregate_complexity_limited {
-                available.len()
-            } else {
-                0
-            };
+            // Subset search is reachable only when the complete O(n) scan
+            // found no direct match and the candidate set is within budget.
+            // This ordering also guarantees the shift below is always safe.
+            let subset_n =
+                if direct_matches.is_empty() && allow_aggregate && !aggregate_complexity_limited {
+                    available.len()
+                } else {
+                    0
+                };
             let total_combos = 1usize << subset_n;
 
             for mask in 1..total_combos {
@@ -824,13 +847,6 @@ pub fn execute_reconciliation(
                         }
                     }
                 }
-            }
-
-            // With aggregate disabled we use the O(n) direct scan. With it
-            // enabled, the bounded scan above can downgrade a direct hit only
-            // when an alternative valid aggregate proves ambiguity.
-            if !allow_aggregate && !direct_matches.is_empty() {
-                matching_subsets = direct_matches;
             }
 
             if aggregate_complexity_limited {
@@ -1313,8 +1329,16 @@ pub fn execute_reconciliation(
         // INVARIANT: Finalized match group consumes candidates ONLY if it is an accepted match
         if is_accepted_match(&overall_status) {
             for tid in &group_target_ids {
-                consumed_secondary_ids.insert(tid.clone());
+                accepted_secondary_ids.insert(tid.clone());
+                review_linked_secondary_ids.remove(tid);
             }
+        } else {
+            review_linked_secondary_ids.extend(
+                group_target_ids
+                    .iter()
+                    .filter(|tid| bank_secondary_record_ids.contains(*tid))
+                    .cloned(),
+            );
         }
 
         let amount_variance = grp_revenue_var + grp_vat_var + grp_receivable_var + grp_other_var;
@@ -1406,7 +1430,7 @@ pub fn execute_reconciliation(
                     let available: Vec<&&CanonicalRecord> = candidates
                         .iter()
                         .filter(|c| {
-                            !consumed_secondary_ids.contains(&c.id)
+                            !accepted_secondary_ids.contains(&c.id)
                                 && is_date_within_tolerance(
                                     primary.date.as_deref(),
                                     c.date.as_deref(),
@@ -1524,7 +1548,8 @@ pub fn execute_reconciliation(
                         MatchStatus::MismatchMetadata
                     } else {
                         for cid in fallback_candidates_to_consume {
-                            consumed_secondary_ids.insert(cid);
+                            review_linked_secondary_ids.remove(&cid);
+                            accepted_secondary_ids.insert(cid);
                         }
                         MatchStatus::MatchedWithTolerance
                     };
@@ -1719,6 +1744,15 @@ pub fn execute_reconciliation(
     // -------------------------------------------------------------
     // PASS 3: Residual Sweep for Secondary-Missing Records
     // -------------------------------------------------------------
+    let truly_unlinked_secondary_ids: HashSet<String> = secondary_indexes
+        .iter()
+        .flat_map(|index| index.all_records.iter())
+        .filter(|record| {
+            !accepted_secondary_ids.contains(&record.id)
+                && !review_linked_secondary_ids.contains(&record.id)
+        })
+        .map(|record| record.id.clone())
+        .collect();
     for (source_index, sec_idx) in secondary_indexes.iter().enumerate() {
         let sec_rule = compiled_controls
             .iter()
@@ -1726,10 +1760,11 @@ pub fn execute_reconciliation(
             .and_then(|control| control.rule);
 
         for sec in sec_idx.all_records {
-            if consumed_secondary_ids.contains(&sec.id) {
+            if !truly_unlinked_secondary_ids.contains(&sec.id) {
                 continue;
             }
-            consumed_secondary_ids.insert(sec.id.clone());
+            // By construction this record is neither accepted nor linked to a
+            // review decision. Only truly unlinked records reach this sweep.
 
             let doc_display = sec
                 .doc_no

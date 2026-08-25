@@ -1,7 +1,7 @@
 //! Local-only acceptance harness. It never embeds, copies, serializes, or
 //! commits workbook data. Run explicitly with `--ignored --nocapture`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use reconciliation_core::{
@@ -172,6 +172,25 @@ fn local_real_acceptance_reports_sanitized_counts() {
         enable_aggregate_match: false,
     };
     let result = execute_reconciliation(&session, &records).expect("local baseline reconciliation");
+    assert_eq!(records.get(&invoice.id).map_or(0, Vec::len), 46);
+    assert_eq!(records.get(&ledger.id).map_or(0, Vec::len), 45);
+    assert_eq!(result.summary.total_source_records, 46);
+    assert_eq!(result.summary.total_target_records, 45);
+    assert_eq!(result.summary.exact_matches_count, 45);
+    assert_eq!(result.summary.missing_in_target_count, 1);
+    assert_eq!(
+        result.summary.total_discrepant_amount,
+        Decimal::from(105_000_000u64)
+    );
+    let missing_233 = result
+        .groups
+        .iter()
+        .find(|group| {
+            group.doc_no.as_deref() == Some("233")
+                && group.status == reconciliation_core::MatchStatus::UnmatchedMissingInTarget
+        })
+        .expect("invoice 233 must be missing from TK511");
+    assert_eq!(missing_233.primary_source_record_ids.len(), 1);
     println!(
         "LOCAL_ACCEPTANCE baseline source={} target={} exact={} missing_target={} gross={}",
         result.summary.total_source_records,
@@ -214,6 +233,20 @@ fn local_real_acceptance_reports_sanitized_counts() {
     };
     let bank_result =
         execute_reconciliation(&bank_session, &records).expect("local bank reconciliation");
+    assert_eq!(records.get(&bank.id).map_or(0, Vec::len), 225);
+    let ledger112_records = records.get(&ledger112.id).expect("TK112 records");
+    let balance_value_count = ledger112_records
+        .iter()
+        .filter(|record| record.balance.is_some())
+        .count();
+    let balance_equation = running_balance_equation_holds(ledger112_records);
+    match balance_equation {
+        Some(holds) => assert!(holds, "TK112 running balance equation must hold"),
+        None => assert!(
+            balance_value_count < 2,
+            "NOT_VERIFIED is valid only without enough normalized balance values"
+        ),
+    }
     let count_reason = |reason: &str| {
         bank_result
             .groups
@@ -226,23 +259,66 @@ fn local_real_acceptance_reports_sanitized_counts() {
             })
             .count()
     };
-    let strong = count_reason("BANK_MATCH_EVIDENCE");
-    let bank_only = bank_result
+    let ids_for_reason = |reason: &str| -> HashSet<String> {
+        bank_result
+            .groups
+            .iter()
+            .filter(|group| {
+                group
+                    .discrepancies
+                    .iter()
+                    .any(|discrepancy| discrepancy.message.contains(reason))
+            })
+            .flat_map(|group| group.target_source_record_ids.iter().cloned())
+            .collect()
+    };
+    let accepted_secondary_ids = ids_for_reason("BANK_MATCH_EVIDENCE");
+    let suggested_candidates = ids_for_reason("SUGGESTED_DIRECTION_AMOUNT_DATE");
+    let ambiguous_candidates = ids_for_reason("AMBIGUOUS_BANK_CANDIDATES");
+    let ambiguous_secondary_ids: HashSet<String> = ambiguous_candidates
+        .difference(&accepted_secondary_ids)
+        .cloned()
+        .collect();
+    let suggested_secondary_ids: HashSet<String> = suggested_candidates
+        .difference(&accepted_secondary_ids)
+        .filter(|id| !ambiguous_secondary_ids.contains(*id))
+        .cloned()
+        .collect();
+    let review_linked_secondary_ids: HashSet<String> = suggested_secondary_ids
+        .union(&ambiguous_secondary_ids)
+        .cloned()
+        .collect();
+    let truly_unlinked_secondary_ids: HashSet<String> = bank_result
         .groups
         .iter()
         .filter(|group| group.status == reconciliation_core::MatchStatus::UnmatchedMissingInSource)
-        .count();
+        .flat_map(|group| group.target_source_record_ids.iter().cloned())
+        .collect();
+    assert!(accepted_secondary_ids.is_disjoint(&truly_unlinked_secondary_ids));
+    assert!(review_linked_secondary_ids.is_disjoint(&truly_unlinked_secondary_ids));
+    let classified_secondary_ids: HashSet<String> = accepted_secondary_ids
+        .union(&review_linked_secondary_ids)
+        .cloned()
+        .chain(truly_unlinked_secondary_ids.iter().cloned())
+        .collect();
+    let all_bank_ids: HashSet<String> = records
+        .get(&bank.id)
+        .expect("bank records")
+        .iter()
+        .map(|record| record.id.clone())
+        .collect();
+    assert_eq!(classified_secondary_ids, all_bank_ids);
     let ledger_only = bank_result
         .groups
         .iter()
         .filter(|group| group.status == reconciliation_core::MatchStatus::UnmatchedMissingInTarget)
         .count();
     println!(
-        "LOCAL_ACCEPTANCE bank parsed={} tk112={} balance_equation={:?} strong={} suggested={} ambiguous={} bank_only={} ledger_only={} direction_conflict={} insufficient={}",
+        "LOCAL_ACCEPTANCE bank parsed={} tk112={} balance_equation={:?} strong_accepted={} suggested_review_linked={} ambiguous_review_linked={} true_bank_only={} true_ledger_only={} direction_conflict={} insufficient={}",
         records.get(&bank.id).map_or(0, Vec::len), records.get(&ledger112.id).map_or(0, Vec::len),
-        running_balance_equation_holds(records.get(&ledger112.id).expect("TK112 records")),
-        strong, count_reason("SUGGESTED_DIRECTION_AMOUNT_DATE"), count_reason("AMBIGUOUS_BANK_CANDIDATES"),
-        bank_only, ledger_only, count_reason("DIRECTION_CONFLICT"), count_reason("INSUFFICIENT_BANK_EVIDENCE")
+        balance_equation,
+        accepted_secondary_ids.len(), suggested_secondary_ids.len(), ambiguous_secondary_ids.len(),
+        truly_unlinked_secondary_ids.len(), ledger_only, count_reason("DIRECTION_CONFLICT"), count_reason("INSUFFICIENT_BANK_EVIDENCE")
     );
     let register = sources
         .iter()
@@ -315,13 +391,26 @@ fn local_real_acceptance_reports_sanitized_counts() {
         enable_aggregate_match: false,
     };
     let tri = execute_reconciliation(&tri_session, &records).expect("local tri reconciliation");
-    let document_233 = tri.groups.iter().find(|group| {
-        group.doc_no.as_deref() == Some("233") && !group.primary_source_record_ids.is_empty()
-    });
+    let document_233 = tri
+        .groups
+        .iter()
+        .find(|group| {
+            group.doc_no.as_deref() == Some("233") && !group.primary_source_record_ids.is_empty()
+        })
+        .expect("tri-source invoice 233");
+    assert_eq!(
+        document_233.status,
+        reconciliation_core::MatchStatus::NeedsReview
+    );
+    assert!(document_233
+        .discrepancies
+        .iter()
+        .any(|discrepancy| discrepancy.message.contains("HIGH")));
+    assert_eq!(partner_0502, Some(true));
+    assert_eq!(sales_layers, Some((35, 54)));
     println!(
         "LOCAL_ACCEPTANCE tri_233={:?} partner_0502={:?}",
-        document_233.map(|group| &group.status),
-        partner_0502
+        document_233.status, partner_0502
     );
     println!(
         "LOCAL_ACCEPTANCE partner_records={:?} sales_layers={:?}",

@@ -81,3 +81,11 @@
 - `cargo test --workspace`: SUCCESS; all baseline regression, V15 blocker, support, end-to-end, golden, IPC, and performance targets passed. The confidential local harness remains ignored by default and was run explicitly.
 - `npm run test`: SUCCESS (19 tests). `npm run typecheck`, `cargo fmt --all -- --check`, and `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
 - `npx tauri build`: SUCCESS; fresh ignored Windows installer artifacts were generated. The fresh release executable passed a five-second hidden smoke launch.
+
+### 11. V15 Final Micro-Fix (2026-08-25)
+- `cargo test --workspace`: SUCCESS; the 54-test correctness baseline, 17 V15 blocker tests, six dataset-support tests, performance targets, and all other workspace targets passed. The existing GNU WebView2 linker warning remained non-fatal.
+- Explicit ignored real-local acceptance harness: SUCCESS. All known oracles are assertions; bank matching counts remain observed classifications rather than hard-coded oracle counts.
+- Real bank classification: 225 parsed; 0 strong accepted, 93 suggested/review-linked, 42 ambiguous/review-linked, 90 true bank-only, 0 true ledger-only. Classification conservation covered all parsed records.
+- Synthetic benchmark: 100k one-control 4.15s, three-control 7.41s, four-control tri-source 13.25s; exactly 100,000 matches in each run.
+- `npm run test`: SUCCESS (19/19). TypeScript typecheck, Rust format check, and strict workspace Clippy: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh ignored MSI/NSIS and release executable were generated. Five-second hidden executable smoke: SUCCESS.

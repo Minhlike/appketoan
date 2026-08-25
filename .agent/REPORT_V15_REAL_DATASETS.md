@@ -18,7 +18,7 @@
 - Invoice/TK511 baseline: PASS through the real-local regression suite.
 - Invoice to BK support: PASS for source detection, mapped control fields, preserved provenance, and the local control-document presence check; cross-source period remains a mandatory matching condition.
 - Partner master: PASS for non-monetary typed normalization, local required-partner presence, and fail-closed duplicate tax-identity resolution.
-- TK112/bank: PASS for the local opening/turnover/closing balance equation and directional compatibility guard; opposite directions cannot produce an amount-only match.
+- TK112/bank: PASS for directional compatibility and review conservation. The running-balance equation is `NOT_VERIFIED` because the normalized source does not expose enough balance values; no equation is inferred.
 - Legacy XLS: PASS through the real Calamine reader with an adaptive physical header position.
 - Sales report: PASS; group and detail totals must agree and exactly one verified layer is used.
 - FALSE_MATCH: PASS; synthetic adversarial regression and the new TK112/bank direction test reject equal-amount contradictory-direction candidates.
@@ -67,3 +67,11 @@ persisted in agent memory.
 - Partner identity and sales-analysis layer controls both completed locally; the analytical report selected one verified layer and did not double-count group plus detail rows.
 - Benchmark coverage: PASS for 100k one-semantic, three-semantic, and four-control tri-source synthetic runs. Elapsed values are terminal-only runtime evidence, not persisted here.
 - Native ingestion: path-first is used whenever the Tauri source path exists; byte ingestion remains only for explicitly supplied IPC bytes and is not represented as an optimization.
+
+## V15 Final Micro-Fix (2026-08-25)
+
+- Real-local assertions: PASS. The known invoice/TK511 record-count, exact-match, missing-document, revenue-gap, bank parsed-count, required-partner, sales-layer, and tri-source high-review oracles are executable assertions rather than console-only observations. Sensitive document and monetary values are intentionally not duplicated in agent memory.
+- Bank classification over 225 parsed statement records: 0 strong accepted, 93 suggested/review-linked, 42 ambiguous/review-linked, 90 true bank-only, and 0 true ledger-only. The accepted/review/unlinked union covers every statement record and review-linked records are excluded from residual missing-source output.
+- Aggregate policy regressions: PASS for 32 and 64 candidates with one direct match, 32 candidates without a direct match, and multiple direct matches. Subset enumeration is unreachable above the 12-candidate budget.
+- Synthetic performance: 100k one-control completed in 4.15s, 100k three-control in 7.41s, and 100k four-control tri-source in 13.25s; each produced exactly 100,000 matches.
+- Full Rust/TS/type/format/Clippy gate, Tauri release build, and five-second executable smoke: PASS.

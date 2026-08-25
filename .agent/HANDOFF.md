@@ -79,3 +79,9 @@
 - Aggregate matching first checks the full O(n) direct candidate set; subset search starts only when no direct match exists and fails closed above the budget.
 - `local_real_acceptance_test` is ignored by default and reads only the local ignored dataset directory. It reports sanitized aggregates, confirms the tri-source review condition, and does not persist workbook values. A running balance equation is reported as unavailable rather than inferred when the normalized data lacks balance values.
 - Final workspace/build/smoke verification completed successfully, including a five-second release executable smoke launch. The V15.4 commit was pushed to the feature branch; do not merge PR #1.
+
+## V15 Final Micro-Fix — 2026-08-25
+- Aggregate evaluation scans every candidate once for direct matches. More than one direct match is ambiguous; exactly one is accepted immediately; only zero direct matches can reach bounded subset search. Candidate sets above the budget return `COMPLEXITY_LIMIT` without a shift or subset enumeration.
+- Bank matching maintains accepted and review-linked secondary ID sets separately. Residual output is generated only for IDs in neither set, so Suggested/Ambiguous evidence cannot also appear as bank-only.
+- The local acceptance harness now asserts all approved oracles and validates classification conservation across all parsed bank records. Bank classification counts are observed, not hard-coded expectations.
+- Workspace tests, explicit local acceptance, frontend tests, typecheck, format, strict Clippy, release build, and executable smoke all passed. The micro-fix is scoped to the existing feature branch only; do not merge PR #1.

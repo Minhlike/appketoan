@@ -614,7 +614,7 @@ fn test_07_aggregate_boundary_date_filtering() {
 }
 
 #[test]
-fn test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess() {
+fn test_08_unique_direct_match_precedes_aggregate_search() {
     let src1 = create_source(
         "src_inv",
         "Hóa đơn",
@@ -660,7 +660,8 @@ fn test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess() {
         }],
     );
 
-    // Candidate A = 100M, Candidate B = 40M, Candidate C = 60M (Two subsets equal 100M!)
+    // Candidate A is the only direct 1:1 match. Aggregate search must not run,
+    // even though B+C would also sum to the source amount.
     records_map.insert(
         "src_511".to_string(),
         vec![
@@ -695,8 +696,8 @@ fn test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess() {
     );
 
     let res = execute_reconciliation(&session, &records_map).expect("Should succeed");
-    assert_eq!(res.groups[0].status, MatchStatus::AmbiguousMatch);
-    assert_eq!(res.summary.ambiguous_count, 1);
+    assert_eq!(res.groups[0].status, MatchStatus::MatchedExact);
+    assert_eq!(res.summary.exact_matches_count, 1);
 }
 
 // -------------------------------------------------------------------------------------------------

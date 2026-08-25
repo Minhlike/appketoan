@@ -77,3 +77,9 @@ Reconciliation Core (crates/reconciliation-core/)
 - Direct 1:1 candidates are scanned across the full set before aggregate subset search. Aggregate search remains fail-closed above its candidate budget.
 - The local acceptance harness is ignored, path-based, and does not retain workbook content. It completed against the required local workbook set; running-balance validation is unavailable when normalized balance values are absent.
 - Final V15.4 workspace checks, frontend checks, formatting, strict Clippy, Tauri build, and release executable smoke all completed. The branch is ready for source/diff review only and remains unmerged.
+
+## V15 Final Micro-Fix (2026-08-25)
+- Aggregate matching now follows a strict direct-first state machine: multiple direct matches are ambiguous, one direct match is accepted without subset search, and aggregate subsets are considered only with no direct match and at most the configured candidate budget.
+- Bank secondary records have disjoint final classifications for accepted, review-linked, and truly unlinked state. Suggested/ambiguous links remain review evidence but no longer produce duplicate bank-only residual groups.
+- The ignored real-local harness asserts every known oracle and proves bank-record classification conservation. Running-balance verification remains unavailable only because normalized balance evidence is insufficient.
+- Full release gate and executable smoke passed. The feature branch remains unmerged and is ready for final diff review.
