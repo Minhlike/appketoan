@@ -51,3 +51,9 @@
 - The user confirmed that the suffixless workbooks in `.local-testdata/` are the acceptance set. They were processed locally only and are still ignored.
 - V15 source, parser, model, matching-safety, UI mapping, and test changes are on `feature/v15-real-accounting-datasets`; see `docs/REAL_DATASET_SUPPORT_MATRIX.md` for sanitized support evidence.
 - The feature branch passed workspace Rust tests, frontend tests, typecheck, formatting, clippy, release build, and executable smoke test. It has not been merged to `main`.
+
+## V15 Blocker Closure — 2026-08-25
+- The matcher now evaluates all explicit rules for the same primary/secondary source-kind pair, preserving each semantic comparison.
+- Direction compatibility is checked before a candidate can enter exact, tolerance, fallback, or aggregate resolution.
+- Partner-master and sales-analysis one-source scenarios return typed reference-control results via the Tauri command and UI rather than transaction matches.
+- Mapped invoice lifecycles are typed and fail closed unless standard. The invoice/sales-register/TK511 control raises a high-priority review when the first two agree but TK511 is absent.

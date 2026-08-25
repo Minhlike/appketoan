@@ -2,9 +2,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use reconciliation_core::{
-    execute_reconciliation, export_reconciliation_to_excel,
+    evaluate_partner_master_control, evaluate_sales_analysis_control, execute_reconciliation,
+    execute_reference_controls, export_reconciliation_to_excel,
     filter_reconciliation_session_and_records, inspect_excel_bytes, inspect_excel_file,
-    normalize_data_source_rows, read_sheet_rows, read_sheet_rows_from_bytes, CanonicalRecord,
+    normalize_data_source_rows, normalize_partner_master_rows, normalize_sales_analysis_rows,
+    read_sheet_rows, read_sheet_rows_from_bytes, CanonicalRecord, DataSourceKind,
     ExcelFileMetadata, ExportSummary, ReconciliationResult, ReconciliationSession,
 };
 use sha2::{Digest, Sha256};
@@ -29,6 +31,7 @@ pub fn cmd_run_reconciliation(
 ) -> Result<ReconciliationResult, String> {
     let mut source_records_map: HashMap<String, Vec<CanonicalRecord>> = HashMap::new();
     let mut raw_file_hashes: HashMap<String, String> = HashMap::new();
+    let mut reference_controls = Vec::new();
     let bytes_map = file_bytes_map.unwrap_or_default();
 
     for source in &session.data_sources {
@@ -111,8 +114,29 @@ pub fn cmd_run_reconciliation(
             raw_file_hashes.insert(source.id.clone(), h);
         }
 
-        let records = normalize_data_source_rows(source, &header_cols, &raw_rows);
-        source_records_map.insert(source.id.clone(), records);
+        match source.kind {
+            DataSourceKind::PartnerMaster => {
+                let records = normalize_partner_master_rows(source, &header_cols, &raw_rows);
+                reference_controls
+                    .push(evaluate_partner_master_control(source.id.clone(), &records));
+            }
+            DataSourceKind::SalesAnalysisReport => {
+                let records = normalize_sales_analysis_rows(source, &header_cols, &raw_rows);
+                reference_controls
+                    .push(evaluate_sales_analysis_control(source.id.clone(), &records));
+            }
+            _ => {
+                let records = normalize_data_source_rows(source, &header_cols, &raw_rows);
+                source_records_map.insert(source.id.clone(), records);
+            }
+        }
+    }
+
+    if !reference_controls.is_empty() {
+        if reference_controls.len() != session.data_sources.len() {
+            return Err("Không trộn nguồn danh mục/báo cáo với đối chiếu giao dịch trong cùng một lần chạy.".to_string());
+        }
+        return execute_reference_controls(&session, reference_controls);
     }
 
     // 1. Pass through intake dedup & dataset identity gate

@@ -27,3 +27,7 @@
   - Pass 3: Residual sweep for missing records on either side.
   - Aggregate 1-to-N: Sum target amounts within group before evaluation.
 - **Rationale**: Guarantees zero false-positive matches for invoices with identical amounts but distinct invoice numbers.
+
+## Decision 006: Semantic Rules and Reference Controls Fail Closed
+- **Decision**: Evaluate every explicit comparison rule for a source-kind pair; apply monetary direction compatibility before any candidate is accepted; execute partner-master and sales-analysis sources as typed one-source controls outside the transactional matcher.
+- **Rationale**: A revenue-only pass cannot mask VAT/receivable divergence, equal opposite cash flows cannot match, and non-transactional sources must not be misclassified as ledger transactions.

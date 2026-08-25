@@ -59,3 +59,8 @@
 - `cargo test --workspace`: SUCCESS; 54/54 reconciliation regression tests plus the V15 support suite passed.
 - `npm run test`: SUCCESS; 18/18 passed. `npm run typecheck`, `cargo fmt --all -- --check`, and strict Clippy: SUCCESS.
 - `npx tauri build`: SUCCESS. The release executable launched and remained alive for the local five-second smoke check.
+
+### 7. V15 Blocker Closure (2026-08-25)
+- `cargo test --workspace`: SUCCESS; all 54 baseline regression tests, 7 new blocker regressions, and existing V15 tests passed.
+- `npm run test`: SUCCESS; 18/18 passed. `npm run typecheck`, `cargo fmt --all -- --check`, and strict workspace Clippy: SUCCESS.
+- `npx tauri build`: SUCCESS; generated artifacts remain ignored.

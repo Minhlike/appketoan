@@ -46,6 +46,12 @@ Reconciliation Core (crates/reconciliation-core/)
 - V15 adds typed handling for partner masters and sales analysis, directional safeguards for TK112/bank matching, adaptive header detection, and additive UI mapping/source-kind support.
 - The immutable reconciliation baseline remains covered by the real-local regression suite.
 
+## V15 Blocker Closure (2026-08-25)
+- Matching executes every explicit rule for a source pair; a source pair is no longer reduced to its first rule.
+- TK112/bank candidate selection rejects opposite directions before exact, tolerance, fallback, or aggregate acceptance.
+- One-source partner-master and sales-analysis controls run through typed local normalization and return dedicated control results instead of transaction groups.
+- A mapped invoice lifecycle is typed at execution and non-standard/unknown values are fail-closed.
+
 ## Latest Verification (2026-08-25)
 - GNU workspace test suite completed successfully after the v14 intake and packaging changes.
 - Frontend Vitest suite completed successfully.

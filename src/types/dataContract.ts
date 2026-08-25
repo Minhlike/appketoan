@@ -322,7 +322,16 @@ export interface ReconciliationResult {
   profileId: string;
   summary: ReconciliationSummary;
   groups: MatchGroup[];
+  referenceControls?: ReferenceControlResult[];
   intakeAnalysis?: IntakeAnalysisResult;
+}
+
+export interface ReferenceControlResult {
+  sourceId: string;
+  sourceKind: DataSourceKind;
+  recordCount: number;
+  status: MatchStatus;
+  message: string;
 }
 
 export interface ExportSummary {

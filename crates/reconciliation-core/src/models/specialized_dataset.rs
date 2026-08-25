@@ -8,6 +8,60 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::models::{CanonicalRecord, ColumnMapping, DataSourceKind, MatchStatus};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InvoiceLifecycle {
+    Standard,
+    Adjusted,
+    Replaced,
+    Cancelled,
+    Unknown,
+}
+
+impl InvoiceLifecycle {
+    pub fn from_status(status: Option<&str>) -> Self {
+        let Some(status) = status else {
+            return Self::Unknown;
+        };
+        let normalized =
+            crate::reader::header_detector::remove_diacritics(status).to_ascii_lowercase();
+        if normalized.contains("dieu chinh") {
+            Self::Adjusted
+        } else if normalized.contains("thay the") {
+            Self::Replaced
+        } else if normalized.contains("huy") {
+            Self::Cancelled
+        } else if normalized.contains("moi")
+            || normalized.contains("goc")
+            || normalized.contains("hop le")
+            || normalized.contains("da cap ma")
+            || normalized.contains("con hieu luc")
+        {
+            Self::Standard
+        } else {
+            Self::Unknown
+        }
+    }
+
+    pub fn is_regular(self) -> bool {
+        self == Self::Standard
+    }
+}
+
+/// Converts the mapped raw lifecycle field into a typed business decision.
+/// Sources without a lifecycle mapping preserve legacy compatibility; a mapped
+/// but absent or unfamiliar value is always `UNKNOWN` and therefore fail-closed.
+pub fn invoice_lifecycle_for_record(
+    record: &CanonicalRecord,
+    mapping: &ColumnMapping,
+) -> Option<InvoiceLifecycle> {
+    mapping.invoice_status_column.as_ref().map(|column| {
+        InvoiceLifecycle::from_status(record.raw_fields.get(column).map(String::as_str))
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AnalyticalRowLevel {
@@ -62,6 +116,77 @@ pub enum NormalizedDataset {
     Transactional,
     PartnerMaster(Vec<PartnerRecord>),
     SalesAnalysis(Vec<SalesAnalysisRecord>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReferenceControlResult {
+    pub source_id: String,
+    pub source_kind: DataSourceKind,
+    pub record_count: usize,
+    pub status: MatchStatus,
+    pub message: String,
+}
+
+pub fn evaluate_partner_master_control(
+    source_id: String,
+    records: &[PartnerRecord],
+) -> ReferenceControlResult {
+    let mut tax_id_counts: HashMap<&str, usize> = HashMap::new();
+    for record in records {
+        if let Some(tax_id) = record
+            .partner_tax_id
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            *tax_id_counts.entry(tax_id).or_default() += 1;
+        }
+    }
+    let ambiguous = tax_id_counts.values().filter(|&&count| count > 1).count();
+    let (status, message) = if ambiguous > 0 {
+        (
+            MatchStatus::NeedsReview,
+            format!(
+                "AMBIGUOUS_MASTER_IDENTITY: {} mã số thuế xuất hiện trên nhiều đối tác.",
+                ambiguous
+            ),
+        )
+    } else {
+        (
+            MatchStatus::MatchedExact,
+            "Danh mục đối tác hợp lệ; không phát hiện định danh MST trùng.".to_string(),
+        )
+    };
+    ReferenceControlResult {
+        source_id,
+        source_kind: DataSourceKind::PartnerMaster,
+        record_count: records.len(),
+        status,
+        message,
+    }
+}
+
+pub fn evaluate_sales_analysis_control(
+    source_id: String,
+    records: &[SalesAnalysisRecord],
+) -> ReferenceControlResult {
+    let (status, message) = match select_sales_analysis_control_layer(records) {
+        Ok(totals) => (
+            MatchStatus::MatchedExact,
+            format!(
+                "Đã xác minh một tầng dữ liệu {:?}; không cộng đồng thời nhóm và chi tiết.",
+                totals.row_level
+            ),
+        ),
+        Err(code) => (MatchStatus::NeedsReview, code.to_string()),
+    };
+    ReferenceControlResult {
+        source_id,
+        source_kind: DataSourceKind::SalesAnalysisReport,
+        record_count: records.len(),
+        status,
+        message,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

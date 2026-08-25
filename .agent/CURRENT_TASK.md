@@ -36,4 +36,4 @@ FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V15 real-dataset expansion is implemented and awaiting review on `feature/v15-real-accounting-datasets`. The suffixless `.local-testdata/` workbooks were explicitly confirmed by the user as the local acceptance set; they remain untracked and ignored. No merge to `main` has occurred.
+V15 blocker closure is implemented on `feature/v15-real-accounting-datasets` and is awaiting source/diff review. The branch has not been merged to `main`; local acceptance workbooks remain untracked and ignored.
