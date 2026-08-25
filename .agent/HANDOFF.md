@@ -48,6 +48,6 @@
 - The `main` branch was pushed successfully to the configured GitHub `origin`; verify the current commit before any follow-up work.
 
 ## V15 Real Dataset Gate — 2026-08-25
-- BLOCKED before Phase A: `.local-testdata/` is absent, so none of the seven required local workbooks could be inspected.
+- BLOCKED before Phase A: `.local-testdata/` exists, but none of the seven required `(1)`-suffix filenames is present. Similar suffixless workbooks were found and intentionally not assumed equivalent.
 - No source-detection, parser, matching, UI, or test code was changed for V15.
 - `.local-testdata/` is ignored to prevent confidential workbooks from entering version control.

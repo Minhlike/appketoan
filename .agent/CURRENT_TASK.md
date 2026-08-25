@@ -36,4 +36,4 @@ FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V15 real-dataset expansion is blocked until all seven required workbooks are available under `.local-testdata/`. No V15 feature code has been started.
+V15 real-dataset expansion is blocked until the seven required `(1)`-suffix workbooks are confirmed under `.local-testdata/`. Similar suffixless workbooks exist but have not been assumed equivalent. No V15 feature code has been started.

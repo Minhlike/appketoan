@@ -11,13 +11,13 @@
 
 | Required local workbook | Status |
 |---|---|
-| `T7.2026 Thuế (1).xlsx` | Not available: `.local-testdata/` directory is absent. |
-| `T7.2026 (1).xlsx` | Not available: `.local-testdata/` directory is absent. |
-| `BK(1).xlsx` | Not available: `.local-testdata/` directory is absent. |
-| `DM Khách hàng(1).xlsx` | Not available: `.local-testdata/` directory is absent. |
-| `CÁI tk 112(1).xlsx` | Not available: `.local-testdata/` directory is absent. |
-| `báo cáo 2 chỉ tiếu T6.2026(1).xlsx` | Not available: `.local-testdata/` directory is absent. |
-| `lich-su-giao-dich(20-08-2026 04_38_08)(1).xls` | Not available: `.local-testdata/` directory is absent. |
+| `T7.2026 Thuế (1).xlsx` | Missing by exact name. |
+| `T7.2026 (1).xlsx` | Missing by exact name. |
+| `BK(1).xlsx` | Missing by exact name. |
+| `DM Khách hàng(1).xlsx` | Missing by exact name. |
+| `CÁI tk 112(1).xlsx` | Missing by exact name. |
+| `báo cáo 2 chỉ tiếu T6.2026(1).xlsx` | Missing by exact name. |
+| `lich-su-giao-dich(20-08-2026 04_38_08)(1).xls` | Missing by exact name. |
 
 ## Acceptance
 
@@ -47,7 +47,7 @@
 
 ## Known Limitations
 
-- The requested local acceptance directory is missing, so file format, sheet, headers, row counts, mappings, warnings, and legacy XLS compatibility cannot be claimed.
+- The requested local acceptance directory exists, but its files do not match the seven required filenames exactly. Similar suffixless candidates were found but were not inspected or assumed to be equivalent.
 - This report contains no workbook contents or accounting records.
 
 ## Files Changed

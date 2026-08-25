@@ -55,5 +55,5 @@
 - The verified `main` state was then published to the configured GitHub `origin`.
 
 ### 6. V15 Real-Dataset Gate (2026-08-25)
-- No V15 test or real-file smoke run was started because the required local dataset directory is absent.
+- No V15 test or real-file smoke run was started because the required `(1)`-suffix local filenames are absent; suffixless candidates were not assumed equivalent.
 - Existing code was not modified in the blocked V15 attempt.
