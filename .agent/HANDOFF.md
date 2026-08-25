@@ -32,3 +32,11 @@
 - **Rust Engine Tests**: `cargo test -- --nocapture` (in `crates/reconciliation-core`)
 - **Frontend Tests**: `npm test` (in root)
 - **Frontend Production Build**: `npm run build` (in root)
+
+## 2026-08-25 Continuation Record
+- The current agent reviewed this handoff and the mandatory project-state documents before acting.
+- Verified `cargo test --workspace` successfully with the GNU toolchain; the 54-test reconciliation regression suite passed.
+- Verified `npm run test` successfully; 18 frontend tests passed.
+- Committed inherited v14 source, test, handoff, and GNU WebView2 patch changes: `b2e8658` (`fix(v14): harden multi-source intake and GNU packaging`).
+- The generated portable distribution is intentionally ignored and was not committed.
+- No release build or portable smoke test was run in this continuation; those require their corresponding release gate when a release is requested.

@@ -40,3 +40,8 @@ Reconciliation Core (crates/reconciliation-core/)
 
 ## Blockers
 - NONE.
+
+## Latest Verification (2026-08-25)
+- GNU workspace test suite completed successfully after the v14 intake and packaging changes.
+- Frontend Vitest suite completed successfully.
+- Repository source changes were committed as `b2e8658`.
