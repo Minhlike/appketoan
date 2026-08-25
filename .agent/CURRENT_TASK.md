@@ -36,4 +36,4 @@ FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-Repository publication is complete. Await user-directed product work; no product feature was changed during publication.
+V15 real-dataset expansion is blocked until all seven required workbooks are available under `.local-testdata/`. No V15 feature code has been started.

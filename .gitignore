@@ -48,6 +48,7 @@ releases/*.msi
 releases/*.zip
 !releases/.gitkeep
 appketoan-standalone-dist/
+.local-testdata/
 
 # Generated files inside the vendored GNU WebView2 linker patch
 crates/webview2-com-sys/.cargo-ok

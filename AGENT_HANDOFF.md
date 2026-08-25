@@ -1034,3 +1034,9 @@ Mục tiêu cao nhất của AppKetoan không phải “match được nhiều�
 Mục tiêu là:
 
 > **Không tạo ra sự tự tin giả trong một kết luận kế toán.**
+
+---
+
+## 26. V15 REAL-DATASET GATE (2026-08-25)
+
+The V15 implementation must not start until all required real workbooks are available locally under `.local-testdata/`. This directory is intentionally ignored and must never be committed. If the directory or any required workbook is missing, record the blocked state and do not infer source structure from filenames or historical assumptions.

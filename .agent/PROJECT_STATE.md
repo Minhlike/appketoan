@@ -41,6 +41,9 @@ Reconciliation Core (crates/reconciliation-core/)
 ## Blockers
 - NONE.
 
+## V15 Local Dataset Gate (2026-08-25)
+- BLOCKED: the required local dataset directory is absent, so no real-dataset inspection or V15 feature implementation has started.
+
 ## Latest Verification (2026-08-25)
 - GNU workspace test suite completed successfully after the v14 intake and packaging changes.
 - Frontend Vitest suite completed successfully.

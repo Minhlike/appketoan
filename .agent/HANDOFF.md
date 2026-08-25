@@ -46,3 +46,8 @@
 - The full pre-push gate completed successfully: Rust workspace tests, frontend tests, TypeScript typecheck, Rust formatting, and Clippy with warnings denied.
 - No product behavior was changed during this repository-publication task.
 - The `main` branch was pushed successfully to the configured GitHub `origin`; verify the current commit before any follow-up work.
+
+## V15 Real Dataset Gate — 2026-08-25
+- BLOCKED before Phase A: `.local-testdata/` is absent, so none of the seven required local workbooks could be inspected.
+- No source-detection, parser, matching, UI, or test code was changed for V15.
+- `.local-testdata/` is ignored to prevent confidential workbooks from entering version control.
