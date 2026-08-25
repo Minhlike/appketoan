@@ -78,8 +78,9 @@ pub fn inspect_excel_file<P: AsRef<Path>>(path: P) -> Result<ExcelFileMetadata, 
         if let Ok(range) = workbook.worksheet_range(sheet_name) {
             let total_rows = range.height();
             let total_cols = range.width();
+            let range_start_row = range.start().map(|(row, _)| row + 1).unwrap_or(1);
 
-            let preview_string_rows = range_to_string_rows(&range, Some(25));
+            let preview_string_rows = range_to_string_rows(&range, Some(500));
             let (detected_header, detected_start, columns, suggested_mapping, suggested_kind, conf) =
                 detect_header_and_mapping_with_context(sheet_name, &preview_string_rows);
 
@@ -89,8 +90,11 @@ pub fn inspect_excel_file<P: AsRef<Path>>(path: P) -> Result<ExcelFileMetadata, 
                 name: sheet_name.clone(),
                 total_rows,
                 total_cols,
+                range_start_row,
                 detected_header_row: detected_header,
                 detected_data_start_row: detected_start,
+                physical_header_row: range_start_row + detected_header - 1,
+                physical_data_start_row: range_start_row + detected_start - 1,
                 columns,
                 suggested_mapping,
                 suggested_kind,
@@ -121,8 +125,9 @@ pub fn inspect_excel_bytes(bytes: &[u8], file_name: &str) -> Result<ExcelFileMet
         if let Ok(range) = workbook.worksheet_range(sheet_name) {
             let total_rows = range.height();
             let total_cols = range.width();
+            let range_start_row = range.start().map(|(row, _)| row + 1).unwrap_or(1);
 
-            let preview_string_rows = range_to_string_rows(&range, Some(25));
+            let preview_string_rows = range_to_string_rows(&range, Some(500));
             let (detected_header, detected_start, columns, suggested_mapping, suggested_kind, conf) =
                 detect_header_and_mapping_with_context(sheet_name, &preview_string_rows);
 
@@ -132,8 +137,11 @@ pub fn inspect_excel_bytes(bytes: &[u8], file_name: &str) -> Result<ExcelFileMet
                 name: sheet_name.clone(),
                 total_rows,
                 total_cols,
+                range_start_row,
                 detected_header_row: detected_header,
                 detected_data_start_row: detected_start,
+                physical_header_row: range_start_row + detected_header - 1,
+                physical_data_start_row: range_start_row + detected_start - 1,
                 columns,
                 suggested_mapping,
                 suggested_kind,

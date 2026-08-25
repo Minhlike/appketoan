@@ -139,6 +139,10 @@ const PARTNER_NAME_KEYWORDS: &[&str] = &[
     "doi tuong",
 ];
 
+const CUSTOMER_FLAG_KEYWORDS: &[&str] = &["khach hang", "customer"];
+const SUPPLIER_FLAG_KEYWORDS: &[&str] = &["nha cung cap", "supplier", "vendor"];
+const PARTNER_STATUS_KEYWORDS: &[&str] = &["trang thai", "status"];
+
 /// Pretax amount keywords (e.g. "Tổng tiền chưa thuế")
 const PRETAX_AMOUNT_KEYWORDS: &[&str] = &[
     "tong tien chua thue",
@@ -263,6 +267,38 @@ const BANK_ACCOUNT_KEYWORDS: &[&str] = &[
     "stk",
 ];
 
+const PARTNER_CODE_KEYWORDS: &[&str] =
+    &["ma khach", "ma khach ncc", "customer code", "partner code"];
+const ADDRESS_KEYWORDS: &[&str] = &["dia chi", "address"];
+const CURRENCY_KEYWORDS: &[&str] = &["don vi tien te", "currency"];
+const EXCHANGE_RATE_KEYWORDS: &[&str] = &["ty gia", "exchange rate"];
+const INVOICE_STATUS_KEYWORDS: &[&str] = &["trang thai hoa don", "invoice status"];
+const INVOICE_CHECK_KEYWORDS: &[&str] = &["ket qua kiem tra hoa don", "invoice check"];
+const TRANSACTION_NUMBER_KEYWORDS: &[&str] =
+    &["so giao dich", "transaction number", "reference number"];
+const ACCOUNTING_DATE_KEYWORDS: &[&str] = &["ngay hach toan", "accounting date"];
+const TRANSACTION_DATE_KEYWORDS: &[&str] =
+    &["ngay phat sinh giao dich", "transaction date", "value date"];
+const COUNTERPARTY_ACCOUNT_KEYWORDS: &[&str] = &[
+    "so tai khoan doi ung",
+    "corresponsive account",
+    "correspondent account",
+    "counterparty account",
+];
+const COUNTERPARTY_NAME_KEYWORDS: &[&str] = &[
+    "ten tai khoan doi ung",
+    "corresponsive name",
+    "correspondent name",
+    "counterparty name",
+];
+const BALANCE_KEYWORDS: &[&str] = &["so du tk", "so du", "account balance", "balance"];
+const PRODUCT_CODE_KEYWORDS: &[&str] = &["mat hang", "ma hang", "product code"];
+const PRODUCT_NAME_KEYWORDS: &[&str] = &["ten mat hang", "product name"];
+const QUANTITY_KEYWORDS: &[&str] = &["so luong", "quantity"];
+const UNIT_PRICE_KEYWORDS: &[&str] = &["gia ban", "unit price"];
+const COST_KEYWORDS: &[&str] = &["tien von", "cost"];
+const PROFIT_KEYWORDS: &[&str] = &["lai", "profit"];
+
 /// Backward compatibility entry point
 pub fn detect_header_and_mapping(
     raw_rows: &[Vec<String>],
@@ -289,7 +325,9 @@ pub fn detect_header_and_mapping_with_context(
     let mut best_row_idx = 0;
     let mut best_score = 0;
 
-    let scan_limit = raw_rows.len().min(25);
+    // Header rows frequently appear after multi-line bank/report titles. The
+    // limit is deliberately bounded for predictable local intake cost.
+    let scan_limit = raw_rows.len().min(500);
     for (idx, row) in raw_rows.iter().take(scan_limit).enumerate() {
         let non_empty_count = row.iter().filter(|c| !c.trim().is_empty()).count();
         if non_empty_count < 2 {
@@ -319,6 +357,10 @@ pub fn detect_header_and_mapping_with_context(
                 || matches_exact_or_contains(t, DESCRIPTION_KEYWORDS)
                 || matches_exact_or_contains(t, FEE_AMOUNT_KEYWORDS)
                 || matches_exact_or_contains(t, DISCOUNT_AMOUNT_KEYWORDS)
+                || matches_exact_or_contains(t, PARTNER_CODE_KEYWORDS)
+                || matches_exact_or_contains(t, PRODUCT_CODE_KEYWORDS)
+                || matches_exact_or_contains(t, TRANSACTION_NUMBER_KEYWORDS)
+                || matches_exact_or_contains(t, BALANCE_KEYWORDS)
             {
                 score += 10;
             }
@@ -354,12 +396,18 @@ pub fn detect_header_and_mapping_with_context(
         let norm = normalize_token(col);
 
         // 1. Debit & Credit amounts
+        let is_bank_credit = norm == "co"
+            || norm == "credit"
+            || norm.starts_with("co ")
+            || norm.ends_with(" credit");
+        let is_bank_debit =
+            norm == "no" || norm == "debit" || norm.starts_with("no ") || norm.ends_with(" debit");
         if mapping.credit_amount_column.is_none()
-            && matches_exact_or_contains(col, CREDIT_AMOUNT_KEYWORDS)
+            && (matches_exact_or_contains(col, CREDIT_AMOUNT_KEYWORDS) || is_bank_credit)
         {
             mapping.credit_amount_column = Some(col.clone());
         } else if mapping.debit_amount_column.is_none()
-            && matches_exact_or_contains(col, DEBIT_AMOUNT_KEYWORDS)
+            && (matches_exact_or_contains(col, DEBIT_AMOUNT_KEYWORDS) || is_bank_debit)
         {
             mapping.debit_amount_column = Some(col.clone());
         }
@@ -468,8 +516,119 @@ pub fn detect_header_and_mapping_with_context(
             mapping.description_column = Some(col.clone());
         } else if mapping.bank_account_column.is_none()
             && matches_exact_or_contains(col, BANK_ACCOUNT_KEYWORDS)
+            && !norm.contains("doi ung")
+            && !norm.contains("corresponsive")
         {
             mapping.bank_account_column = Some(col.clone());
+        }
+    }
+
+    // PASS A2: domain-specific metadata. These mappings are additive and do
+    // not change the legacy transactional field semantics above.
+    for col in &columns {
+        let norm = normalize_token(col);
+        if mapping.partner_code_column.is_none()
+            && matches_exact_or_contains(col, PARTNER_CODE_KEYWORDS)
+        {
+            mapping.partner_code_column = Some(col.clone());
+        }
+        if mapping.address_column.is_none() && matches_exact_or_contains(col, ADDRESS_KEYWORDS) {
+            mapping.address_column = Some(col.clone());
+        }
+        if mapping.is_customer_column.is_none() && matches_exact(col, CUSTOMER_FLAG_KEYWORDS) {
+            mapping.is_customer_column = Some(col.clone());
+        }
+        if mapping.is_supplier_column.is_none() && matches_exact(col, SUPPLIER_FLAG_KEYWORDS) {
+            mapping.is_supplier_column = Some(col.clone());
+        }
+        if mapping.status_column.is_none() && matches_exact(col, PARTNER_STATUS_KEYWORDS) {
+            mapping.status_column = Some(col.clone());
+        }
+        if mapping.currency_column.is_none() && matches_exact_or_contains(col, CURRENCY_KEYWORDS) {
+            mapping.currency_column = Some(col.clone());
+        }
+        if mapping.exchange_rate_column.is_none()
+            && matches_exact_or_contains(col, EXCHANGE_RATE_KEYWORDS)
+        {
+            mapping.exchange_rate_column = Some(col.clone());
+        }
+        if mapping.invoice_status_column.is_none()
+            && matches_exact_or_contains(col, INVOICE_STATUS_KEYWORDS)
+        {
+            mapping.invoice_status_column = Some(col.clone());
+        }
+        if mapping.invoice_check_result_column.is_none()
+            && matches_exact_or_contains(col, INVOICE_CHECK_KEYWORDS)
+        {
+            mapping.invoice_check_result_column = Some(col.clone());
+        }
+        if mapping.transaction_number_column.is_none()
+            && matches_exact_or_contains(col, TRANSACTION_NUMBER_KEYWORDS)
+        {
+            mapping.transaction_number_column = Some(col.clone());
+            if mapping.voucher_no_column.is_none() {
+                mapping.voucher_no_column = Some(col.clone());
+            }
+        }
+        if mapping.accounting_date_column.is_none()
+            && matches_exact_or_contains(col, ACCOUNTING_DATE_KEYWORDS)
+        {
+            mapping.accounting_date_column = Some(col.clone());
+        }
+        if mapping.transaction_date_column.is_none()
+            && matches_exact_or_contains(col, TRANSACTION_DATE_KEYWORDS)
+        {
+            mapping.transaction_date_column = Some(col.clone());
+        }
+        if mapping.counterparty_account_column.is_none()
+            && matches_exact_or_contains(col, COUNTERPARTY_ACCOUNT_KEYWORDS)
+        {
+            mapping.counterparty_account_column = Some(col.clone());
+        }
+        if mapping.counterparty_name_column.is_none()
+            && matches_exact_or_contains(col, COUNTERPARTY_NAME_KEYWORDS)
+        {
+            mapping.counterparty_name_column = Some(col.clone());
+        }
+        if mapping.balance_column.is_none() && matches_exact_or_contains(col, BALANCE_KEYWORDS) {
+            mapping.balance_column = Some(col.clone());
+        }
+        if mapping.product_name_column.is_none()
+            && matches_exact_or_contains(col, PRODUCT_NAME_KEYWORDS)
+        {
+            mapping.product_name_column = Some(col.clone());
+        } else if mapping.product_code_column.is_none()
+            && matches_exact_or_contains(col, PRODUCT_CODE_KEYWORDS)
+        {
+            mapping.product_code_column = Some(col.clone());
+        }
+        if mapping.quantity_column.is_none() && matches_exact_or_contains(col, QUANTITY_KEYWORDS) {
+            mapping.quantity_column = Some(col.clone());
+        }
+        if mapping.unit_price_column.is_none()
+            && matches_exact_or_contains(col, UNIT_PRICE_KEYWORDS)
+        {
+            mapping.unit_price_column = Some(col.clone());
+        }
+        if mapping.revenue_column.is_none()
+            && (matches_exact_or_contains(col, &["doanh thu"]) || norm == "tien")
+        {
+            mapping.revenue_column = Some(col.clone());
+            if mapping.pretax_amount_column.is_none() {
+                mapping.pretax_amount_column = Some(col.clone());
+            }
+        }
+        if mapping.cost_column.is_none() && matches_exact_or_contains(col, COST_KEYWORDS) {
+            mapping.cost_column = Some(col.clone());
+        }
+        if mapping.profit_column.is_none() && matches_exact_or_contains(col, PROFIT_KEYWORDS) {
+            mapping.profit_column = Some(col.clone());
+        }
+        if mapping.vat_amount_column.is_none() && norm == "thue" {
+            mapping.vat_amount_column = Some(col.clone());
+        }
+        if mapping.total_amount_column.is_none() && norm == "phai thu" {
+            mapping.total_amount_column = Some(col.clone());
         }
     }
 
@@ -503,6 +662,7 @@ pub fn detect_header_and_mapping_with_context(
         }
     }
     let norm_context = normalize_token(&context_str);
+    let norm_columns = normalize_token(&columns.join(" "));
 
     let mut score_einvoice = 0;
     let mut score_511 = 0;
@@ -512,6 +672,10 @@ pub fn detect_header_and_mapping_with_context(
     let mut score_bank = 0;
     let mut score_cash = 0;
     let mut score_branch = 0;
+    let mut score_112 = 0;
+    let mut score_partner_master = 0;
+    let mut score_sales_register = 0;
+    let mut score_sales_analysis = 0;
 
     // Structural evidence weights for EInvoice
     if mapping.series_column.is_some() {
@@ -570,9 +734,51 @@ pub fn detect_header_and_mapping_with_context(
         score_133 += 60;
     }
 
+    if norm_context.contains("112")
+        && mapping.debit_amount_column.is_some()
+        && mapping.credit_amount_column.is_some()
+    {
+        score_112 += 80;
+    }
+    if mapping.partner_code_column.is_some()
+        && mapping.partner_name_column.is_some()
+        && mapping.partner_tax_id_column.is_some()
+        && (norm_context.contains("danh muc")
+            || norm_context.contains("khach hang")
+            || norm_context.contains("nha cung cap")
+            || norm_columns.contains("khach hang")
+            || norm_columns.contains("nha cung cap"))
+    {
+        score_partner_master += 90;
+    }
+    if mapping.date_column.is_some()
+        && mapping.doc_no_column.is_some()
+        && mapping.partner_code_column.is_some()
+        && mapping.revenue_column.is_some()
+        && mapping.vat_amount_column.is_some()
+        && mapping.total_amount_column.is_some()
+    {
+        score_sales_register += 85;
+    }
+    if mapping.product_name_column.is_some()
+        && mapping.revenue_column.is_some()
+        && mapping.cost_column.is_some()
+        && mapping.profit_column.is_some()
+    {
+        score_sales_analysis += 90;
+    }
+
     // Bank Statement evidence
-    if mapping.bank_account_column.is_some() {
+    if mapping.bank_account_column.is_some() || mapping.transaction_number_column.is_some() {
         score_bank += 35;
+    }
+    if mapping.debit_amount_column.is_some()
+        && mapping.credit_amount_column.is_some()
+        && mapping.transaction_number_column.is_some()
+        && mapping.accounting_date_column.is_some()
+        && mapping.balance_column.is_some()
+    {
+        score_bank += 55;
     }
     if norm_context.contains("sao ke")
         || norm_context.contains("ngan hang")
@@ -597,6 +803,10 @@ pub fn detect_header_and_mapping_with_context(
         (DataSourceKind::Ledger3331, score_3331),
         (DataSourceKind::Ledger131, score_131),
         (DataSourceKind::Ledger133, score_133),
+        (DataSourceKind::Ledger112, score_112),
+        (DataSourceKind::PartnerMaster, score_partner_master),
+        (DataSourceKind::SalesRegister, score_sales_register),
+        (DataSourceKind::SalesAnalysisReport, score_sales_analysis),
         (DataSourceKind::BankStatement, score_bank),
         (DataSourceKind::CashBook, score_cash),
         (DataSourceKind::BranchLedger, score_branch),

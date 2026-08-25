@@ -76,6 +76,28 @@ export const MappingModal: React.FC<MappingModalProps> = ({
     { key: "voucherNoColumn", label: "Số phiếu / Số CT sổ cái", description: "Ví dụ: PKT-00101" },
     { key: "descriptionColumn", label: "Diễn giải / Nội dung", description: "Nội dung giao dịch kế toán" },
     { key: "bankAccountColumn", label: "Số tài khoản ngân hàng", description: "Dành cho sao kê ngân hàng" },
+    { key: "partnerCodeColumn", label: "Mã khách hàng / NCC", description: "Định danh nội bộ của đối tác" },
+    { key: "addressColumn", label: "Địa chỉ đối tác", description: "Thông tin hỗ trợ, không tự động match" },
+    { key: "isCustomerColumn", label: "Cờ khách hàng", description: "Dấu nhận diện khách hàng trong danh mục" },
+    { key: "isSupplierColumn", label: "Cờ nhà cung cấp", description: "Dấu nhận diện nhà cung cấp trong danh mục" },
+    { key: "statusColumn", label: "Trạng thái đối tác", description: "Trạng thái hoạt động của đối tác" },
+    { key: "currencyColumn", label: "Đơn vị tiền tệ", description: "Ví dụ VND, USD" },
+    { key: "exchangeRateColumn", label: "Tỷ giá", description: "Tỷ giá hóa đơn" },
+    { key: "invoiceStatusColumn", label: "Trạng thái hóa đơn", description: "Mới, điều chỉnh, thay thế, hủy" },
+    { key: "invoiceCheckResultColumn", label: "Kết quả kiểm tra hóa đơn", description: "Kết quả xác thực nguồn" },
+    { key: "transactionNumberColumn", label: "Số giao dịch ngân hàng", description: "Mã giao dịch / reference" },
+    { key: "accountingDateColumn", label: "Ngày hạch toán", description: "Ngày ghi sổ hoặc hạch toán ngân hàng" },
+    { key: "transactionDateColumn", label: "Ngày giao dịch", description: "Ngày phát sinh / value date" },
+    { key: "counterpartyAccountColumn", label: "Tài khoản đối ứng", description: "Tài khoản đối tác ngân hàng" },
+    { key: "counterpartyNameColumn", label: "Tên đối tác ngân hàng", description: "Tên tài khoản đối ứng" },
+    { key: "balanceColumn", label: "Số dư", description: "Số dư sau giao dịch" },
+    { key: "productCodeColumn", label: "Mã mặt hàng", description: "Mã hàng cho báo cáo phân tích" },
+    { key: "productNameColumn", label: "Tên mặt hàng", description: "Tên hàng cho báo cáo phân tích" },
+    { key: "quantityColumn", label: "Số lượng", description: "Chỉ tiêu phân tích" },
+    { key: "unitPriceColumn", label: "Giá bán", description: "Chỉ tiêu phân tích" },
+    { key: "revenueColumn", label: "Doanh thu", description: "Chỉ tiêu phân tích" },
+    { key: "costColumn", label: "Tiền vốn", description: "Chỉ tiêu phân tích" },
+    { key: "profitColumn", label: "Lãi", description: "Chỉ tiêu phân tích" },
   ];
 
   return (
@@ -116,6 +138,10 @@ export const MappingModal: React.FC<MappingModalProps> = ({
                 <option value="ledger_511">TK 511 - Doanh thu</option>
                 <option value="ledger_3331">TK 3331 - Thuế GTGT</option>
                 <option value="ledger_131">TK 131 - Công nợ (Phải thu)</option>
+                <option value="ledger_112">TK 112 - Tiền gửi ngân hàng</option>
+                <option value="sales_register">Bảng kê bán hàng</option>
+                <option value="partner_master">Danh mục khách hàng / NCC</option>
+                <option value="sales_analysis_report">Báo cáo phân tích bán hàng</option>
                 <option value="ledger_133">TK 133 - Thuế đầu vào</option>
                 <option value="bank_statement">Sao kê ngân hàng</option>
                 <option value="cash_book">Sổ quỹ tiền mặt</option>

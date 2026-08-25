@@ -292,7 +292,10 @@ export function App() {
 
   // Run Reconciliation with strict validation
   const handleRunReconciliation = async () => {
-    if (sources.length < 2) {
+    const isSingleSourceControl =
+      selectedScenario.id === "scenario_partner_identity_control" ||
+      selectedScenario.id === "scenario_sales_analysis_report_control";
+    if (sources.length < 2 && !isSingleSourceControl) {
       setErrorMessage("Vui lòng tải lên ít nhất 2 nguồn dữ liệu Excel để thực hiện đối chiếu.");
       return;
     }
@@ -526,7 +529,10 @@ export function App() {
               type="button"
               className={`btn btn-primary btn-lg ${isRunning ? "btn-loading" : ""}`}
               onClick={() => void handleRunReconciliation()}
-              disabled={isRunning || sources.length < 2 || toleranceError !== null}
+              disabled={isRunning || (sources.length < 2 && !(
+                selectedScenario.id === "scenario_partner_identity_control" ||
+                selectedScenario.id === "scenario_sales_analysis_report_control"
+              )) || toleranceError !== null}
             >
               {isRunning ? "⏳ Đang đối chiếu..." : "▶ CHẠY ĐỐI CHIẾU"}
             </button>
@@ -602,6 +608,18 @@ export function App() {
                 return Array.from(checked);
               })()}
             />
+
+            {result.referenceControls && result.referenceControls.length > 0 && (
+              <section className="results-section" aria-label="Kết quả kiểm soát nguồn tham chiếu">
+                <h2>Kiểm soát nguồn tham chiếu</h2>
+                {result.referenceControls.map((control) => (
+                  <div className="alert-banner" role="status" key={control.sourceId}>
+                    <strong>{control.sourceKind}</strong> · {control.recordCount} dòng · {control.status}
+                    <div>{control.message}</div>
+                  </div>
+                ))}
+              </section>
+            )}
 
             <ResultTable
               groups={result.groups}

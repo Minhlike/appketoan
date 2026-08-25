@@ -45,6 +45,9 @@ pub struct CanonicalRecord {
     pub partner_name: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub partner_code: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pretax_amount: Option<Decimal>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -84,6 +87,21 @@ pub struct CanonicalRecord {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bank_account: Option<String>,
+
+    /// Additive typed bank fields. Raw fields retain the original workbook
+    /// values for provenance, while matching never needs to parse them again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accounting_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_account: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub balance: Option<Decimal>,
 
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub raw_fields: HashMap<String, String>,

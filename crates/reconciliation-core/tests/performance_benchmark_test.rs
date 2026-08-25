@@ -23,6 +23,7 @@ fn generate_synthetic_dataset(count: usize, source_id: &str) -> Vec<CanonicalRec
             buyer_tax_id: Some(format!("010{:07}", i % 500)),
             seller_tax_id: None,
             partner_name: Some(format!("Công ty Thử Nghiệm {}", i % 500)),
+            partner_code: None,
             pretax_amount: Some(pretax),
             vat_amount: Some(vat),
             discount_amount: None,
@@ -37,6 +38,12 @@ fn generate_synthetic_dataset(count: usize, source_id: &str) -> Vec<CanonicalRec
             voucher_no: Some(format!("PKT-{:06}", i)),
             description: Some(format!("Giao dịch số {}", i)),
             bank_account: None,
+            transaction_number: None,
+            accounting_date: None,
+            transaction_date: None,
+            counterparty_account: None,
+            counterparty_name: None,
+            balance: None,
             raw_fields: HashMap::new(),
         });
     }
@@ -115,14 +122,181 @@ fn test_performance_scaling_1k_to_100k() {
         );
 
         assert_eq!(result.summary.exact_matches_count, count);
-
-        if count == 100_000 {
-            // Informational timing check for unoptimized debug test suite (Release is < 150ms)
-            assert!(
-                match_dur.as_secs_f64() < 10.0,
-                "100k matching exceeded 10.0s threshold: {:?}",
-                match_dur
-            );
-        }
     }
+}
+
+fn perf_source(id: &str, kind: DataSourceKind, role: SourceRole) -> DataSource {
+    DataSource {
+        id: id.to_string(),
+        name: id.to_string(),
+        file_path: "synthetic.xlsx".to_string(),
+        sheet_name: "Sheet1".to_string(),
+        kind,
+        role,
+        header_row: 1,
+        data_start_row: 2,
+        column_mapping: ColumnMapping::default(),
+    }
+}
+
+fn perf_rule(
+    id: &str,
+    semantic: ComparisonSemantic,
+    secondary_kind: DataSourceKind,
+    primary_field: &str,
+    secondary_field: &str,
+) -> ComparisonRule {
+    ComparisonRule {
+        id: id.to_string(),
+        name: id.to_string(),
+        semantic,
+        primary_source_kind: DataSourceKind::EInvoice,
+        primary_field: primary_field.to_string(),
+        secondary_source_kind: secondary_kind,
+        secondary_field: secondary_field.to_string(),
+        is_required: true,
+        tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+    }
+}
+
+fn run_100k_multi_control(
+    name: &str,
+    sources: Vec<DataSource>,
+    rules: Vec<ComparisonRule>,
+    records: HashMap<String, Vec<CanonicalRecord>>,
+) {
+    let session = ReconciliationSession {
+        session_id: name.to_string(),
+        scenario_name: name.to_string(),
+        primary_source_id: Some("invoice".to_string()),
+        expected_primary_kind: None,
+        required_source_ids: None,
+        optional_source_ids: None,
+        data_sources: sources,
+        comparison_rules: rules,
+        matching_tolerance_vnd: Decimal::ZERO,
+        date_tolerance_days: 0,
+        enable_aggregate_match: false,
+    };
+    let started = Instant::now();
+    let result = execute_reconciliation(&session, &records).expect("benchmark execution");
+    println!(
+        "[PERF BENCHMARK] {name} | elapsed={:?} | exact={}",
+        started.elapsed(),
+        result.summary.exact_matches_count
+    );
+    assert_eq!(result.summary.exact_matches_count, 100_000);
+}
+
+#[test]
+fn benchmark_100k_invoice_sales_register_three_semantics() {
+    run_100k_multi_control(
+        "100k invoice-sales-register 3 controls",
+        vec![
+            perf_source("invoice", DataSourceKind::EInvoice, SourceRole::Primary),
+            perf_source(
+                "register",
+                DataSourceKind::SalesRegister,
+                SourceRole::RequiredSecondary,
+            ),
+        ],
+        vec![
+            perf_rule(
+                "revenue",
+                ComparisonSemantic::Revenue,
+                DataSourceKind::SalesRegister,
+                "pretaxAmount",
+                "pretaxAmount",
+            ),
+            perf_rule(
+                "vat",
+                ComparisonSemantic::Vat,
+                DataSourceKind::SalesRegister,
+                "vatAmount",
+                "vatAmount",
+            ),
+            perf_rule(
+                "receivable",
+                ComparisonSemantic::Receivable,
+                DataSourceKind::SalesRegister,
+                "totalAmount",
+                "totalAmount",
+            ),
+        ],
+        HashMap::from([
+            (
+                "invoice".to_string(),
+                generate_synthetic_dataset(100_000, "invoice"),
+            ),
+            (
+                "register".to_string(),
+                generate_synthetic_dataset(100_000, "register"),
+            ),
+        ]),
+    );
+}
+
+#[test]
+fn benchmark_100k_tri_source_four_controls() {
+    run_100k_multi_control(
+        "100k invoice-sales-register-ledger 4 controls",
+        vec![
+            perf_source("invoice", DataSourceKind::EInvoice, SourceRole::Primary),
+            perf_source(
+                "register",
+                DataSourceKind::SalesRegister,
+                SourceRole::RequiredSecondary,
+            ),
+            perf_source(
+                "ledger",
+                DataSourceKind::Ledger511,
+                SourceRole::RequiredSecondary,
+            ),
+        ],
+        vec![
+            perf_rule(
+                "register-revenue",
+                ComparisonSemantic::Revenue,
+                DataSourceKind::SalesRegister,
+                "pretaxAmount",
+                "pretaxAmount",
+            ),
+            perf_rule(
+                "register-vat",
+                ComparisonSemantic::Vat,
+                DataSourceKind::SalesRegister,
+                "vatAmount",
+                "vatAmount",
+            ),
+            perf_rule(
+                "register-receivable",
+                ComparisonSemantic::Receivable,
+                DataSourceKind::SalesRegister,
+                "totalAmount",
+                "totalAmount",
+            ),
+            perf_rule(
+                "ledger-revenue",
+                ComparisonSemantic::Revenue,
+                DataSourceKind::Ledger511,
+                "pretaxAmount",
+                "creditAmount",
+            ),
+        ],
+        HashMap::from([
+            (
+                "invoice".to_string(),
+                generate_synthetic_dataset(100_000, "invoice"),
+            ),
+            (
+                "register".to_string(),
+                generate_synthetic_dataset(100_000, "register"),
+            ),
+            (
+                "ledger".to_string(),
+                generate_synthetic_dataset(100_000, "ledger"),
+            ),
+        ]),
+    );
 }

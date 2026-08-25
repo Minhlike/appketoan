@@ -27,3 +27,23 @@
   - Pass 3: Residual sweep for missing records on either side.
   - Aggregate 1-to-N: Sum target amounts within group before evaluation.
 - **Rationale**: Guarantees zero false-positive matches for invoices with identical amounts but distinct invoice numbers.
+
+## Decision 006: Semantic Rules and Reference Controls Fail Closed
+- **Decision**: Evaluate every explicit comparison rule for a source-kind pair; apply monetary direction compatibility before any candidate is accepted; execute partner-master and sales-analysis sources as typed one-source controls outside the transactional matcher.
+- **Rationale**: A revenue-only pass cannot mask VAT/receivable divergence, equal opposite cash flows cannot match, and non-transactional sources must not be misclassified as ledger transactions.
+
+## Decision 007: Generic Ledger Views and Compiled Controls
+- **Decision**: Preserve account-specific source kinds as adapters while exposing additive `LedgerEntry` views. Build one physical index per source and compile all semantic controls against it; bank candidates use deterministic evidence only; aggregate matching is bounded.
+- **Rationale**: This prevents per-rule index duplication, semantic overwrite/netting, false bank matches, and pathological aggregate runtime without breaking existing scenario contracts.
+
+## Decision 008: Source-Aware Presentation and Fail-Closed Aggregate Budget
+- **Decision**: `SemanticFieldComparison` is the presentation/export source of truth; labels always include its actual secondary source. Bank mappings are typed on canonical records. Aggregate matching either searches the full bounded candidate set or emits `COMPLEXITY_LIMIT`; disabled aggregate runs only full 1:1 scans.
+- **Rationale**: A semantic label alone cannot identify a control in a multi-source audit, and truncating candidates before acceptance can create false matches.
+
+## Decision 009: Evidence-Gated Bank Matching and Transactional Primary Derivation
+- **Decision**: A bank candidate is accepted only with unique strong evidence after direction/amount/date compatibility. A unique compatible amount/date candidate is a non-consuming review suggestion. Before matching, remove typed reference controls and resolve the primary from remaining transactional sources, preferring an explicit transactional primary then E-Invoice.
+- **Rationale**: Coincidental cash movements must not be consumed as accounting evidence, and source load order must not turn reference data into a transactional primary.
+
+## Decision 010: Direct-First Aggregate State Machine and Review Conservation
+- **Decision**: Scan all direct candidates in O(n). Multiple direct matches are ambiguous; one direct match is accepted without subset search. Only zero direct matches may enter aggregate search, and only within the fixed candidate budget. Track accepted, review-linked, and truly unlinked secondary IDs separately.
+- **Rationale**: This prevents exponential enumeration and integer-shift hazards, while preserving audit links without misreporting reviewed bank records as missing from the primary source.

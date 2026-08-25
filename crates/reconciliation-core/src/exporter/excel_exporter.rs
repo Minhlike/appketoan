@@ -88,7 +88,7 @@ pub fn export_reconciliation_to_excel<P: AsRef<Path>>(
     let rev_var_f64 = sum.revenue_variance.to_f64().unwrap_or(0.0);
     let vat_var_f64 = sum.vat_variance.to_f64().unwrap_or(0.0);
     let rec_var_f64 = sum.receivable_variance.to_f64().unwrap_or(0.0);
-    let net_var_f64 = sum.net_financial_variance.to_f64().unwrap_or(0.0);
+    let gross_var_f64 = sum.total_discrepant_amount.to_f64().unwrap_or(0.0);
 
     let metrics = [
         ("Tổng số dòng Nguồn chính", sum.total_source_records as f64),
@@ -128,7 +128,7 @@ pub fn export_reconciliation_to_excel<P: AsRef<Path>>(
         ("Chênh lệch Doanh thu (VND)", rev_var_f64),
         ("Chênh lệch Thuế GTGT (VND)", vat_var_f64),
         ("Chênh lệch Công nợ phải thu (VND)", rec_var_f64),
-        ("Tổng chênh lệch tài chính (VND)", net_var_f64),
+        ("Tổng quy mô sai lệch tuyệt đối (VND)", gross_var_f64),
     ];
 
     ws_summary

@@ -15,3 +15,7 @@
 ## 4. Vitest Execution Pool on Windows (Node 24)
 - **Problem**: Vitest default worker pool can experience hang states on some Windows environments with Node 24.
 - **Solution**: Specifying `pool: "forks"` in `vite.config.ts` ensures rapid, reliable test runs.
+
+## 5. Bound Before Exponential Enumeration
+- **Problem**: Computing `1usize << candidate_count` before proving the candidate set is within budget can overflow or trigger infeasible subset work. A unique direct match also makes subset enumeration unnecessary.
+- **Solution**: Complete the O(n) direct scan first. Return ambiguous for multiple direct matches, accept one direct match immediately, and only compute subset bounds when there are zero direct matches and the candidate count is within the fixed aggregate budget.

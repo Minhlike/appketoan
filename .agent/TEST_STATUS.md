@@ -53,3 +53,39 @@
 - `cargo fmt --all -- --check`: SUCCESS.
 - `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
 - The verified `main` state was then published to the configured GitHub `origin`.
+
+### 6. V15 Real-Dataset Gate (2026-08-25)
+- User confirmation established the suffixless `.local-testdata/` files as the local acceptance set; no workbook was committed.
+- `cargo test --workspace`: SUCCESS; 54/54 reconciliation regression tests plus the V15 support suite passed.
+- `npm run test`: SUCCESS; 18/18 passed. `npm run typecheck`, `cargo fmt --all -- --check`, and strict Clippy: SUCCESS.
+- `npx tauri build`: SUCCESS. The release executable launched and remained alive for the local five-second smoke check.
+
+### 7. V15 Blocker Closure (2026-08-25)
+- `cargo test --workspace`: SUCCESS; all 54 baseline regression tests, 7 new blocker regressions, and existing V15 tests passed.
+- `npm run test`: SUCCESS; 18/18 passed. `npm run typecheck`, `cargo fmt --all -- --check`, and strict workspace Clippy: SUCCESS.
+- `npx tauri build`: SUCCESS; generated artifacts remain ignored.
+
+### 8. V15 Control-Plan Follow-up (2026-08-25)
+- `cargo test --workspace`: SUCCESS; 54/54 baseline reconciliation regressions, 9 V15 blocker regressions, and 4 V15 dataset-support tests passed.
+- `npm run test`: SUCCESS; 18/18 passed. `npm run typecheck`, `cargo fmt --all -- --check`, and `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh NSIS/MSI build outputs remain ignored. The GNU linker emitted an existing `webview2-com-sys` `.drectve` warning during tests; strict clippy stayed clean.
+
+### 9. V15 Semantic Closure (2026-08-25)
+- `cargo test -p reconciliation-core --test reconciliation_correctness_regression_test`: SUCCESS; 54/54 baseline regressions passed after aggregate-policy changes.
+- `cargo test -p reconciliation-core --test v15_blocker_regression_test`: SUCCESS; 11/11 blocker regressions passed.
+- `npm run test`: SUCCESS; 19/19 passed. `npm run typecheck`, formatting, and strict workspace Clippy: SUCCESS.
+
+### 10. V15.4 Final Acceptance (2026-08-25)
+- Local confidential-workbook harness: SUCCESS. It read the required ignored workbook set directly using `APPKETOAN_LOCAL_TESTDATA` and emitted only sanitized aggregate runtime metrics.
+- `cargo test -p reconciliation-core --test performance_benchmark_test -- --nocapture`: SUCCESS; one-, three-, and four-control 100k workloads completed with exact match counts.
+- `cargo test --workspace`: SUCCESS; all baseline regression, V15 blocker, support, end-to-end, golden, IPC, and performance targets passed. The confidential local harness remains ignored by default and was run explicitly.
+- `npm run test`: SUCCESS (19 tests). `npm run typecheck`, `cargo fmt --all -- --check`, and `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh ignored Windows installer artifacts were generated. The fresh release executable passed a five-second hidden smoke launch.
+
+### 11. V15 Final Micro-Fix (2026-08-25)
+- `cargo test --workspace`: SUCCESS; the 54-test correctness baseline, 17 V15 blocker tests, six dataset-support tests, performance targets, and all other workspace targets passed. The existing GNU WebView2 linker warning remained non-fatal.
+- Explicit ignored real-local acceptance harness: SUCCESS. All known oracles are assertions; bank matching counts remain observed classifications rather than hard-coded oracle counts.
+- Real bank classification: 225 parsed; 0 strong accepted, 93 suggested/review-linked, 42 ambiguous/review-linked, 90 true bank-only, 0 true ledger-only. Classification conservation covered all parsed records.
+- Synthetic benchmark: 100k one-control 4.15s, three-control 7.41s, four-control tri-source 13.25s; exactly 100,000 matches in each run.
+- `npm run test`: SUCCESS (19/19). TypeScript typecheck, Rust format check, and strict workspace Clippy: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh ignored MSI/NSIS and release executable were generated. Five-second hidden executable smoke: SUCCESS.

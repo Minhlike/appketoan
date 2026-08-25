@@ -2,7 +2,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::models::DataSourceKind;
+use crate::models::{DataSourceKind, ReferenceControlResult};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -154,6 +154,9 @@ pub struct ReconciliationSummary {
     pub receivable_variance: Decimal,
     #[serde(default)]
     pub total_discrepant_amount: Decimal,
+    /// Deprecated compatibility field. Since semantic variances must never be
+    /// netted, this is the non-negative gross discrepancy magnitude.
+    #[serde(default)]
     pub net_financial_variance: Decimal,
 }
 
@@ -165,6 +168,8 @@ pub struct ReconciliationResult {
     pub profile_id: String,
     pub summary: ReconciliationSummary,
     pub groups: Vec<MatchGroup>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_controls: Vec<ReferenceControlResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intake_analysis: Option<crate::intake::IntakeAnalysisResult>,
 }
@@ -240,6 +245,7 @@ mod tests {
                     amount_variance: dec!(50000),
                 },
             ],
+            reference_controls: vec![],
             intake_analysis: None,
         };
 

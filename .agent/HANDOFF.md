@@ -46,3 +46,42 @@
 - The full pre-push gate completed successfully: Rust workspace tests, frontend tests, TypeScript typecheck, Rust formatting, and Clippy with warnings denied.
 - No product behavior was changed during this repository-publication task.
 - The `main` branch was pushed successfully to the configured GitHub `origin`; verify the current commit before any follow-up work.
+
+## V15 Real Dataset Gate — 2026-08-25
+- The user confirmed that the suffixless workbooks in `.local-testdata/` are the acceptance set. They were processed locally only and are still ignored.
+- V15 source, parser, model, matching-safety, UI mapping, and test changes are on `feature/v15-real-accounting-datasets`; see `docs/REAL_DATASET_SUPPORT_MATRIX.md` for sanitized support evidence.
+- The feature branch passed workspace Rust tests, frontend tests, typecheck, formatting, clippy, release build, and executable smoke test. It has not been merged to `main`.
+
+## V15 Blocker Closure — 2026-08-25
+- The matcher now evaluates all explicit rules for the same primary/secondary source-kind pair, preserving each semantic comparison.
+- Direction compatibility is checked before a candidate can enter exact, tolerance, fallback, or aggregate resolution.
+- Partner-master and sales-analysis one-source scenarios return typed reference-control results via the Tauri command and UI rather than transaction matches.
+- Mapped invoice lifecycles are typed and fail closed unless standard. The invoice/sales-register/TK511 control raises a high-priority review when the first two agree but TK511 is absent.
+
+## V15 Control-Plan Follow-up — 2026-08-25
+- `LedgerEntry` is an additive generic ledger view; legacy `Ledger511`, `Ledger112`, `Ledger131`, `Ledger133`, and `Ledger3331` kinds remain compatible adapters.
+- Matching compiles semantic controls against one physical `SourceIndex` per secondary source. Group target IDs are stable and de-duplicated for navigation.
+- TK112/bank uses an explicit deterministic policy: compatible money direction, rule amount, date window, then unique reference/counterparty evidence. Missing evidence is `NEEDS_REVIEW`; no fuzzy score and no document/MST precondition.
+- Reference-master and sales-analysis sources can coexist with transaction sources in IPC; they remain typed controls and are not passed to the transactional matcher.
+- Aggregate subset search has a 12-candidate cap and exits after the second solution. Summary/export use gross discrepancy magnitude so semantic variances cannot cancel to a false zero.
+- Verification before handoff: workspace Rust tests passed (54 baseline regression + 9 V15 blocker + 4 V15 support); frontend tests 18/18, TypeScript typecheck, formatting, and strict clippy passed. `npx tauri build` produced fresh ignored NSIS/MSI artifacts locally.
+
+## V15 Semantic Closure — 2026-08-25
+- `SemanticFieldComparison` drives UI wording per evaluated source; Sales Register revenue/VAT/receivable controls are separate from TK511 controls.
+- Bank properties used for evidence are now typed on `CanonicalRecord`; audit evidence/review reason is retained in group discrepancies. Candidate policy remains deterministic.
+- Partner identity is a read-only cross-source control with MST first, partner code fallback, and no name-based auto-merge.
+- Aggregate matching never accepts a truncated candidate set. Under budget it searches bounded aggregate candidates; over budget it returns `COMPLEXITY_LIMIT`; when disabled it scans only 1:1 candidates.
+
+## V15.4 Final Acceptance (2026-08-25)
+- Bank auto-pass is evidence-gated: unique reference/transaction identity or unique strong counterparty evidence may be accepted; direction/amount/date alone is a non-consuming `SUGGESTED_DIRECTION_AMOUNT_DATE` review result. Opposite-direction amount/date candidates return a directional conflict.
+- The header detector recognizes both historical `corresponsive` aliases and standard `correspondent account/name` aliases. A generic Vietnamese balance header is also mapped when present.
+- Cross-source partner identity is restricted to explicitly compatible invoice, sales-register, and ledger kinds. Reference controls no longer determine the transactional primary after typed datasets are split.
+- Aggregate matching first checks the full O(n) direct candidate set; subset search starts only when no direct match exists and fails closed above the budget.
+- `local_real_acceptance_test` is ignored by default and reads only the local ignored dataset directory. It reports sanitized aggregates, confirms the tri-source review condition, and does not persist workbook values. A running balance equation is reported as unavailable rather than inferred when the normalized data lacks balance values.
+- Final workspace/build/smoke verification completed successfully, including a five-second release executable smoke launch. The V15.4 commit was pushed to the feature branch; do not merge PR #1.
+
+## V15 Final Micro-Fix — 2026-08-25
+- Aggregate evaluation scans every candidate once for direct matches. More than one direct match is ambiguous; exactly one is accepted immediately; only zero direct matches can reach bounded subset search. Candidate sets above the budget return `COMPLEXITY_LIMIT` without a shift or subset enumeration.
+- Bank matching maintains accepted and review-linked secondary ID sets separately. Residual output is generated only for IDs in neither set, so Suggested/Ambiguous evidence cannot also appear as bank-only.
+- The local acceptance harness now asserts all approved oracles and validates classification conservation across all parsed bank records. Bank classification counts are observed, not hard-coded expectations.
+- Workspace tests, explicit local acceptance, frontend tests, typecheck, format, strict Clippy, release build, and executable smoke all passed. The micro-fix is scoped to the existing feature branch only; do not merge PR #1.

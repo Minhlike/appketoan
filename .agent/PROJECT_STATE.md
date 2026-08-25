@@ -41,9 +41,45 @@ Reconciliation Core (crates/reconciliation-core/)
 ## Blockers
 - NONE.
 
+## V15 Local Dataset Gate (2026-08-25)
+- COMPLETE: the user confirmed the seven suffixless workbooks in `.local-testdata/` are the authoritative local acceptance set. They were read only through the local Rust reader and remain ignored by Git.
+- V15 adds typed handling for partner masters and sales analysis, directional safeguards for TK112/bank matching, adaptive header detection, and additive UI mapping/source-kind support.
+- The immutable reconciliation baseline remains covered by the real-local regression suite.
+
+## V15 Blocker Closure (2026-08-25)
+- Matching executes every explicit rule for a source pair; a source pair is no longer reduced to its first rule.
+- TK112/bank candidate selection rejects opposite directions before exact, tolerance, fallback, or aggregate acceptance.
+- One-source partner-master and sales-analysis controls run through typed local normalization and return dedicated control results instead of transaction groups.
+- A mapped invoice lifecycle is typed at execution and non-standard/unknown values are fail-closed.
+
+## V15 Control-Plan Follow-up (2026-08-25)
+- Added the additive generic `LedgerEntry` view while retaining legacy account-kind adapters.
+- Each secondary source now builds one physical source index and compiles all of its semantic controls against it.
+- Bank candidates can be accepted without document number or tax ID only on deterministic direction/amount/date evidence; otherwise they fail closed to review.
+- Transactional and typed reference controls can run together through IPC. The new tri-source UI scenario covers invoice, sales register, and TK511.
+- Aggregate search is capped at 12 candidates and stops after the second valid subset; gross discrepancy reporting cannot net different semantics to zero.
+
+## V15 Semantic Closure (2026-08-25)
+- Result presentation is source-aware: semantic labels include their actual secondary source and no longer imply fixed ledger accounts.
+- Canonical bank fields and a read-only cross-source partner identity control are additive; they preserve source provenance and never auto-merge by fuzzy name.
+- Aggregate controls are fail-closed over the candidate budget; aggregate-disabled paths scan all 1:1 candidates without subset enumeration.
+
 ## Latest Verification (2026-08-25)
 - GNU workspace test suite completed successfully after the v14 intake and packaging changes.
 - Frontend Vitest suite completed successfully.
 - Repository source changes were committed as `b2e8658`.
 - Root `Cargo.lock` is tracked to make the Rust dependency graph reproducible for repository handoff.
 - The `main` branch has been published to the configured GitHub `origin`.
+
+## V15.4 Final Acceptance In Progress (2026-08-25)
+- The feature branch remains unmerged. Bank candidate policy now requires unique strong evidence for acceptance; a unique direction/amount/date candidate is review-only and remains unconsumed.
+- Transactional execution derives its primary only after typed reference controls are removed. Partner identity evaluates declared transactional kinds only.
+- Direct 1:1 candidates are scanned across the full set before aggregate subset search. Aggregate search remains fail-closed above its candidate budget.
+- The local acceptance harness is ignored, path-based, and does not retain workbook content. It completed against the required local workbook set; running-balance validation is unavailable when normalized balance values are absent.
+- Final V15.4 workspace checks, frontend checks, formatting, strict Clippy, Tauri build, and release executable smoke all completed. The branch is ready for source/diff review only and remains unmerged.
+
+## V15 Final Micro-Fix (2026-08-25)
+- Aggregate matching now follows a strict direct-first state machine: multiple direct matches are ambiguous, one direct match is accepted without subset search, and aggregate subsets are considered only with no direct match and at most the configured candidate budget.
+- Bank secondary records have disjoint final classifications for accepted, review-linked, and truly unlinked state. Suggested/ambiguous links remain review evidence but no longer produce duplicate bank-only residual groups.
+- The ignored real-local harness asserts every known oracle and proves bank-record classification conservation. Running-balance verification remains unavailable only because normalized balance evidence is insufficient.
+- Full release gate and executable smoke passed. The feature branch remains unmerged and is ready for final diff review.

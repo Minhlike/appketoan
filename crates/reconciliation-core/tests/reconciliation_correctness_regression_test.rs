@@ -614,7 +614,7 @@ fn test_07_aggregate_boundary_date_filtering() {
 }
 
 #[test]
-fn test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess() {
+fn test_08_unique_direct_match_precedes_aggregate_search() {
     let src1 = create_source(
         "src_inv",
         "Hóa đơn",
@@ -660,7 +660,8 @@ fn test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess() {
         }],
     );
 
-    // Candidate A = 100M, Candidate B = 40M, Candidate C = 60M (Two subsets equal 100M!)
+    // Candidate A is the only direct 1:1 match. Aggregate search must not run,
+    // even though B+C would also sum to the source amount.
     records_map.insert(
         "src_511".to_string(),
         vec![
@@ -695,8 +696,8 @@ fn test_08_unsafe_aggregate_ambiguity_no_arbitrary_guess() {
     );
 
     let res = execute_reconciliation(&session, &records_map).expect("Should succeed");
-    assert_eq!(res.groups[0].status, MatchStatus::AmbiguousMatch);
-    assert_eq!(res.summary.ambiguous_count, 1);
+    assert_eq!(res.groups[0].status, MatchStatus::MatchedExact);
+    assert_eq!(res.summary.exact_matches_count, 1);
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -2233,8 +2234,8 @@ fn test_18_false_positive_adversarial_suite() {
 // -------------------------------------------------------------------------------------------------
 #[test]
 fn test_19_real_2_file_baseline_46_45_missing_233() {
-    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
-    let tk_path = "D:\\appketoan\\T7.2026.xlsx";
+    let inv_path = "D:\\appketoan\\.local-testdata\\T7.2026 Thuế.xlsx";
+    let tk_path = "D:\\appketoan\\.local-testdata\\T7.2026.xlsx";
 
     if !Path::new(inv_path).exists() || !Path::new(tk_path).exists() {
         println!("Skipping real 2-file test as files are not present in current env");
@@ -2341,8 +2342,8 @@ fn test_19_real_2_file_baseline_46_45_missing_233() {
 // -------------------------------------------------------------------------------------------------
 #[test]
 fn test_20_independent_oracle_verification() {
-    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
-    let tk_path = "D:\\appketoan\\T7.2026.xlsx";
+    let inv_path = "D:\\appketoan\\.local-testdata\\T7.2026 Thuế.xlsx";
+    let tk_path = "D:\\appketoan\\.local-testdata\\T7.2026.xlsx";
 
     if !Path::new(inv_path).exists() || !Path::new(tk_path).exists() {
         return;
@@ -4482,8 +4483,8 @@ fn test_37_n_file_intake_deduplication_4_files_exact_baseline() {
         analyze_intake_data_sources, filter_reconciliation_session_and_records, DatasetRelation,
     };
 
-    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
-    let tk511_path = "D:\\appketoan\\T7.2026.xlsx";
+    let inv_path = "D:\\appketoan\\.local-testdata\\T7.2026 Thuế.xlsx";
+    let tk511_path = "D:\\appketoan\\.local-testdata\\T7.2026.xlsx";
 
     let meta_inv = inspect_excel_file(inv_path).expect("Failed to inspect invoice file");
     let sheet_inv = &meta_inv.sheets[0];
@@ -4785,8 +4786,8 @@ fn test_39_partial_overlap_detection_fail_closed() {
 fn test_40_upload_order_invariance_and_remapping() {
     use reconciliation_core::intake::filter_reconciliation_session_and_records;
 
-    let inv_path = "D:\\appketoan\\T7.2026 Thuế.xlsx";
-    let tk511_path = "D:\\appketoan\\T7.2026.xlsx";
+    let inv_path = "D:\\appketoan\\.local-testdata\\T7.2026 Thuế.xlsx";
+    let tk511_path = "D:\\appketoan\\.local-testdata\\T7.2026.xlsx";
 
     if !Path::new(inv_path).exists() || !Path::new(tk511_path).exists() {
         return;

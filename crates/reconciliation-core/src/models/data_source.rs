@@ -10,6 +10,7 @@ pub enum SourceRole {
     Primary,
     RequiredSecondary,
     OptionalSecondary,
+    ReferenceMaster,
 }
 
 impl SourceRole {
@@ -18,6 +19,7 @@ impl SourceRole {
             Self::Primary => "Nguồn chính (PRIMARY)",
             Self::RequiredSecondary => "Nguồn bắt buộc (REQUIRED)",
             Self::OptionalSecondary => "Nguồn bổ trợ (OPTIONAL)",
+            Self::ReferenceMaster => "Danh mục tham chiếu (REFERENCE MASTER)",
         }
     }
 }
@@ -34,6 +36,14 @@ pub enum DataSourceKind {
     Ledger133,
     #[serde(rename = "ledger_131", alias = "ledger131")]
     Ledger131,
+    #[serde(rename = "ledger_112", alias = "ledger112")]
+    Ledger112,
+    #[serde(rename = "partner_master", alias = "partnermaster")]
+    PartnerMaster,
+    #[serde(rename = "sales_register", alias = "salesregister")]
+    SalesRegister,
+    #[serde(rename = "sales_analysis_report", alias = "salesanalysisreport")]
+    SalesAnalysisReport,
     #[serde(rename = "bank_statement", alias = "bankstatement")]
     BankStatement,
     #[serde(rename = "cash_book", alias = "cashbook")]
@@ -53,6 +63,10 @@ impl DataSourceKind {
             Self::Ledger3331 => "ledger_3331",
             Self::Ledger133 => "ledger_133",
             Self::Ledger131 => "ledger_131",
+            Self::Ledger112 => "ledger_112",
+            Self::PartnerMaster => "partner_master",
+            Self::SalesRegister => "sales_register",
+            Self::SalesAnalysisReport => "sales_analysis_report",
             Self::BankStatement => "bank_statement",
             Self::CashBook => "cash_book",
             Self::BranchLedger => "branch_ledger",
@@ -67,6 +81,10 @@ impl DataSourceKind {
             Self::Ledger3331 => "Sổ cái TK 3331 (Thuế GTGT)",
             Self::Ledger133 => "Sổ cái TK 133 (Thuế đầu vào)",
             Self::Ledger131 => "Sổ công nợ TK 131 (Phải thu)",
+            Self::Ledger112 => "Sổ cái TK 112 (Tiền gửi ngân hàng)",
+            Self::PartnerMaster => "Danh mục khách hàng / nhà cung cấp",
+            Self::SalesRegister => "Bảng kê bán hàng",
+            Self::SalesAnalysisReport => "Báo cáo phân tích bán hàng",
             Self::BankStatement => "Sao kê ngân hàng",
             Self::CashBook => "Sổ quỹ tiền mặt",
             Self::BranchLedger => "Sổ chi nhánh",
@@ -143,6 +161,51 @@ pub struct ColumnMapping {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bank_account_column: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partner_code_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_customer_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_supplier_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub currency_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exchange_rate_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invoice_status_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invoice_check_result_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_number_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_date_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accounting_date_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_account_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_name_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub balance_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub product_code_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub product_name_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantity_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit_price_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revenue_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profit_column: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,8 +240,17 @@ pub struct SheetMetadata {
     pub name: String,
     pub total_rows: usize,
     pub total_cols: usize,
+    /// First physical worksheet row represented by Calamine's non-empty range.
+    #[serde(default)]
+    pub range_start_row: u32,
     pub detected_header_row: u32,
     pub detected_data_start_row: u32,
+    /// Physical worksheet positions for audit/reporting. The legacy detected
+    /// fields remain range-relative for backward-compatible normalization.
+    #[serde(default)]
+    pub physical_header_row: u32,
+    #[serde(default)]
+    pub physical_data_start_row: u32,
     pub columns: Vec<String>,
     pub suggested_mapping: ColumnMapping,
     pub suggested_kind: DataSourceKind,
@@ -255,5 +327,27 @@ mod tests {
 
         let deserialized: DataSource = serde_json::from_str(&json).expect("Deserialization failed");
         assert_eq!(ds, deserialized);
+    }
+
+    #[test]
+    fn reference_master_role_and_v15_kind_round_trip() {
+        let source = DataSource {
+            id: "master".to_string(),
+            name: "Partner master".to_string(),
+            file_path: "synthetic.xlsx".to_string(),
+            sheet_name: "Sheet1".to_string(),
+            kind: DataSourceKind::PartnerMaster,
+            role: SourceRole::ReferenceMaster,
+            header_row: 1,
+            data_start_row: 2,
+            column_mapping: ColumnMapping::default(),
+        };
+        let json = serde_json::to_string(&source).expect("serialize");
+        assert!(json.contains("partner_master"));
+        assert!(json.contains("REFERENCE_MASTER"));
+        assert_eq!(
+            serde_json::from_str::<DataSource>(&json).expect("deserialize"),
+            source
+        );
     }
 }

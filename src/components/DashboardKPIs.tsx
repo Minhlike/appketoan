@@ -112,7 +112,6 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
     (showVatVariance && !isZeroMoney(summary.vatVariance!)) ||
     (showReceivableVariance && !isZeroMoney(summary.receivableVariance!));
 
-  const isNetZero = isZeroMoney(summary.netFinancialVariance);
 
   return (
     <section className="dashboard-section">
@@ -121,7 +120,7 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
         <div className="variance-badges-container" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
 
           {showRevenueVariance ? (
-            <div className="net-variance-badge" title="Chênh lệch Doanh thu (Pretax ↔ TK 511)">
+            <div className="net-variance-badge" title="Chênh lệch doanh thu trên các control đã chạy">
               <span className="var-label">Lệch Doanh thu:</span>
               <span
                 className={`var-value ${
@@ -135,7 +134,7 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
 
           {vatChecked ? (
             showVatVariance ? (
-              <div className="net-variance-badge" title="Chênh lệch Thuế GTGT (VAT ↔ TK 3331)">
+              <div className="net-variance-badge" title="Chênh lệch thuế GTGT trên các control đã chạy">
                 <span className="var-label">Lệch Thuế GTGT:</span>
                 <span
                   className={`var-value ${
@@ -155,7 +154,7 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
 
           {receivableChecked ? (
             showReceivableVariance ? (
-              <div className="net-variance-badge" title="Chênh lệch Công nợ (Total ↔ TK 131)">
+              <div className="net-variance-badge" title="Chênh lệch phải thu trên các control đã chạy">
                 <span className="var-label">Lệch Công nợ:</span>
                 <span
                   className={`var-value ${
@@ -175,17 +174,15 @@ export const DashboardKPIs: React.FC<DashboardKPIsProps> = ({
 
           {!hasAnyVariance && (
             <div className="net-variance-badge">
-              <span className="var-label">Chênh lệch tài chính:</span>
+              <span className="var-label">Tổng quy mô sai lệch:</span>
               <span
                 className={`var-value ${
-                  isNetZero
+                  isZeroMoney(summary.totalDiscrepantAmount)
                     ? "var-zero"
-                    : String(summary.netFinancialVariance).startsWith("-")
-                    ? "var-neg"
                     : "var-pos"
                 }`}
               >
-                {formatVND(summary.netFinancialVariance)}
+                {formatVND(summary.totalDiscrepantAmount)}
               </span>
             </div>
           )}

@@ -52,8 +52,8 @@ describe("AppKetoan UI End-to-End Workflow", () => {
     expect(screen.getByText(/📊 Xuất Báo Cáo Excel/i)).toBeDefined();
 
     // Check table headers
-    expect(screen.getByText(/Doanh thu \(511\)/i)).toBeDefined();
-    expect(screen.getByText(/Thuế GTGT \(3331\)/i)).toBeDefined();
+    expect(screen.getByText(/Doanh thu \(theo nguồn\)/i)).toBeDefined();
+    expect(screen.getByText(/Thuế GTGT \(theo nguồn\)/i)).toBeDefined();
     expect(screen.getByText(/Chi tiết & Lý do sai lệch/i)).toBeDefined();
   });
 

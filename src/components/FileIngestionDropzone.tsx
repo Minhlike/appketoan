@@ -239,6 +239,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                       <option value="PRIMARY">🔵 Nguồn chính (PRIMARY)</option>
                       <option value="REQUIRED_SECONDARY">🟠 Nguồn bắt buộc (REQUIRED)</option>
                       <option value="OPTIONAL_SECONDARY">⚪ Nguồn bổ trợ (OPTIONAL)</option>
+                      <option value="REFERENCE_MASTER">🟣 Danh mục tham chiếu</option>
                     </select>
                   </div>
 
@@ -261,6 +262,10 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                       <option value="ledger_511">TK 511 - Doanh thu</option>
                       <option value="ledger_3331">TK 3331 - Thuế GTGT</option>
                       <option value="ledger_131">TK 131 - Công nợ (Phải thu)</option>
+                      <option value="ledger_112">TK 112 - Tiền gửi ngân hàng</option>
+                      <option value="sales_register">Bảng kê bán hàng</option>
+                      <option value="partner_master">Danh mục khách hàng / NCC</option>
+                      <option value="sales_analysis_report">Báo cáo phân tích bán hàng</option>
                       <option value="ledger_133">TK 133 - Thuế đầu vào</option>
                       <option value="bank_statement">Sao kê ngân hàng</option>
                       <option value="cash_book">Sổ quỹ tiền mặt</option>

@@ -3,7 +3,7 @@
  * Synchronized with Rust models in `crates/reconciliation-core/src/models/`
  */
 
-export type SourceRole = "PRIMARY" | "REQUIRED_SECONDARY" | "OPTIONAL_SECONDARY";
+export type SourceRole = "PRIMARY" | "REQUIRED_SECONDARY" | "OPTIONAL_SECONDARY" | "REFERENCE_MASTER";
 
 export type DataSourceKind =
   | "e_invoice"
@@ -11,6 +11,10 @@ export type DataSourceKind =
   | "ledger_3331"
   | "ledger_133"
   | "ledger_131"
+  | "ledger_112"
+  | "partner_master"
+  | "sales_register"
+  | "sales_analysis_report"
   | "bank_statement"
   | "cash_book"
   | "branch_ledger"
@@ -61,6 +65,28 @@ export interface ColumnMapping {
   voucherNoColumn?: string;
   descriptionColumn?: string;
   bankAccountColumn?: string;
+  partnerCodeColumn?: string;
+  addressColumn?: string;
+  isCustomerColumn?: string;
+  isSupplierColumn?: string;
+  statusColumn?: string;
+  currencyColumn?: string;
+  exchangeRateColumn?: string;
+  invoiceStatusColumn?: string;
+  invoiceCheckResultColumn?: string;
+  transactionNumberColumn?: string;
+  transactionDateColumn?: string;
+  accountingDateColumn?: string;
+  counterpartyAccountColumn?: string;
+  counterpartyNameColumn?: string;
+  balanceColumn?: string;
+  productCodeColumn?: string;
+  productNameColumn?: string;
+  quantityColumn?: string;
+  unitPriceColumn?: string;
+  revenueColumn?: string;
+  costColumn?: string;
+  profitColumn?: string;
 }
 
 export interface DataSource {
@@ -79,8 +105,11 @@ export interface SheetMetadata {
   name: string;
   totalRows: number;
   totalCols: number;
+  rangeStartRow?: number;
   detectedHeaderRow: number;
   detectedDataStartRow: number;
+  physicalHeaderRow?: number;
+  physicalDataStartRow?: number;
   columns: string[];
   suggestedMapping: ColumnMapping;
   suggestedKind: DataSourceKind;
@@ -293,7 +322,16 @@ export interface ReconciliationResult {
   profileId: string;
   summary: ReconciliationSummary;
   groups: MatchGroup[];
+  referenceControls?: ReferenceControlResult[];
   intakeAnalysis?: IntakeAnalysisResult;
+}
+
+export interface ReferenceControlResult {
+  sourceId: string;
+  sourceKind: DataSourceKind;
+  recordCount: number;
+  status: MatchStatus;
+  message: string;
 }
 
 export interface ExportSummary {
