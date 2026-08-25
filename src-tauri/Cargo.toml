@@ -8,6 +8,11 @@ edition = "2021"
 [lib]
 name = "tauri_app_lib"
 crate-type = ["staticlib", "rlib"]
+# The GNU WebView2 loader cannot execute a synthetic lib-test harness reliably.
+# This crate has no unit tests; pure business tests stay in reconciliation-core
+# and Tauri behavior is covered by build + release executable smoke gates.
+test = false
+doctest = false
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
