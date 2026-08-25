@@ -33,7 +33,7 @@ describe("AppKetoan UI End-to-End Workflow", () => {
     ).toBe(true);
 
     openAdvancedWorkflow();
-    const runBtn = screen.getByRole("button", { name: /▶ CHẠY ĐỐI CHIẾU/i });
+    const runBtn = screen.getByRole("button", { name: /CHẠY ĐỐI CHIẾU/i });
     expect(runBtn.hasAttribute("disabled")).toBe(false);
   });
 
@@ -45,7 +45,7 @@ describe("AppKetoan UI End-to-End Workflow", () => {
 
     // 2. Click run reconciliation
     openAdvancedWorkflow();
-    const runBtn = screen.getByRole("button", { name: /▶ CHẠY ĐỐI CHIẾU/i });
+    const runBtn = screen.getByRole("button", { name: /CHẠY ĐỐI CHIẾU/i });
     fireEvent.click(runBtn);
 
     // 3. Wait for results to render
@@ -60,7 +60,7 @@ describe("AppKetoan UI End-to-End Workflow", () => {
     expect(screen.getAllByText(/Nghi ngờ trùng lặp/i).length).toBeGreaterThan(0);
 
     // Check action buttons
-    expect(screen.getByText(/📊 Xuất Báo Cáo Excel/i)).toBeDefined();
+    expect(screen.getByText(/Xuất báo cáo Excel/i)).toBeDefined();
 
     // Check table headers
     expect(screen.getByText(/Doanh thu \(theo nguồn\)/i)).toBeDefined();
@@ -72,7 +72,7 @@ describe("AppKetoan UI End-to-End Workflow", () => {
     render(<App />);
     fireEvent.click(screen.getByText(/📁 Nạp dữ liệu mẫu/i));
     openAdvancedWorkflow();
-    fireEvent.click(screen.getByRole("button", { name: /▶ CHẠY ĐỐI CHIẾU/i }));
+    fireEvent.click(screen.getByRole("button", { name: /CHẠY ĐỐI CHIẾU/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/Kết quả đối chiếu tổng quan/i)).toBeDefined();

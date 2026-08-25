@@ -1,13 +1,13 @@
-import React, { useRef, useState } from "react";
-import type { DataSource, ExcelFileMetadata, DataSourceKind, SourceRole } from "../types/dataContract";
-import { inspectExcelBytes } from "../services/api";
-
-interface IngestedSourceItem {
-  id: string;
-  source: DataSource;
-  fileMetadata: ExcelFileMetadata;
-  rawBytes?: Uint8Array;
-}
+import React, { useEffect, useRef, useState } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import type { DataSource, DataSourceKind, SourceRole } from "../types/dataContract";
+import type { IngestedSourceItem } from "../types/auditWorkspace";
+import {
+  inspectExcelBytes,
+  inspectExcelFile,
+  isTauriRuntime,
+  safeUserError,
+} from "../services/api";
 
 interface FileIngestionDropzoneProps {
   sources: IngestedSourceItem[];
@@ -21,22 +21,11 @@ interface FileIngestionDropzoneProps {
   advancedMode?: boolean;
 }
 
-const sourceKindLabel = (kind: DataSourceKind): string =>
-  ({
-    e_invoice: "Hóa đơn điện tử",
-    ledger_511: "Sổ doanh thu (TK 511)",
-    ledger_3331: "Sổ thuế GTGT (TK 3331)",
-    ledger_133: "Sổ thuế đầu vào (TK 133)",
-    ledger_131: "Sổ công nợ phải thu (TK 131)",
-    ledger_112: "Sổ tiền gửi ngân hàng (TK 112)",
-    partner_master: "Danh mục khách hàng / nhà cung cấp",
-    sales_register: "Bảng kê bán hàng",
-    sales_analysis_report: "Báo cáo phân tích bán hàng",
-    bank_statement: "Sao kê ngân hàng",
-    cash_book: "Sổ quỹ tiền mặt",
-    branch_ledger: "Sổ chi nhánh",
-    custom: "Chưa xác định",
-  })[kind];
+async function sha256(bytes: Uint8Array): Promise<string | undefined> {
+  if (!globalThis.crypto?.subtle) return undefined;
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as BufferSource);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
   sources,
@@ -54,12 +43,25 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const processFile = async (file: File) => {
+  const processFile = async (
+    file: File,
+    seenHashes: Set<string>,
+    sourcePosition: number
+  ) => {
     try {
       setLoading(true);
       setErrorMessage(null);
+      if (file.name.startsWith("~$")) {
+        setErrorMessage("Đã bỏ qua tệp tạm do Microsoft Office tạo.");
+        return;
+      }
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
+      const rawSha256 = await sha256(bytes);
+      if (rawSha256 && seenHashes.has(rawSha256)) {
+        setErrorMessage("Tệp này trùng hoàn toàn với nguồn đã nạp.");
+        return;
+      }
 
       const metadata = await inspectExcelBytes(bytes, file.name);
       if (!metadata.sheets || metadata.sheets.length === 0) {
@@ -70,7 +72,8 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
       const sourceId = `src_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
       // Default role: first source is Primary, subsequent are RequiredSecondary
-      const defaultRole: SourceRole = sources.length === 0 ? "PRIMARY" : "REQUIRED_SECONDARY";
+      const defaultRole: SourceRole =
+        sourcePosition === 0 ? "PRIMARY" : "REQUIRED_SECONDARY";
 
       const dataSource: DataSource = {
         id: sourceId,
@@ -89,18 +92,85 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
         source: dataSource,
         fileMetadata: metadata,
         rawBytes: bytes,
+        rawSha256,
       });
+      if (rawSha256) seenHashes.add(rawSha256);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(`Không thể đọc file Excel: ${msg}`);
+      setErrorMessage(`Không thể đọc file Excel: ${safeUserError(err)}`);
     } finally {
       setLoading(false);
     }
   };
 
+  const processPath = async (filePath: string, sourcePosition: number) => {
+    const fileName = filePath.split(/[\\/]/).pop() || filePath;
+    try {
+      setLoading(true);
+      setErrorMessage(null);
+      if (fileName.startsWith("~$")) {
+        setErrorMessage("Đã bỏ qua tệp tạm do Microsoft Office tạo.");
+        return;
+      }
+      if (!/\.(xlsx|xls|xlsb)$/i.test(fileName)) {
+        setErrorMessage("Vui lòng chỉ nạp file Excel (.xlsx, .xls, .xlsb).");
+        return;
+      }
+      const metadata = await inspectExcelFile(filePath);
+      const defaultSheet = metadata.sheets[0];
+      if (!defaultSheet) throw new Error("File không chứa sheet dữ liệu nào.");
+      const sourceId = `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      onAddSource({
+        id: sourceId,
+        source: {
+          id: sourceId,
+          name: fileName.replace(/\.[^/.]+$/, ""),
+          filePath,
+          sheetName: defaultSheet.name,
+          kind: defaultSheet.suggestedKind,
+          role: sourcePosition === 0 ? "PRIMARY" : "REQUIRED_SECONDARY",
+          headerRow: defaultSheet.detectedHeaderRow,
+          dataStartRow: defaultSheet.detectedDataStartRow,
+          columnMapping: defaultSheet.suggestedMapping,
+        },
+        fileMetadata: metadata,
+      });
+    } catch (error: unknown) {
+      setErrorMessage(`Không thể đọc file Excel: ${safeUserError(error)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        if (disposed || disabled || event.payload.type !== "drop") return;
+        const paths = event.payload.paths;
+        void (async () => {
+          for (const [index, path] of paths.entries()) {
+            await processPath(path, sources.length + index);
+          }
+        })();
+      })
+      .then((cleanup) => {
+        if (disposed) cleanup();
+        else unlisten = cleanup;
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [disabled, sources.length]);
+
   const processFiles = async (fileList: File[]) => {
-    for (const file of fileList) {
-      await processFile(file);
+    const seenHashes = new Set(
+      sources.flatMap((source) => (source.rawSha256 ? [source.rawSha256] : []))
+    );
+    for (const [index, file] of fileList.entries()) {
+      await processFile(file, seenHashes, sources.length + index);
     }
   };
 
@@ -126,6 +196,7 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
     e.preventDefault();
     setIsDragging(false);
     if (disabled) return;
+    if (isTauriRuntime()) return;
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const validFiles: File[] = [];
@@ -227,22 +298,10 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                 </div>
 
                 <div className="source-card-body">
-                  {advancedMode && <div className="source-field-row">
-                    <label className="field-label">Tên phân loại:</label>
-                    <input
-                      type="text"
-                      className="input-control"
-                      value={item.source.name}
-                      disabled={disabled}
-                      onChange={(e) => {
-                        item.source.name = e.target.value;
-                      }}
-                    />
-                  </div>}
-
-                  <div className="source-field-row">
-                    <label className="field-label">Vai trò trong kịch bản:</label>
-                    {advancedMode ? <select
+                  {advancedMode && (
+                    <div className="source-field-row">
+                      <label className="field-label">Vai trò trong kịch bản:</label>
+                      <select
                       className="select-control"
                       value={role}
                       disabled={disabled}
@@ -259,11 +318,14 @@ export const FileIngestionDropzone: React.FC<FileIngestionDropzoneProps> = ({
                       <option value="REQUIRED_SECONDARY">🟠 Nguồn bắt buộc (REQUIRED)</option>
                       <option value="OPTIONAL_SECONDARY">⚪ Nguồn bổ trợ (OPTIONAL)</option>
                       <option value="REFERENCE_MASTER">🟣 Danh mục tham chiếu</option>
-                    </select> : <strong>{sourceKindLabel(item.source.kind)}</strong>}
-                  </div>
+                      </select>
+                    </div>
+                  )}
 
                   <div className="source-field-row">
-                    <label className="field-label">Loại dữ liệu:</label>
+                    <label className="field-label">
+                      {advancedMode ? "Loại dữ liệu:" : "Loại dữ liệu nhận dạng:"}
+                    </label>
                     <select
                       className="select-control"
                       value={item.source.kind}
