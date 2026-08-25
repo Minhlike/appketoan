@@ -39,7 +39,7 @@ Reconciliation Core (crates/reconciliation-core/)
 - **Source Archive**: `D:\appketoan-source.zip` (404.67 KB)
 
 ## Blockers
-- NONE.
+- No correctness or build blocker. Multi-control execution time and unmeasured peak memory remain performance follow-up items.
 
 ## V15 Local Dataset Gate (2026-08-25)
 - COMPLETE: the user confirmed the seven suffixless workbooks in `.local-testdata/` are the authoritative local acceptance set. They were read only through the local Rust reader and remain ignored by Git.
@@ -98,3 +98,11 @@ Reconciliation Core (crates/reconciliation-core/)
 - Transactional data is bounded by the session period and then by each control's required-source date intersection. Missing dates, empty intersections, and duplicate required capabilities fail closed to review.
 - Each source is read, normalized, and prepared once per audit execution; controls reuse the retained typed datasets and preserve provenance.
 - The real-local V15 and V16 acceptance harnesses passed without persisting workbook data. The full Rust/frontend/type/format/Clippy/Tauri gate passed; the known GNU WebView2 linker warning remains non-fatal.
+
+## V17 Resilience / UI Foundation (2026-08-26)
+- Status: implementation complete on `codex/v17-resilience-ui-foundation`, stacked on the unmerged V16 branch; not merged.
+- Audit reports now carry typed errors, independent control outcomes, structured stage/control metrics, cooperative cancellation state, and accounting-specific result summaries.
+- Tauri owns a bounded app-process prepared-source cache keyed by source identity, content SHA-256, sheet, mapping, source kind, and normalization schema. Period views and indexes are rebuilt fail-closed; no workbook content is persisted by the cache.
+- The default React workflow is decomposed into source intake, period, planner/results, and unified review components. The legacy scenario workflow remains available under advanced settings.
+- Office lock files and exact duplicates are reported; native Tauri drag/drop is path-first while browser/file-picker bytes remain a compatibility fallback.
+- Local acceptance, full Rust/frontend/type/format/Clippy gates, Tauri production build, and release executable smoke passed. Peak RAM, pure IPC serialization time, inner-loop cancellation, and automated browser visual inspection remain explicitly unverified.

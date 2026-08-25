@@ -23,3 +23,7 @@
 ## V16 Period and Local Acceptance Traps (2026-08-25)
 - A single audit package may contain controls whose evidence belongs to different sub-periods. Keep one explicit session boundary, then calculate the intersection of required-source date evidence separately for each control; never widen a narrow source to match a broader workbook.
 - Office lock files and exact duplicate derived workbooks can appear beside an acceptance set. Ignore lock files and collapse only proven same-kind content duplicates in a local harness. Production planning must leave unrelated duplicate capabilities as `NEEDS_REVIEW` rather than choosing by load order or filename.
+
+## V17 GNU Tauri Test Harness Boundary (2026-08-26)
+- Adding managed Tauri runtime state can make the synthetic library test harness load WebView2 symbols and fail before running tests with `STATUS_ENTRYPOINT_NOT_FOUND` on the supported GNU toolchain.
+- Keep accounting and resilience unit/integration tests in the pure Rust core. The Tauri shell has no lib unit tests, so its synthetic lib/doctest target is disabled; validate that boundary with workspace check, strict Clippy, production Tauri build, executable smoke, frontend tests, and static privacy/IPC contract tests.

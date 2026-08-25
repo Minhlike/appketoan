@@ -51,3 +51,19 @@
 ## Decision 011: Capability-Based Audit Session and Per-Control Period Intersection
 - **Decision**: Add an `AuditSession` that owns an explicit period, capability catalog, normalized datasets, prepared indexes, generated control plans, and independent control results. Transactional sources are first bounded by the session period, then each control runs only on the intersection of date evidence from its required sources. Legacy account-specific kinds remain adapters; corresponding-account columns do not imply ownership of that ledger capability.
 - **Rationale**: This enables import/normalize/index once with multi-control reuse, prevents cross-period false matches, and reports missing TK131/TK3331 evidence without inventing it from unrelated ledgers or bank data. See ADR 0008.
+
+## Decision 012: Structured Execution Evidence
+- **Decision**: Keep backend stages, per-control timing, IPC-inclusive overhead, and first-render timing in a typed report. Leave peak memory unset until measured by a reliable process-level mechanism.
+- **Rationale**: Performance decisions need comparable workloads and must not convert guessed measurements into release evidence. See ADR 0009.
+
+## Decision 013: Recoverable Audit Boundaries
+- **Decision**: Use scoped typed errors, independent control outcomes, cooperative cancellation tokens, and non-destructive export failure. Cancelled controls cannot report PASS.
+- **Rationale**: One damaged source or failed control must not erase unrelated audit evidence or crash the desktop process. See ADR 0010.
+
+## Decision 014: Prepared Data Stays In Process
+- **Decision**: Cache normalized sources only in memory using content/sheet/mapping/kind/schema identity, with fixed entry/size limits and explicit removal/reset invalidation. Rebuild period views and indexes for each execution.
+- **Rationale**: Reruns should avoid repeated parse/normalization without weakening provenance, period correctness, or local-data privacy. See ADR 0011.
+
+## Decision 015: Accounting-First Default UI
+- **Decision**: Use a four-step Vietnamese audit workspace and unified actionable review queue as the default; keep role/scenario controls in the preserved advanced workflow.
+- **Rationale**: Accounting users should understand what is present, missing, reviewed, and actionable without learning engine terminology. See ADR 0012.
