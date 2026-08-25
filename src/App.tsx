@@ -12,12 +12,15 @@ import type {
   PreconfiguredScenario,
   ReconciliationResult,
   ReconciliationSession,
+  AccountingPeriod,
+  AuditWorkspaceReport,
 } from "./types/dataContract";
 import {
   exportReport,
   getDemoDatasets,
   PRECONFIGURED_SCENARIOS,
   runReconciliation,
+  runAuditWorkspace,
 } from "./services/api";
 import { parseVietnameseMoneyInput } from "./utils/money";
 
@@ -28,6 +31,7 @@ import { MappingModal } from "./components/MappingModal";
 import { DashboardKPIs } from "./components/DashboardKPIs";
 import { ResultTable } from "./components/ResultTable";
 import { DetailInspectorModal } from "./components/DetailInspectorModal";
+import { AuditWorkspaceDashboard } from "./components/AuditWorkspaceDashboard";
 
 interface IngestedSourceItem {
   id: string;
@@ -57,6 +61,12 @@ export function App() {
   const [inspectingGroup, setInspectingGroup] = useState<MatchGroup | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [auditReport, setAuditReport] = useState<AuditWorkspaceReport | null>(null);
+  const [accountingPeriod, setAccountingPeriod] = useState<AccountingPeriod>({
+    startDate: "",
+    endDate: "",
+  });
+  const [advancedMode, setAdvancedMode] = useState(false);
 
   // Scenario change: automatically assign roles to current sources if kinds match
   const handleSelectScenario = (scenario: PreconfiguredScenario) => {
@@ -85,6 +95,7 @@ export function App() {
         };
       })
     );
+    setAuditReport(null);
   };
 
   // Add source
@@ -108,12 +119,14 @@ export function App() {
     };
 
     setSources((prev) => [...prev, newItem]);
+    setAuditReport(null);
     setErrorMessage(null);
   };
 
   // Remove source
   const handleRemoveSource = (id: string) => {
     setSources((prev) => prev.filter((s) => s.id !== id));
+    setAuditReport(null);
   };
 
   // Update sheet: re-runs detection and reclassifies source.kind
@@ -154,6 +167,7 @@ export function App() {
           : item
       )
     );
+    setAuditReport(null);
   };
 
   // Update source role
@@ -178,6 +192,7 @@ export function App() {
     setSources((prev) =>
       prev.map((item) => (item.id === updatedSource.id ? { ...item, source: updatedSource } : item))
     );
+    setAuditReport(null);
   };
 
   // Load demo data
@@ -279,6 +294,44 @@ export function App() {
 
     setSources([source1, source2]);
     setErrorMessage(null);
+    setAuditReport(null);
+  };
+
+  const handleRunAuditWorkspace = async () => {
+    if (sources.length === 0) {
+      setErrorMessage("Vui lòng nạp ít nhất một nguồn vào bộ hồ sơ kế toán.");
+      return;
+    }
+    if (!accountingPeriod.startDate || !accountingPeriod.endDate) {
+      setErrorMessage("Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc kỳ kế toán.");
+      return;
+    }
+    if (accountingPeriod.startDate > accountingPeriod.endDate) {
+      setErrorMessage("Ngày bắt đầu kỳ kế toán không được sau ngày kết thúc.");
+      return;
+    }
+    try {
+      setIsRunning(true);
+      setErrorMessage(null);
+      const fileBytesMap: Record<string, number[]> = {};
+      for (const source of sources) {
+        if (source.rawBytes) fileBytesMap[source.id] = Array.from(source.rawBytes);
+      }
+      const report = await runAuditWorkspace(
+        `audit_${Date.now()}`,
+        accountingPeriod,
+        sources.map((item) => item.source),
+        String(toleranceVnd),
+        dateToleranceDays,
+        Object.keys(fileBytesMap).length > 0 ? fileBytesMap : undefined
+      );
+      setAuditReport(report);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorMessage(`Không thể lập và chạy kế hoạch kiểm tra: ${msg}`);
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   // Reset
@@ -288,6 +341,7 @@ export function App() {
     setStatusFilter("ALL");
     setExportMessage(null);
     setErrorMessage(null);
+    setAuditReport(null);
   };
 
   // Run Reconciliation with strict validation
@@ -439,14 +493,12 @@ export function App() {
           </div>
         )}
 
-        {/* Step 1: Scenario selection */}
-        <ScenarioSelector
-          selectedScenarioId={selectedScenario.id}
-          onSelectScenario={handleSelectScenario}
-          disabled={isRunning}
+        <AuditWorkspaceDashboard
+          sources={sources}
+          accountingPeriod={accountingPeriod}
+          report={auditReport}
         />
 
-        {/* Step 2: Multi-file ingestion */}
         <FileIngestionDropzone
           sources={sources}
           onAddSource={handleAddSource}
@@ -456,9 +508,63 @@ export function App() {
           onUpdateRole={handleUpdateRole}
           onOpenMapping={(item) => setActiveMappingItem(item)}
           disabled={isRunning}
+          advancedMode={advancedMode}
         />
 
-        {/* Options & Action Bar */}
+        <div className="period-controls" aria-label="Kỳ kế toán">
+          <label>
+            Từ ngày
+            <input
+              className="input-control"
+              type="date"
+              value={accountingPeriod.startDate}
+              onChange={(event) => {
+                setAccountingPeriod((period) => ({ ...period, startDate: event.target.value }));
+                setAuditReport(null);
+              }}
+              disabled={isRunning}
+            />
+          </label>
+          <label>
+            Đến ngày
+            <input
+              className="input-control"
+              type="date"
+              value={accountingPeriod.endDate}
+              onChange={(event) => {
+                setAccountingPeriod((period) => ({ ...period, endDate: event.target.value }));
+                setAuditReport(null);
+              }}
+              disabled={isRunning}
+            />
+          </label>
+          <button
+            type="button"
+            className={`btn btn-primary btn-lg ${isRunning ? "btn-loading" : ""}`}
+            onClick={() => void handleRunAuditWorkspace()}
+            disabled={
+              isRunning ||
+              sources.length === 0 ||
+              !accountingPeriod.startDate ||
+              !accountingPeriod.endDate
+            }
+          >
+            {isRunning ? "⏳ Đang kiểm tra..." : "▶ Chạy tất cả kiểm tra có thể"}
+          </button>
+        </div>
+
+        <details
+          className="advanced-workflow"
+          onToggle={(event) => setAdvancedMode(event.currentTarget.open)}
+        >
+          <summary>Thiết lập nâng cao theo kịch bản</summary>
+          <ScenarioSelector
+            selectedScenarioId={selectedScenario.id}
+            onSelectScenario={handleSelectScenario}
+            disabled={isRunning}
+          />
+
+        {/* Legacy scenario execution remains available as an advanced workflow. */}
         <section className="action-toolbar-card">
           <div className="toolbar-options">
             <label className="option-control" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
@@ -548,6 +654,7 @@ export function App() {
             )}
           </div>
         </section>
+        </details>
 
         {/* Results Area */}
         {result && (

@@ -47,3 +47,7 @@
 ## Decision 010: Direct-First Aggregate State Machine and Review Conservation
 - **Decision**: Scan all direct candidates in O(n). Multiple direct matches are ambiguous; one direct match is accepted without subset search. Only zero direct matches may enter aggregate search, and only within the fixed candidate budget. Track accepted, review-linked, and truly unlinked secondary IDs separately.
 - **Rationale**: This prevents exponential enumeration and integer-shift hazards, while preserving audit links without misreporting reviewed bank records as missing from the primary source.
+
+## Decision 011: Capability-Based Audit Session and Per-Control Period Intersection
+- **Decision**: Add an `AuditSession` that owns an explicit period, capability catalog, normalized datasets, prepared indexes, generated control plans, and independent control results. Transactional sources are first bounded by the session period, then each control runs only on the intersection of date evidence from its required sources. Legacy account-specific kinds remain adapters; corresponding-account columns do not imply ownership of that ledger capability.
+- **Rationale**: This enables import/normalize/index once with multi-control reuse, prevents cross-period false matches, and reports missing TK131/TK3331 evidence without inventing it from unrelated ledgers or bank data. See ADR 0008.

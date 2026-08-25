@@ -19,3 +19,7 @@
 ## 5. Bound Before Exponential Enumeration
 - **Problem**: Computing `1usize << candidate_count` before proving the candidate set is within budget can overflow or trigger infeasible subset work. A unique direct match also makes subset enumeration unnecessary.
 - **Solution**: Complete the O(n) direct scan first. Return ambiguous for multiple direct matches, accept one direct match immediately, and only compute subset bounds when there are zero direct matches and the candidate count is within the fixed aggregate budget.
+
+## V16 Period and Local Acceptance Traps (2026-08-25)
+- A single audit package may contain controls whose evidence belongs to different sub-periods. Keep one explicit session boundary, then calculate the intersection of required-source date evidence separately for each control; never widen a narrow source to match a broader workbook.
+- Office lock files and exact duplicate derived workbooks can appear beside an acceptance set. Ignore lock files and collapse only proven same-kind content duplicates in a local harness. Production planning must leave unrelated duplicate capabilities as `NEEDS_REVIEW` rather than choosing by load order or filename.

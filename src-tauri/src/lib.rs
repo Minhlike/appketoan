@@ -10,6 +10,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             cmd_inspect_excel_file,
             cmd_inspect_excel_bytes,
+            cmd_run_audit_workspace,
             cmd_run_reconciliation,
             cmd_export_reconciliation_report,
         ])

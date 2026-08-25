@@ -1,7 +1,7 @@
 # Current Task
 
 ## Task Name
-FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
+V16 — ACCOUNTING AUDIT WORKSPACE / CONTROL PLANNER
 
 ## Objectives & Status
 1. [x] Migrate all monetary values to `rust_decimal::Decimal` (eliminating `f64` float rounding issues across ingestion, models, rules, engine, discrepancies, and export).
@@ -36,4 +36,15 @@ FIX RECONCILIATION CORRECTNESS & VERIFY MANDATORY ACCEPTANCE TARGETS
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V15 is merged and frozen on `main`. Awaiting ChatGPT product direction. Do not begin a new account kind, feature, architecture rewrite, or performance refactor without explicit direction. Local acceptance workbooks and release artifacts remain ignored.
+V16 is implemented and verified on `codex/v16-control-planner`. After publication, stop and await ChatGPT source/diff review. Do not merge, add TK131/TK3331 behavior, or begin another feature.
+
+## V16 Objectives & Status
+1. [x] Add an explicit-period `AuditSession`, `SourceCatalog`, normalized dataset cache, prepared source indexes, and `ControlPlan` collection.
+2. [x] Define controls declaratively by source capabilities rather than filenames or scenario selection.
+3. [x] Preserve legacy account-kind adapters while allowing content-derived generic ledger capabilities.
+4. [x] Generate READY, MISSING_SOURCE, NEEDS_MAPPING, NEEDS_REVIEW, and NOT_APPLICABLE plans fail-closed.
+5. [x] Filter session data and compute a safe per-control date intersection before matching.
+6. [x] Wire the audit workspace through Tauri IPC and the default React dashboard; keep legacy scenarios advanced.
+7. [x] Add synthetic planner, generic ledger, duplicate-capability, UI, local acceptance, and reuse benchmark coverage.
+8. [x] Preserve V15 regression and bank review-only policy.
+9. [x] Complete the mandatory release gate without committing local workbooks or generated artifacts.
