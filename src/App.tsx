@@ -7,38 +7,27 @@ import type {
   DataSourceKind,
   MoneyValue,
   SourceRole,
-  ExcelFileMetadata,
   MatchGroup,
   PreconfiguredScenario,
   ReconciliationResult,
   ReconciliationSession,
-  AccountingPeriod,
-  AuditWorkspaceReport,
 } from "./types/dataContract";
+import type { IngestedSourceItem } from "./types/auditWorkspace";
 import {
   exportReport,
   getDemoDatasets,
   PRECONFIGURED_SCENARIOS,
   runReconciliation,
-  runAuditWorkspace,
+  safeUserError,
 } from "./services/api";
-import { parseVietnameseMoneyInput } from "./utils/money";
-
 import { Header } from "./components/Header";
-import { ScenarioSelector } from "./components/ScenarioSelector";
-import { FileIngestionDropzone } from "./components/FileIngestionDropzone";
 import { MappingModal } from "./components/MappingModal";
 import { DashboardKPIs } from "./components/DashboardKPIs";
 import { ResultTable } from "./components/ResultTable";
 import { DetailInspectorModal } from "./components/DetailInspectorModal";
-import { AuditWorkspaceDashboard } from "./components/AuditWorkspaceDashboard";
-
-interface IngestedSourceItem {
-  id: string;
-  source: DataSource;
-  fileMetadata: ExcelFileMetadata;
-  rawBytes?: Uint8Array;
-}
+import { AuditWorkspacePage } from "./components/AuditWorkspacePage";
+import { AdvancedScenarioPanel } from "./components/AdvancedScenarioPanel";
+import { useAuditExecution } from "./hooks/useAuditExecution";
 
 export function App() {
   const [selectedScenario, setSelectedScenario] = useState<PreconfiguredScenario>(
@@ -61,12 +50,8 @@ export function App() {
   const [inspectingGroup, setInspectingGroup] = useState<MatchGroup | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [auditReport, setAuditReport] = useState<AuditWorkspaceReport | null>(null);
-  const [accountingPeriod, setAccountingPeriod] = useState<AccountingPeriod>({
-    startDate: "",
-    endDate: "",
-  });
   const [advancedMode, setAdvancedMode] = useState(false);
+  const audit = useAuditExecution(sources, toleranceVnd, dateToleranceDays);
 
   // Scenario change: automatically assign roles to current sources if kinds match
   const handleSelectScenario = (scenario: PreconfiguredScenario) => {
@@ -95,7 +80,7 @@ export function App() {
         };
       })
     );
-    setAuditReport(null);
+    audit.invalidate();
   };
 
   // Add source
@@ -119,14 +104,14 @@ export function App() {
     };
 
     setSources((prev) => [...prev, newItem]);
-    setAuditReport(null);
+    audit.invalidate(true);
     setErrorMessage(null);
   };
 
   // Remove source
   const handleRemoveSource = (id: string) => {
     setSources((prev) => prev.filter((s) => s.id !== id));
-    setAuditReport(null);
+    audit.resetPreparedSession();
   };
 
   // Update sheet: re-runs detection and reclassifies source.kind
@@ -150,6 +135,7 @@ export function App() {
         return item;
       })
     );
+    audit.invalidate();
   };
 
   // Update source kind
@@ -167,7 +153,7 @@ export function App() {
           : item
       )
     );
-    setAuditReport(null);
+    audit.invalidate();
   };
 
   // Update source role
@@ -192,7 +178,7 @@ export function App() {
     setSources((prev) =>
       prev.map((item) => (item.id === updatedSource.id ? { ...item, source: updatedSource } : item))
     );
-    setAuditReport(null);
+    audit.invalidate();
   };
 
   // Load demo data
@@ -294,44 +280,7 @@ export function App() {
 
     setSources([source1, source2]);
     setErrorMessage(null);
-    setAuditReport(null);
-  };
-
-  const handleRunAuditWorkspace = async () => {
-    if (sources.length === 0) {
-      setErrorMessage("Vui lòng nạp ít nhất một nguồn vào bộ hồ sơ kế toán.");
-      return;
-    }
-    if (!accountingPeriod.startDate || !accountingPeriod.endDate) {
-      setErrorMessage("Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc kỳ kế toán.");
-      return;
-    }
-    if (accountingPeriod.startDate > accountingPeriod.endDate) {
-      setErrorMessage("Ngày bắt đầu kỳ kế toán không được sau ngày kết thúc.");
-      return;
-    }
-    try {
-      setIsRunning(true);
-      setErrorMessage(null);
-      const fileBytesMap: Record<string, number[]> = {};
-      for (const source of sources) {
-        if (source.rawBytes) fileBytesMap[source.id] = Array.from(source.rawBytes);
-      }
-      const report = await runAuditWorkspace(
-        `audit_${Date.now()}`,
-        accountingPeriod,
-        sources.map((item) => item.source),
-        String(toleranceVnd),
-        dateToleranceDays,
-        Object.keys(fileBytesMap).length > 0 ? fileBytesMap : undefined
-      );
-      setAuditReport(report);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(`Không thể lập và chạy kế hoạch kiểm tra: ${msg}`);
-    } finally {
-      setIsRunning(false);
-    }
+    audit.invalidate(true);
   };
 
   // Reset
@@ -341,7 +290,7 @@ export function App() {
     setStatusFilter("ALL");
     setExportMessage(null);
     setErrorMessage(null);
-    setAuditReport(null);
+    audit.reset();
   };
 
   // Run Reconciliation with strict validation
@@ -446,8 +395,7 @@ export function App() {
       setResult(res);
       setStatusFilter("ALL");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(`Lỗi khi thực hiện đối chiếu: ${msg}`);
+      setErrorMessage(`Lỗi khi thực hiện đối chiếu: ${safeUserError(err)}`);
     } finally {
       setIsRunning(false);
     }
@@ -461,8 +409,7 @@ export function App() {
       const summary = await exportReport(result);
       setExportMessage(`✓ Đã xuất báo cáo thành công vào: ${summary.outputPath}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(`Không thể xuất báo cáo: ${msg}`);
+      setErrorMessage(`Không thể xuất báo cáo: ${safeUserError(err)}`);
     }
   };
 
@@ -493,168 +440,46 @@ export function App() {
           </div>
         )}
 
-        <AuditWorkspaceDashboard
+        <AuditWorkspacePage
           sources={sources}
-          accountingPeriod={accountingPeriod}
-          report={auditReport}
-        />
-
-        <FileIngestionDropzone
-          sources={sources}
+          accountingPeriod={audit.accountingPeriod}
+          setAccountingPeriod={audit.setAccountingPeriod}
+          report={audit.report}
+          operationState={audit.operationState}
+          errorMessage={audit.errorMessage}
+          canRun={audit.canRun && !isRunning}
+          advancedMode={advancedMode}
           onAddSource={handleAddSource}
           onRemoveSource={handleRemoveSource}
           onUpdateSheet={handleUpdateSheet}
           onUpdateKind={handleUpdateKind}
           onUpdateRole={handleUpdateRole}
           onOpenMapping={(item) => setActiveMappingItem(item)}
-          disabled={isRunning}
-          advancedMode={advancedMode}
+          onRun={() => void audit.run()}
+          onCancel={() => void audit.cancel()}
         />
 
-        <div className="period-controls" aria-label="Kỳ kế toán">
-          <label>
-            Từ ngày
-            <input
-              className="input-control"
-              type="date"
-              value={accountingPeriod.startDate}
-              onChange={(event) => {
-                setAccountingPeriod((period) => ({ ...period, startDate: event.target.value }));
-                setAuditReport(null);
-              }}
-              disabled={isRunning}
-            />
-          </label>
-          <label>
-            Đến ngày
-            <input
-              className="input-control"
-              type="date"
-              value={accountingPeriod.endDate}
-              onChange={(event) => {
-                setAccountingPeriod((period) => ({ ...period, endDate: event.target.value }));
-                setAuditReport(null);
-              }}
-              disabled={isRunning}
-            />
-          </label>
-          <button
-            type="button"
-            className={`btn btn-primary btn-lg ${isRunning ? "btn-loading" : ""}`}
-            onClick={() => void handleRunAuditWorkspace()}
-            disabled={
-              isRunning ||
-              sources.length === 0 ||
-              !accountingPeriod.startDate ||
-              !accountingPeriod.endDate
-            }
-          >
-            {isRunning ? "⏳ Đang kiểm tra..." : "▶ Chạy tất cả kiểm tra có thể"}
-          </button>
-        </div>
-
-        <details
-          className="advanced-workflow"
-          onToggle={(event) => setAdvancedMode(event.currentTarget.open)}
-        >
-          <summary>Thiết lập nâng cao theo kịch bản</summary>
-          <ScenarioSelector
-            selectedScenarioId={selectedScenario.id}
-            onSelectScenario={handleSelectScenario}
-            disabled={isRunning}
-          />
-
-        {/* Legacy scenario execution remains available as an advanced workflow. */}
-        <section className="action-toolbar-card">
-          <div className="toolbar-options">
-            <label className="option-control" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span>Dung sai số tiền:</span>
-                <input
-                  type="text"
-                  className={`input-control input-sm ${toleranceError ? "input-error" : ""}`}
-                  value={toleranceInput}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setToleranceInput(raw);
-                    const parsed = parseVietnameseMoneyInput(raw);
-                    if (parsed.success) {
-                      setToleranceVnd(parsed.value);
-                      setToleranceError(null);
-                    } else {
-                      setToleranceError(parsed.error);
-                    }
-                  }}
-                  disabled={isRunning}
-                  placeholder="0"
-                  style={{
-                    borderColor: toleranceError ? "#ef4444" : undefined,
-                  }}
-                />
-                <span className="unit-label">VND</span>
-              </div>
-              {toleranceError && (
-                <span
-                  style={{
-                    color: "#dc2626",
-                    fontSize: "0.75rem",
-                    marginTop: "0.25rem",
-                  }}
-                >
-                  ⚠️ {toleranceError}
-                </span>
-              )}
-            </label>
-
-            <label className="option-control">
-              <span>Dung sai ngày:</span>
-              <input
-                type="number"
-                min="0"
-                className="input-control input-sm"
-                value={dateToleranceDays}
-                onChange={(e) => setDateToleranceDays(parseInt(e.target.value, 10) || 0)}
-                disabled={isRunning}
-              />
-              <span className="unit-label">ngày</span>
-            </label>
-
-            <label className="checkbox-control">
-              <input
-                type="checkbox"
-                checked={enableAggregate}
-                onChange={(e) => setEnableAggregate(e.target.checked)}
-                disabled={isRunning}
-              />
-              <span>Tự động khớp gộp tổng (1 hóa đơn = nhiều dòng sổ cái)</span>
-            </label>
-          </div>
-
-          <div className="toolbar-buttons">
-            <button
-              type="button"
-              className={`btn btn-primary btn-lg ${isRunning ? "btn-loading" : ""}`}
-              onClick={() => void handleRunReconciliation()}
-              disabled={isRunning || (sources.length < 2 && !(
-                selectedScenario.id === "scenario_partner_identity_control" ||
-                selectedScenario.id === "scenario_sales_analysis_report_control"
-              )) || toleranceError !== null}
-            >
-              {isRunning ? "⏳ Đang đối chiếu..." : "▶ CHẠY ĐỐI CHIẾU"}
-            </button>
-
-            {result && (
-              <button
-                type="button"
-                className="btn btn-success btn-lg"
-                onClick={() => void handleExport()}
-              >
-                📊 Xuất Báo Cáo Excel (.xlsx)
-              </button>
-            )}
-          </div>
-        </section>
-        </details>
+        <AdvancedScenarioPanel
+          selectedScenario={selectedScenario}
+          isRunning={isRunning}
+          sourceCount={sources.length}
+          toleranceInput={toleranceInput}
+          toleranceError={toleranceError}
+          dateToleranceDays={dateToleranceDays}
+          enableAggregate={enableAggregate}
+          hasResult={Boolean(result)}
+          onToggle={setAdvancedMode}
+          onSelectScenario={handleSelectScenario}
+          onToleranceChange={(raw, value, error) => {
+            setToleranceInput(raw);
+            setToleranceError(error || null);
+            if (value !== undefined) setToleranceVnd(value);
+          }}
+          onDateToleranceChange={setDateToleranceDays}
+          onEnableAggregateChange={setEnableAggregate}
+          onRun={() => void handleRunReconciliation()}
+          onExport={() => void handleExport()}
+        />
 
         {/* Results Area */}
         {result && (

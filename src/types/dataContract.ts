@@ -188,7 +188,45 @@ export interface ControlPlan {
   effectivePeriod?: AccountingPeriod;
 }
 
-export type ControlExecutionStatus = "PASS" | "NEEDS_REVIEW" | "NOT_RUN";
+export type ControlExecutionStatus =
+  | "PASS"
+  | "NEEDS_REVIEW"
+  | "NOT_RUN"
+  | "FAILED"
+  | "CANCELLED";
+
+export type AuditRunStatus = "COMPLETED" | "PARTIAL" | "FAILED" | "CANCELLED";
+
+export type AuditErrorCode =
+  | "SOURCE_READ_ERROR"
+  | "INVALID_WORKBOOK"
+  | "UNSUPPORTED_FORMAT"
+  | "PASSWORD_PROTECTED_WORKBOOK"
+  | "NO_VISIBLE_SHEET"
+  | "HEADER_NOT_DETECTED"
+  | "MAPPING_INCOMPLETE"
+  | "INVALID_DATE"
+  | "ACCOUNTING_PERIOD_INVALID"
+  | "CAPABILITY_AMBIGUOUS"
+  | "CAPABILITY_MISSING"
+  | "CONTROL_PRECONDITION_FAILED"
+  | "CONTROL_EXECUTION_FAILED"
+  | "COMPLEXITY_LIMIT"
+  | "EXPORT_FAILED"
+  | "OUT_OF_MEMORY_RISK"
+  | "CANCELLED"
+  | "INTERNAL_ERROR";
+
+export interface AuditExecutionError {
+  code: AuditErrorCode;
+  scope: "SESSION" | "SOURCE" | "CONTROL" | "EXPORT";
+  sourceId?: string;
+  controlId?: string;
+  safeUserMessage: string;
+  technicalDetail?: string;
+  recoverability: "RETRY" | "USER_ACTION_REQUIRED" | "CONTINUE_OTHER_CONTROLS" | "FATAL";
+  recommendedAction?: string;
+}
 
 export interface ControlFinding {
   code: string;
@@ -203,6 +241,11 @@ export interface ControlResult {
   findings: ControlFinding[];
   sourceIds: string[];
   missingCapabilities: SourceCapability[];
+  effectivePeriod?: AccountingPeriod;
+  elapsedMs: number;
+  summaryMetrics: Record<string, number>;
+  limitations: string[];
+  error?: AuditExecutionError;
   reconciliationResult?: ReconciliationResult;
 }
 
@@ -212,6 +255,31 @@ export interface SourceReuseEvidence {
   normalizeCount: number;
   indexCount: number;
   normalizedRecordCount: number;
+  cacheHit: boolean;
+}
+
+export interface AuditExecutionMetrics {
+  stages: {
+    fileReadMs: number;
+    excelParseMs: number;
+    normalizationMs: number;
+    periodFilteringMs: number;
+    capabilityDetectionMs: number;
+    indexConstructionMs: number;
+    controlPlanningMs: number;
+    resultSerializationMs: number;
+    totalBackendMs: number;
+  };
+  controlExecution: { controlId: string; elapsedMs: number }[];
+  sourceCount: number;
+  normalizedRecordCount: number;
+  cacheHits: number;
+  cacheMisses: number;
+  estimatedCacheBytes: number;
+  peakMemoryBytes?: number;
+  ipcInclusiveMs?: number;
+  ipcRoundTripOverheadMs?: number;
+  frontendRenderMs?: number;
 }
 
 export interface AuditWorkspaceReport {
@@ -221,6 +289,9 @@ export interface AuditWorkspaceReport {
   controlPlans: ControlPlan[];
   controlResults: ControlResult[];
   sourceReuse: SourceReuseEvidence[];
+  runStatus: AuditRunStatus;
+  errors: AuditExecutionError[];
+  metrics: AuditExecutionMetrics;
 }
 
 export type ValueOrigin = "SOURCE" | "DERIVED";

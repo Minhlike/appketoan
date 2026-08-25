@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AuditExecutionError,
   ExcelFileMetadata,
   ReconciliationResult,
   ReconciliationSession,
@@ -15,9 +16,16 @@ import eInvoicesSynthetic from "../../fixtures/synthetic/einvoices_comprehensive
 import ledger511Synthetic from "../../fixtures/synthetic/ledger_511_comprehensive_synthetic.json";
 import goldenResult from "../../fixtures/expected/golden_comprehensive_reconciliation_result.json";
 
-const isTauriRuntime = () => {
+export const isTauriRuntime = () => {
   return typeof window !== "undefined" && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
 };
+
+export function safeUserError(error: unknown): string {
+  if (typeof error === "object" && error !== null && "safeUserMessage" in error) {
+    return String((error as AuditExecutionError).safeUserMessage);
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * Inspects an Excel file from disk path via Tauri IPC or synthetic fallback
@@ -121,6 +129,16 @@ export async function runAuditWorkspace(
     dateToleranceDays,
     fileBytesMap,
   });
+}
+
+export async function cancelAuditWorkspace(sessionId: string): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return await invoke<boolean>("cmd_cancel_audit_workspace", { sessionId });
+}
+
+export async function resetAuditWorkspace(sessionId: string): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("cmd_reset_audit_workspace", { sessionId });
 }
 
 /**

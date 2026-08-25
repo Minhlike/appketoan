@@ -106,3 +106,12 @@
 - `cargo test --workspace`: SUCCESS; all unit, integration, 54-test correctness, V15, V16, benchmark, and doc-test targets passed. Local confidential harnesses are ignored by the default command and were run explicitly.
 - `npm run test`: SUCCESS (20/20). `npm run typecheck`, `cargo fmt --all -- --check`, and strict workspace Clippy: SUCCESS.
 - `npx tauri build`: SUCCESS; generated MSI/NSIS artifacts remain ignored. The known GNU WebView2 `.drectve` warning remained non-fatal.
+
+### 14. V17 Resilience / UI Foundation Gate (2026-08-26)
+- `cargo test --workspace`: SUCCESS; all unit, integration, 54-test correctness, V15/V16/V17 resilience/privacy, benchmark, and doc-test targets passed. Confidential harnesses remain ignored by default.
+- Explicit V15 and V16 local acceptance harnesses: SUCCESS against the ignored local workbook set; immutable oracle, four READY/two MISSING planning behavior, bank review-only policy, and classification conservation remained unchanged.
+- `npm run test`: SUCCESS (26/26 across seven files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- Equivalent debug benchmark evidence is recorded in the V17 architecture note; it is one iteration and is not labeled median/p95. Peak memory remains unmeasured.
+- `npx tauri build`: SUCCESS; fresh ignored MSI/NSIS and release executable generated. Five-second release executable smoke: SUCCESS.
+- Automated local browser visual inspection: NOT VERIFIED because the Codex browser runtime could not initialize its local kernel assets. Component behavior tests, production frontend build, Tauri build, and executable smoke passed; no substitute automation was misreported as visual evidence.

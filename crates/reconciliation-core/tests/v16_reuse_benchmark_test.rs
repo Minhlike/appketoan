@@ -178,7 +178,7 @@ fn benchmark_v15_tri_source_vs_v16_reused_workspace() {
         analysis("analysis-group", AnalyticalRowLevel::Group),
         analysis("analysis-detail", AnalyticalRowLevel::Detail),
     ];
-    let v16_started = Instant::now();
+    let prepare_started = Instant::now();
     let audit = prepare_audit_session(
         "v16-reuse-benchmark".to_string(),
         AccountingPeriod {
@@ -192,6 +192,7 @@ fn benchmark_v15_tri_source_vs_v16_reused_workspace() {
         HashMap::new(),
     )
     .expect("prepare V16 workspace");
+    let prepare_elapsed = prepare_started.elapsed();
     assert!(audit.source_reuse.iter().all(|source| {
         source.read_count == 1 && source.normalize_count == 1 && source.index_count == 1
     }));
@@ -204,8 +205,10 @@ fn benchmark_v15_tri_source_vs_v16_reused_workspace() {
             .status,
         ControlPlanStatus::Ready
     );
+    let warm_audit = audit.clone();
+    let execution_started = Instant::now();
     let v16 = execute_audit_session(audit, Decimal::ZERO, 0).expect("V16 reused workspace");
-    let v16_elapsed = v16_started.elapsed();
+    let execution_elapsed = execution_started.elapsed();
     let v16_revenue = v16
         .control_results
         .iter()
@@ -220,9 +223,23 @@ fn benchmark_v15_tri_source_vs_v16_reused_workspace() {
             .count(),
         3
     );
+    let warm_started = Instant::now();
+    let v17_warm =
+        execute_audit_session(warm_audit, Decimal::ZERO, 0).expect("V17 warm reused workspace");
+    let warm_elapsed = warm_started.elapsed();
+    let warm_revenue = v17_warm
+        .control_results
+        .iter()
+        .find(|result| result.control_id == REVENUE_CONTROL_ID)
+        .and_then(|result| result.reconciliation_result.as_ref())
+        .expect("V17 warm revenue result");
+    assert_eq!(warm_revenue.summary.exact_matches_count, 100_000);
     println!(
-        "V16_BENCHMARK records_per_transaction_source=100000 v15_tri_ms={} v16_reused_three_controls_ms={} exact=100000 reuse=1/1/1",
+        "V17_EQUIVALENT_BENCHMARK records_per_transaction_source=100000 controls=3 iterations=1 build=debug v15_tri_ms={} prepare_ms={} execute_ms={} total_ms={} warm_execute_ms={} exact=100000 reuse=1/1/1",
         v15_elapsed.as_millis(),
-        v16_elapsed.as_millis()
+        prepare_elapsed.as_millis(),
+        execution_elapsed.as_millis(),
+        prepare_elapsed.saturating_add(execution_elapsed).as_millis(),
+        warm_elapsed.as_millis(),
     );
 }

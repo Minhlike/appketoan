@@ -103,3 +103,13 @@
 - Local acceptance produced four READY implemented controls and two missing future controls. The immutable V15 oracle and bank evidence policy remain unchanged.
 - The 100k comparison benchmark completed with exact result counts; V16 intentionally includes session preparation plus three independent controls and is not presented as a speedup over the V15 tri-source-only run.
 - Full workspace tests, frontend tests, typecheck, format check, strict Clippy, and Tauri release build passed. Generated installers and confidential workbooks remain ignored.
+
+## V17 Resilience / UI Foundation — 2026-08-26
+- Branch: `codex/v17-resilience-ui-foundation`, stacked on the unmerged V16 branch. Neither branch may be merged by the agent.
+- `audit_resilience.rs` defines typed failures, run status, structured metrics, cancellation token, prepared cache key/data, and fixed memory/source bounds.
+- Audit controls execute independently. Recoverable source/control failure produces partial results; cancellation is cooperative at source/control boundaries and cannot produce PASS.
+- Tauri runtime state owns cancellation tokens and an in-memory L1 cache. Source identity plus content/sheet/mapping/kind/schema prevents cross-source provenance reuse; period changes rebuild the view.
+- The default UI is split into workspace, source intake, period, planner/result, review queue, execution hook, and advanced scenario components. Suggested/ambiguous bank evidence remains review-only.
+- Native drag/drop sends local file paths; file-picker/browser fallback still uses byte arrays. The backend enforces duplicate, lock-file, and source-size policies regardless of UI path.
+- Full local acceptance and mandatory release gates passed. Exact benchmark numbers and limitations are recorded in `docs/04-architecture/04-v17-resilience-ui-foundation.md`.
+- Generated release artifacts and local accounting workbooks remain ignored. Stop after pushing the stacked PR for ChatGPT source/diff review.

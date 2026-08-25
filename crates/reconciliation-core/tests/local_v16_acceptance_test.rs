@@ -237,11 +237,14 @@ fn local_v16_planner_acceptance() {
         .iter()
         .any(|finding| finding.severity == "HIGH"));
 
-    let bank = report
+    let bank_control = report
         .control_results
         .iter()
         .find(|result| result.control_id == BANK_CONTROL_ID)
-        .and_then(|result| result.reconciliation_result.as_ref())
+        .expect("bank control");
+    let bank = bank_control
+        .reconciliation_result
+        .as_ref()
         .expect("bank reconciliation result");
     let strong_accepted = bank
         .groups
@@ -254,6 +257,15 @@ fn local_v16_planner_acceptance() {
         })
         .count();
     assert_eq!(strong_accepted, 0);
+    assert_eq!(bank_control.summary_metrics["strongAccepted"], 0);
+    assert_eq!(
+        bank_control.summary_metrics["strongAccepted"]
+            + bank_control.summary_metrics["suggestedReviewLinked"]
+            + bank_control.summary_metrics["ambiguousReviewLinked"]
+            + bank_control.summary_metrics["trueBankOnly"],
+        bank.summary.total_target_records as u64,
+        "every bank transaction must have exactly one control classification"
+    );
     assert!(bank.groups.iter().all(|group| {
         let review_link = group.discrepancies.iter().any(|item| {
             item.message.contains("SUGGESTED_DIRECTION_AMOUNT_DATE")

@@ -1,4 +1,5 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::Instant;
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -6,9 +7,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     evaluate_partner_identity_cross_source, evaluate_partner_master_control,
-    evaluate_sales_analysis_control, execute_reconciliation, AnalyticalRowLevel, CanonicalRecord,
-    ComparisonRule, ComparisonSemantic, DataSource, DataSourceKind, MatchStatus, PartnerRecord,
-    ReconciliationResult, ReconciliationSession, SalesAnalysisRecord, SourceRole,
+    evaluate_sales_analysis_control, execute_reconciliation, AnalyticalRowLevel,
+    AuditCancellationToken, AuditExecutionError, AuditExecutionMetrics, AuditRunStatus,
+    CanonicalRecord, ComparisonRule, ComparisonSemantic, ControlTimingMetric, DataSource,
+    DataSourceKind, MatchStatus, PartnerRecord, ReconciliationResult, ReconciliationSession,
+    SalesAnalysisRecord, SourceRole,
 };
 
 pub const REVENUE_CONTROL_ID: &str = "REVENUE_INVOICE_REGISTER_LEDGER";
@@ -151,6 +154,8 @@ pub enum ControlExecutionStatus {
     Pass,
     NeedsReview,
     NotRun,
+    Failed,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,6 +175,14 @@ pub struct ControlResult {
     pub findings: Vec<ControlFinding>,
     pub source_ids: Vec<String>,
     pub missing_capabilities: Vec<SourceCapability>,
+    pub effective_period: Option<AccountingPeriod>,
+    pub elapsed_ms: u64,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub summary_metrics: BTreeMap<String, u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub limitations: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<AuditExecutionError>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reconciliation_result: Option<ReconciliationResult>,
 }
@@ -182,6 +195,7 @@ pub struct SourceReuseEvidence {
     pub normalize_count: usize,
     pub index_count: usize,
     pub normalized_record_count: usize,
+    pub cache_hit: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -193,6 +207,9 @@ pub struct AuditWorkspaceReport {
     pub control_plans: Vec<ControlPlan>,
     pub control_results: Vec<ControlResult>,
     pub source_reuse: Vec<SourceReuseEvidence>,
+    pub run_status: AuditRunStatus,
+    pub errors: Vec<AuditExecutionError>,
+    pub metrics: AuditExecutionMetrics,
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +234,7 @@ pub struct AuditSession {
     pub normalized_datasets: NormalizedAuditDatasets,
     pub control_plans: Vec<ControlPlan>,
     pub source_reuse: Vec<SourceReuseEvidence>,
+    pub metrics: AuditExecutionMetrics,
 }
 
 fn ledger_capability(account: &str) -> SourceCapability {
@@ -412,11 +430,11 @@ fn effective_record_date(record: &CanonicalRecord) -> Option<&str> {
         .or(record.accounting_date.as_deref())
 }
 
-fn filter_period_and_index(
+fn filter_period(
     records: Vec<CanonicalRecord>,
     start: NaiveDate,
     end: NaiveDate,
-) -> (PreparedSourceIndex, PeriodEvidence) {
+) -> (Vec<CanonicalRecord>, PeriodEvidence) {
     let mut evidence = PeriodEvidence::default();
     let mut in_period = Vec::new();
     for record in records {
@@ -450,8 +468,12 @@ fn filter_period_and_index(
             evidence.records_outside_period += 1;
         }
     }
+    (in_period, evidence)
+}
+
+fn build_index(records: Vec<CanonicalRecord>) -> PreparedSourceIndex {
     let mut by_document_number: HashMap<String, Vec<usize>> = HashMap::new();
-    for (index, record) in in_period.iter().enumerate() {
+    for (index, record) in records.iter().enumerate() {
         if let Some(document) = record.doc_no.as_deref().filter(|value| !value.is_empty()) {
             by_document_number
                 .entry(document.to_string())
@@ -459,13 +481,10 @@ fn filter_period_and_index(
                 .push(index);
         }
     }
-    (
-        PreparedSourceIndex {
-            records: in_period,
-            by_document_number,
-        },
-        evidence,
-    )
+    PreparedSourceIndex {
+        records,
+        by_document_number,
+    }
 }
 
 fn source_for_capability<'a>(
@@ -624,7 +643,12 @@ pub fn prepare_audit_session(
     sales_analysis: HashMap<String, Vec<SalesAnalysisRecord>>,
     provenance_sha256: HashMap<String, String>,
 ) -> Result<AuditSession, String> {
+    let prepare_started = Instant::now();
     let (start, end) = accounting_period.validate()?;
+    let mut metrics = AuditExecutionMetrics {
+        source_count: sources.len(),
+        ..Default::default()
+    };
     let mut datasets = NormalizedAuditDatasets {
         partner_masters,
         sales_analysis,
@@ -635,7 +659,12 @@ pub fn prepare_audit_session(
 
     for source in &sources {
         let original_records = transactional_records.remove(&source.id).unwrap_or_default();
+        let capability_started = Instant::now();
         let capabilities = capabilities_for_source(source, &original_records);
+        metrics.stages.capability_detection_ms = metrics
+            .stages
+            .capability_detection_ms
+            .saturating_add(capability_started.elapsed().as_millis() as u64);
         let record_count = if source.kind == DataSourceKind::PartnerMaster {
             datasets.partner_masters.get(&source.id).map_or(0, Vec::len)
         } else if source.kind == DataSourceKind::SalesAnalysisReport {
@@ -649,7 +678,19 @@ pub fn prepare_audit_session(
                 DataSourceKind::PartnerMaster | DataSourceKind::SalesAnalysisReport
             );
         let (prepared, period_evidence) = if is_transactional {
-            filter_period_and_index(original_records, start, end)
+            let filtering_started = Instant::now();
+            let (filtered, evidence) = filter_period(original_records, start, end);
+            metrics.stages.period_filtering_ms = metrics
+                .stages
+                .period_filtering_ms
+                .saturating_add(filtering_started.elapsed().as_millis() as u64);
+            let indexing_started = Instant::now();
+            let prepared = build_index(filtered);
+            metrics.stages.index_construction_ms = metrics
+                .stages
+                .index_construction_ms
+                .saturating_add(indexing_started.elapsed().as_millis() as u64);
+            (prepared, evidence)
         } else {
             (
                 PreparedSourceIndex {
@@ -701,9 +742,17 @@ pub fn prepare_audit_session(
             } else {
                 record_count
             },
+            cache_hit: false,
         });
     }
+    metrics.normalized_record_count = source_reuse
+        .iter()
+        .map(|source| source.normalized_record_count)
+        .sum();
+    let planning_started = Instant::now();
     let control_plans = plan_controls(&catalog);
+    metrics.stages.control_planning_ms = planning_started.elapsed().as_millis() as u64;
+    metrics.stages.total_backend_ms = prepare_started.elapsed().as_millis() as u64;
     Ok(AuditSession {
         session_id,
         accounting_period,
@@ -712,6 +761,7 @@ pub fn prepare_audit_session(
         normalized_datasets: datasets,
         control_plans,
         source_reuse,
+        metrics,
     })
 }
 
@@ -926,6 +976,12 @@ fn reconciliation_control_result(
     plan: &ControlPlan,
     result: ReconciliationResult,
 ) -> ControlResult {
+    let summary_metrics = reconciliation_summary_metrics(definition, &result);
+    let limitations = if definition.id == BANK_CONTROL_ID {
+        vec!["TK112_RUNNING_BALANCE_NOT_VERIFIED".to_string()]
+    } else {
+        vec![]
+    };
     let review_groups: Vec<_> = result
         .groups
         .iter()
@@ -971,8 +1027,141 @@ fn reconciliation_control_result(
         findings,
         source_ids: plan.source_ids.clone(),
         missing_capabilities: vec![],
+        effective_period: plan.effective_period.clone(),
+        elapsed_ms: 0,
+        summary_metrics,
+        limitations,
+        error: None,
         reconciliation_result: Some(result),
     }
+}
+
+fn reconciliation_summary_metrics(
+    definition: &ControlDefinition,
+    result: &ReconciliationResult,
+) -> BTreeMap<String, u64> {
+    let mut metrics = BTreeMap::from([
+        (
+            "primaryRecords".to_string(),
+            result.summary.total_source_records as u64,
+        ),
+        (
+            "secondaryRecords".to_string(),
+            result.summary.total_target_records as u64,
+        ),
+        (
+            "exactMatches".to_string(),
+            result.summary.exact_matches_count as u64,
+        ),
+        (
+            "toleranceMatches".to_string(),
+            result.summary.tolerance_matches_count as u64,
+        ),
+        (
+            "aggregateMatches".to_string(),
+            result.summary.aggregate_matches_count as u64,
+        ),
+        (
+            "needsReview".to_string(),
+            (result.summary.mismatches_count
+                + result.summary.duplicates_count
+                + result.summary.ambiguous_count
+                + result.summary.needs_review_count) as u64,
+        ),
+        (
+            "missingInTarget".to_string(),
+            result.summary.missing_in_target_count as u64,
+        ),
+        (
+            "missingInSource".to_string(),
+            result.summary.missing_in_source_count as u64,
+        ),
+    ]);
+
+    if definition.id == BANK_CONTROL_ID {
+        let mut accepted_secondary_ids = HashSet::new();
+        let mut suggested_secondary_ids = HashSet::new();
+        let mut ambiguous_secondary_ids = HashSet::new();
+        let mut true_bank_only_ids = HashSet::new();
+        let mut true_ledger_only_ids = HashSet::new();
+        let mut direction_conflict = 0_u64;
+        let mut insufficient_evidence = 0_u64;
+
+        for group in &result.groups {
+            let messages = group
+                .discrepancies
+                .iter()
+                .map(|item| item.message.as_str())
+                .collect::<Vec<_>>();
+            if matches!(
+                group.status,
+                MatchStatus::MatchedExact
+                    | MatchStatus::MatchedWithTolerance
+                    | MatchStatus::MatchedAggregate
+            ) {
+                accepted_secondary_ids.extend(group.target_source_record_ids.iter().cloned());
+            }
+            if messages
+                .iter()
+                .any(|message| message.contains("SUGGESTED_DIRECTION_AMOUNT_DATE"))
+            {
+                suggested_secondary_ids.extend(group.target_source_record_ids.iter().cloned());
+            }
+            if messages
+                .iter()
+                .any(|message| message.contains("AMBIGUOUS_BANK_CANDIDATES"))
+            {
+                ambiguous_secondary_ids.extend(group.target_source_record_ids.iter().cloned());
+            }
+            if group.status == MatchStatus::UnmatchedMissingInSource {
+                true_bank_only_ids.extend(group.target_source_record_ids.iter().cloned());
+            }
+            if group.status == MatchStatus::UnmatchedMissingInTarget {
+                true_ledger_only_ids.extend(group.primary_source_record_ids.iter().cloned());
+            }
+            direction_conflict += messages
+                .iter()
+                .filter(|message| message.contains("DIRECTION_CONFLICT"))
+                .count() as u64;
+            insufficient_evidence += messages
+                .iter()
+                .filter(|message| message.contains("INSUFFICIENT_BANK_EVIDENCE"))
+                .count() as u64;
+        }
+
+        suggested_secondary_ids.retain(|id| {
+            !accepted_secondary_ids.contains(id) && !ambiguous_secondary_ids.contains(id)
+        });
+        ambiguous_secondary_ids.retain(|id| !accepted_secondary_ids.contains(id));
+        true_bank_only_ids.retain(|id| {
+            !accepted_secondary_ids.contains(id)
+                && !suggested_secondary_ids.contains(id)
+                && !ambiguous_secondary_ids.contains(id)
+        });
+
+        metrics.extend([
+            (
+                "strongAccepted".to_string(),
+                accepted_secondary_ids.len() as u64,
+            ),
+            (
+                "suggestedReviewLinked".to_string(),
+                suggested_secondary_ids.len() as u64,
+            ),
+            (
+                "ambiguousReviewLinked".to_string(),
+                ambiguous_secondary_ids.len() as u64,
+            ),
+            ("trueBankOnly".to_string(), true_bank_only_ids.len() as u64),
+            (
+                "trueLedgerOnly".to_string(),
+                true_ledger_only_ids.len() as u64,
+            ),
+            ("directionConflict".to_string(), direction_conflict),
+            ("insufficientEvidence".to_string(), insufficient_evidence),
+        ]);
+    }
+    metrics
 }
 
 fn not_run_result(plan: &ControlPlan) -> ControlResult {
@@ -983,6 +1172,50 @@ fn not_run_result(plan: &ControlPlan) -> ControlResult {
         findings: vec![],
         source_ids: plan.source_ids.clone(),
         missing_capabilities: plan.missing_capabilities.clone(),
+        effective_period: plan.effective_period.clone(),
+        elapsed_ms: 0,
+        summary_metrics: BTreeMap::new(),
+        limitations: vec![],
+        error: None,
+        reconciliation_result: None,
+    }
+}
+
+fn failed_result(plan: &ControlPlan, error: AuditExecutionError, elapsed_ms: u64) -> ControlResult {
+    ControlResult {
+        control_id: plan.control_id.clone(),
+        status: ControlExecutionStatus::Failed,
+        evidence: vec![],
+        findings: vec![ControlFinding {
+            code: format!("{:?}", error.code).to_ascii_uppercase(),
+            severity: "HIGH".to_string(),
+            message: error.safe_user_message.to_string(),
+        }],
+        source_ids: plan.source_ids.clone(),
+        missing_capabilities: plan.missing_capabilities.clone(),
+        effective_period: plan.effective_period.clone(),
+        elapsed_ms,
+        summary_metrics: BTreeMap::new(),
+        limitations: vec![],
+        error: Some(error),
+        reconciliation_result: None,
+    }
+}
+
+fn cancelled_result(plan: &ControlPlan) -> ControlResult {
+    let error = AuditExecutionError::cancelled();
+    ControlResult {
+        control_id: plan.control_id.clone(),
+        status: ControlExecutionStatus::Cancelled,
+        evidence: vec![],
+        findings: vec![],
+        source_ids: plan.source_ids.clone(),
+        missing_capabilities: plan.missing_capabilities.clone(),
+        effective_period: plan.effective_period.clone(),
+        elapsed_ms: 0,
+        summary_metrics: BTreeMap::new(),
+        limitations: vec![],
+        error: Some(error),
         reconciliation_result: None,
     }
 }
@@ -992,145 +1225,221 @@ pub fn execute_audit_session(
     tolerance_vnd: Decimal,
     date_tolerance_days: u32,
 ) -> Result<AuditWorkspaceReport, String> {
+    execute_audit_session_with_cancellation(
+        audit,
+        tolerance_vnd,
+        date_tolerance_days,
+        &AuditCancellationToken::default(),
+    )
+}
+
+pub fn execute_audit_session_with_cancellation(
+    audit: AuditSession,
+    tolerance_vnd: Decimal,
+    date_tolerance_days: u32,
+    cancellation: &AuditCancellationToken,
+) -> Result<AuditWorkspaceReport, String> {
+    let execution_started = Instant::now();
     let definitions: HashMap<_, _> = control_definitions()
         .into_iter()
         .map(|definition| (definition.id.clone(), definition))
         .collect();
     let mut control_results = Vec::new();
+    let mut errors = Vec::new();
+    let mut metrics = audit.metrics.clone();
+    let mut was_cancelled = false;
     for plan in &audit.control_plans {
+        if cancellation.is_cancelled() {
+            was_cancelled = true;
+            if plan.status == ControlPlanStatus::Ready {
+                control_results.push(cancelled_result(plan));
+            } else {
+                control_results.push(not_run_result(plan));
+            }
+            continue;
+        }
         if plan.status != ControlPlanStatus::Ready {
             control_results.push(not_run_result(plan));
             continue;
         }
-        let definition = definitions
-            .get(&plan.control_id)
-            .ok_or_else(|| format!("CONTROL_DEFINITION_NOT_FOUND: {}", plan.control_id))?;
-        let result = match plan.control_id.as_str() {
-            REVENUE_CONTROL_ID | BANK_CONTROL_ID => reconciliation_control_result(
-                definition,
-                plan,
-                compile_transaction_control(
+        let control_started = Instant::now();
+        let result: Result<ControlResult, String> = (|| {
+            let definition = definitions
+                .get(&plan.control_id)
+                .ok_or_else(|| format!("CONTROL_DEFINITION_NOT_FOUND: {}", plan.control_id))?;
+            match plan.control_id.as_str() {
+                REVENUE_CONTROL_ID | BANK_CONTROL_ID => compile_transaction_control(
                     &audit,
                     definition,
                     plan,
                     tolerance_vnd,
                     date_tolerance_days,
-                )?,
-            ),
-            PARTNER_CONTROL_ID => {
-                let master_id = plan
-                    .source_ids
-                    .first()
-                    .ok_or_else(|| "PARTNER_MASTER_MISSING".to_string())?;
-                let masters = audit
-                    .normalized_datasets
-                    .partner_masters
-                    .get(master_id)
-                    .ok_or_else(|| "PARTNER_MASTER_DATASET_MISSING".to_string())?;
-                let compatible_records = audit
-                    .source_catalog
-                    .sources
-                    .iter()
-                    .filter(|source| {
-                        source.capabilities.contains(&SourceCapability::Invoice)
-                            || source
-                                .capabilities
-                                .contains(&SourceCapability::SalesTransaction)
-                            || source.capabilities.iter().any(|capability| {
-                                matches!(capability, SourceCapability::LedgerEntry { .. })
-                            })
+                )
+                .map(|result| reconciliation_control_result(definition, plan, result)),
+                PARTNER_CONTROL_ID => {
+                    let master_id = plan
+                        .source_ids
+                        .first()
+                        .ok_or_else(|| "PARTNER_MASTER_MISSING".to_string())?;
+                    let masters = audit
+                        .normalized_datasets
+                        .partner_masters
+                        .get(master_id)
+                        .ok_or_else(|| "PARTNER_MASTER_DATASET_MISSING".to_string())?;
+                    let compatible_records = audit
+                        .source_catalog
+                        .sources
+                        .iter()
+                        .filter(|source| {
+                            source.capabilities.contains(&SourceCapability::Invoice)
+                                || source
+                                    .capabilities
+                                    .contains(&SourceCapability::SalesTransaction)
+                                || source.capabilities.iter().any(|capability| {
+                                    matches!(capability, SourceCapability::LedgerEntry { .. })
+                                })
+                        })
+                        .filter_map(|source| {
+                            audit
+                                .normalized_datasets
+                                .transactional
+                                .get(&source.source_id)
+                        })
+                        .flat_map(|prepared| prepared.records.iter());
+                    let control = if audit
+                        .normalized_datasets
+                        .transactional
+                        .values()
+                        .all(|prepared| prepared.records.is_empty())
+                    {
+                        evaluate_partner_master_control(master_id.clone(), masters)
+                    } else {
+                        evaluate_partner_identity_cross_source(
+                            master_id.clone(),
+                            masters,
+                            compatible_records,
+                        )
+                    };
+                    Ok(ControlResult {
+                        control_id: definition.id.clone(),
+                        status: if control.status == MatchStatus::MatchedExact {
+                            ControlExecutionStatus::Pass
+                        } else {
+                            ControlExecutionStatus::NeedsReview
+                        },
+                        evidence: vec![format!("records_checked={}", control.record_count)],
+                        findings: if control.status == MatchStatus::MatchedExact {
+                            vec![]
+                        } else {
+                            vec![ControlFinding {
+                                code: "PARTNER_IDENTITY_NEEDS_REVIEW".to_string(),
+                                severity: "MEDIUM".to_string(),
+                                message: control.message,
+                            }]
+                        },
+                        source_ids: plan.source_ids.clone(),
+                        missing_capabilities: vec![],
+                        effective_period: plan.effective_period.clone(),
+                        elapsed_ms: 0,
+                        summary_metrics: BTreeMap::from([(
+                            "recordsChecked".to_string(),
+                            control.record_count as u64,
+                        )]),
+                        limitations: vec!["NO_FUZZY_AUTO_MERGE".to_string()],
+                        error: None,
+                        reconciliation_result: None,
                     })
-                    .filter_map(|source| {
-                        audit
-                            .normalized_datasets
-                            .transactional
-                            .get(&source.source_id)
+                }
+                SALES_ANALYSIS_CONTROL_ID => {
+                    let source_id = plan
+                        .source_ids
+                        .first()
+                        .ok_or_else(|| "SALES_ANALYSIS_SOURCE_MISSING".to_string())?;
+                    let records = audit
+                        .normalized_datasets
+                        .sales_analysis
+                        .get(source_id)
+                        .ok_or_else(|| "SALES_ANALYSIS_DATASET_MISSING".to_string())?;
+                    let control = evaluate_sales_analysis_control(source_id.clone(), records);
+                    let group_count = records
+                        .iter()
+                        .filter(|row| row.row_level == AnalyticalRowLevel::Group)
+                        .count();
+                    let detail_count = records
+                        .iter()
+                        .filter(|row| row.row_level == AnalyticalRowLevel::Detail)
+                        .count();
+                    Ok(ControlResult {
+                        control_id: definition.id.clone(),
+                        status: if control.status == MatchStatus::MatchedExact {
+                            ControlExecutionStatus::Pass
+                        } else {
+                            ControlExecutionStatus::NeedsReview
+                        },
+                        evidence: vec![
+                            format!("group_records={group_count}"),
+                            format!("detail_records={detail_count}"),
+                        ],
+                        findings: if control.status == MatchStatus::MatchedExact {
+                            vec![]
+                        } else {
+                            vec![ControlFinding {
+                                code: "SALES_ANALYSIS_NEEDS_REVIEW".to_string(),
+                                severity: "MEDIUM".to_string(),
+                                message: control.message,
+                            }]
+                        },
+                        source_ids: plan.source_ids.clone(),
+                        missing_capabilities: vec![],
+                        effective_period: plan.effective_period.clone(),
+                        elapsed_ms: 0,
+                        summary_metrics: BTreeMap::from([
+                            ("groupRecords".to_string(), group_count as u64),
+                            ("detailRecords".to_string(), detail_count as u64),
+                        ]),
+                        limitations: vec!["GROUP_ROWS_EXCLUDED_FROM_DETAIL_TOTALS".to_string()],
+                        error: None,
+                        reconciliation_result: None,
                     })
-                    .flat_map(|prepared| prepared.records.iter());
-                let control = if audit
-                    .normalized_datasets
-                    .transactional
-                    .values()
-                    .all(|prepared| prepared.records.is_empty())
-                {
-                    evaluate_partner_master_control(master_id.clone(), masters)
-                } else {
-                    evaluate_partner_identity_cross_source(
-                        master_id.clone(),
-                        masters,
-                        compatible_records,
-                    )
-                };
-                ControlResult {
-                    control_id: definition.id.clone(),
-                    status: if control.status == MatchStatus::MatchedExact {
-                        ControlExecutionStatus::Pass
-                    } else {
-                        ControlExecutionStatus::NeedsReview
-                    },
-                    evidence: vec![format!("records_checked={}", control.record_count)],
-                    findings: if control.status == MatchStatus::MatchedExact {
-                        vec![]
-                    } else {
-                        vec![ControlFinding {
-                            code: "PARTNER_IDENTITY_NEEDS_REVIEW".to_string(),
-                            severity: "MEDIUM".to_string(),
-                            message: control.message,
-                        }]
-                    },
-                    source_ids: plan.source_ids.clone(),
-                    missing_capabilities: vec![],
-                    reconciliation_result: None,
                 }
+                _ => Ok(not_run_result(plan)),
             }
-            SALES_ANALYSIS_CONTROL_ID => {
-                let source_id = plan
-                    .source_ids
-                    .first()
-                    .ok_or_else(|| "SALES_ANALYSIS_SOURCE_MISSING".to_string())?;
-                let records = audit
-                    .normalized_datasets
-                    .sales_analysis
-                    .get(source_id)
-                    .ok_or_else(|| "SALES_ANALYSIS_DATASET_MISSING".to_string())?;
-                let control = evaluate_sales_analysis_control(source_id.clone(), records);
-                let group_count = records
-                    .iter()
-                    .filter(|row| row.row_level == AnalyticalRowLevel::Group)
-                    .count();
-                let detail_count = records
-                    .iter()
-                    .filter(|row| row.row_level == AnalyticalRowLevel::Detail)
-                    .count();
-                ControlResult {
-                    control_id: definition.id.clone(),
-                    status: if control.status == MatchStatus::MatchedExact {
-                        ControlExecutionStatus::Pass
-                    } else {
-                        ControlExecutionStatus::NeedsReview
-                    },
-                    evidence: vec![
-                        format!("group_records={group_count}"),
-                        format!("detail_records={detail_count}"),
-                    ],
-                    findings: if control.status == MatchStatus::MatchedExact {
-                        vec![]
-                    } else {
-                        vec![ControlFinding {
-                            code: "SALES_ANALYSIS_NEEDS_REVIEW".to_string(),
-                            severity: "MEDIUM".to_string(),
-                            message: control.message,
-                        }]
-                    },
-                    source_ids: plan.source_ids.clone(),
-                    missing_capabilities: vec![],
-                    reconciliation_result: None,
-                }
+        })();
+        let elapsed_ms = control_started.elapsed().as_millis() as u64;
+        metrics.control_execution.push(ControlTimingMetric {
+            control_id: plan.control_id.clone(),
+            elapsed_ms,
+        });
+        match result {
+            Ok(mut result) => {
+                result.elapsed_ms = elapsed_ms;
+                control_results.push(result);
             }
-            _ => not_run_result(plan),
+            Err(detail) => {
+                let error = AuditExecutionError::control(plan.control_id.clone(), detail);
+                control_results.push(failed_result(plan, error.clone(), elapsed_ms));
+                errors.push(error);
+            }
         };
-        control_results.push(result);
     }
+    metrics.stages.total_backend_ms = metrics
+        .stages
+        .total_backend_ms
+        .saturating_add(execution_started.elapsed().as_millis() as u64);
+    let run_status = if was_cancelled {
+        AuditRunStatus::Cancelled
+    } else if errors.is_empty() {
+        AuditRunStatus::Completed
+    } else if control_results.iter().any(|result| {
+        matches!(
+            result.status,
+            ControlExecutionStatus::Pass | ControlExecutionStatus::NeedsReview
+        )
+    }) {
+        AuditRunStatus::Partial
+    } else {
+        AuditRunStatus::Failed
+    };
     Ok(AuditWorkspaceReport {
         session_id: audit.session_id,
         accounting_period: audit.accounting_period,
@@ -1138,5 +1447,8 @@ pub fn execute_audit_session(
         control_plans: audit.control_plans,
         control_results,
         source_reuse: audit.source_reuse,
+        run_status,
+        errors,
+        metrics,
     })
 }

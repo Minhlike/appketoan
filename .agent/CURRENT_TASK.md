@@ -1,7 +1,7 @@
 # Current Task
 
 ## Task Name
-V16 — ACCOUNTING AUDIT WORKSPACE / CONTROL PLANNER
+V17 — FUTURE-READY PRODUCT / RESILIENCE / UI FOUNDATION
 
 ## Objectives & Status
 1. [x] Migrate all monetary values to `rust_decimal::Decimal` (eliminating `f64` float rounding issues across ingestion, models, rules, engine, discrepancies, and export).
@@ -36,7 +36,7 @@ V16 — ACCOUNTING AUDIT WORKSPACE / CONTROL PLANNER
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V16 is implemented and verified on `codex/v16-control-planner`. After publication, stop and await ChatGPT source/diff review. Do not merge, add TK131/TK3331 behavior, or begin another feature.
+V17 is implemented and verified on `codex/v17-resilience-ui-foundation`. Publish it as a PR stacked on `codex/v16-control-planner`, then stop for ChatGPT source/diff review. Do not merge either PR, add TK131/TK3331 behavior, or begin another feature.
 
 ## V16 Objectives & Status
 1. [x] Add an explicit-period `AuditSession`, `SourceCatalog`, normalized dataset cache, prepared source indexes, and `ControlPlan` collection.
@@ -48,3 +48,14 @@ V16 is implemented and verified on `codex/v16-control-planner`. After publicatio
 7. [x] Add synthetic planner, generic ledger, duplicate-capability, UI, local acceptance, and reuse benchmark coverage.
 8. [x] Preserve V15 regression and bank review-only policy.
 9. [x] Complete the mandatory release gate without committing local workbooks or generated artifacts.
+
+## V17 Objectives & Status
+1. [x] Add structured stage, control, IPC-round-trip, and first-render metrics without fabricating peak-memory evidence.
+2. [x] Add typed source/control/session/export errors and preserve independent control results on partial failure.
+3. [x] Add cooperative cancellation and ensure cancelled work never reports PASS.
+4. [x] Add a bounded in-process prepared-source cache with provenance-safe keys and explicit invalidation/reset.
+5. [x] Decompose the default UI into an accounting-first four-step workspace with actionable review queue; preserve advanced scenarios.
+6. [x] Formalize Office lock and exact duplicate intake behavior.
+7. [x] Add resilience, cache, privacy, source-order, invalid-date, and frontend behavior tests.
+8. [x] Preserve all V15/V16 correctness and local acceptance policies.
+9. [x] Complete Rust/frontend/type/format/Clippy/build/smoke gates without tracking confidential or generated artifacts.
