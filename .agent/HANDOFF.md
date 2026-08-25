@@ -45,3 +45,4 @@
 - Root `Cargo.lock` is intentionally tracked for reproducible Rust workspace resolution; nested and generated lockfiles remain ignored.
 - The full pre-push gate completed successfully: Rust workspace tests, frontend tests, TypeScript typecheck, Rust formatting, and Clippy with warnings denied.
 - No product behavior was changed during this repository-publication task.
+- The `main` branch was pushed successfully to the configured GitHub `origin`; verify the current commit before any follow-up work.

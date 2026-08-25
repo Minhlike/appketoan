@@ -46,3 +46,4 @@ Reconciliation Core (crates/reconciliation-core/)
 - Frontend Vitest suite completed successfully.
 - Repository source changes were committed as `b2e8658`.
 - Root `Cargo.lock` is tracked to make the Rust dependency graph reproducible for repository handoff.
+- The `main` branch has been published to the configured GitHub `origin`.
