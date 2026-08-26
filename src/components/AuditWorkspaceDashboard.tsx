@@ -5,6 +5,7 @@ import type {
   SourceCapability,
 } from "../types/dataContract";
 import type { IngestedSourceItem } from "../types/auditWorkspace";
+import { DocumentIntegrityPanel } from "./DocumentIntegrityPanel";
 
 interface Props {
   sources: IngestedSourceItem[];
@@ -42,6 +43,16 @@ const resultLabel = (status: ControlExecutionStatus) =>
   })[status];
 
 const resultSummary = (controlId: string, metrics: Record<string, number>) => {
+  if (controlId === "REVENUE_INVOICE_REGISTER_LEDGER") {
+    return [
+      `Khớp hoàn toàn: ${metrics.fullyMatched || 0}`,
+      `Sai ngày: ${metrics.dateMismatch || 0}`,
+      `Sai số HĐ: ${metrics.invoiceNumberMismatch || 0}`,
+      `Sai tiền/VAT/Phải thu: ${(metrics.pretaxMismatch || 0)}/${(metrics.vatMismatch || 0)}/${(metrics.totalMismatch || 0)}`,
+      `Thiếu/Thừa BK: ${(metrics.missingInBk || 0)}/${(metrics.extraInBk || 0)}`,
+      `Trùng/Mơ hồ: ${(metrics.duplicateInvoiceNumber || 0)}/${(metrics.ambiguousMatch || 0)}`,
+    ];
+  }
   if (controlId === "BANK_LEDGER_RECONCILIATION") {
     return [
       `Khớp chắc chắn: ${metrics.strongAccepted || 0}`,
@@ -194,6 +205,9 @@ export function AuditWorkspaceDashboard({ sources, accountingPeriod, report }: P
                     <small className="audit-warning">
                       Số dư chạy TK112: chưa đủ dữ liệu để xác minh.
                     </small>
+                  )}
+                  {result?.documentIntegrityResult && (
+                    <DocumentIntegrityPanel result={result.documentIntegrityResult} />
                   )}
                 </div>
                 <span

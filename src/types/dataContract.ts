@@ -234,6 +234,99 @@ export interface ControlFinding {
   message: string;
 }
 
+export type DocumentErrorCode =
+  | "DUPLICATE_INVOICE_NUMBER"
+  | "MISSING_IN_BK"
+  | "EXTRA_IN_BK"
+  | "DATE_MISMATCH"
+  | "INVOICE_NUMBER_MISMATCH"
+  | "PRETAX_MISMATCH"
+  | "VAT_MISMATCH"
+  | "TOTAL_MISMATCH"
+  | "AMBIGUOUS_MATCH"
+  | "INVALID_DATE"
+  | "MISSING_INVOICE_NUMBER"
+  | "INVALID_AMOUNT"
+  | "MISSING_IN_TK511"
+  | "EXTRA_IN_TK511";
+
+export type DocumentField = "DATE" | "INVOICE_NUMBER" | "PRETAX" | "VAT" | "TOTAL";
+export type FieldCheckStatus = "MATCH" | "MISMATCH" | "NOT_CHECKED";
+
+export interface RecordProvenance {
+  sourceId: string;
+  sourceName: string;
+  filePath: string;
+  sheetName: string;
+  recordId: string;
+  sourceRow: number;
+}
+
+export interface DocumentSnapshot {
+  provenance: RecordProvenance;
+  date?: string;
+  invoiceNumber?: string;
+  partnerIdentity?: string;
+  pretaxAmount?: MoneyValue;
+  vatAmount?: MoneyValue;
+  totalAmount?: MoneyValue;
+}
+
+export interface DocumentFieldCheck {
+  scope: "INVOICE_TO_SALES_REGISTER" | "INVOICE_TO_LEDGER511";
+  field: DocumentField;
+  status: FieldCheckStatus;
+  expectedValue?: string;
+  actualValue?: string;
+  errorCode?: DocumentErrorCode;
+}
+
+export interface DocumentIntegrityError {
+  code: DocumentErrorCode;
+  severity: string;
+  message: string;
+  provenance: RecordProvenance[];
+}
+
+export interface DocumentIntegrityCase {
+  id: string;
+  status: "FULLY_MATCHED" | "NEEDS_REVIEW";
+  invoice?: DocumentSnapshot;
+  salesRegister?: DocumentSnapshot;
+  ledger511?: DocumentSnapshot;
+  fieldChecks: DocumentFieldCheck[];
+  errors: DocumentIntegrityError[];
+}
+
+export interface DocumentIntegrityResult {
+  summary: {
+    fullyMatched: number;
+    dateMismatch: number;
+    invoiceNumberMismatch: number;
+    pretaxMismatch: number;
+    vatMismatch: number;
+    totalMismatch: number;
+    missingInBk: number;
+    extraInBk: number;
+    duplicateInvoiceNumber: number;
+    ambiguousMatch: number;
+    invalidDate: number;
+    missingInvoiceNumber: number;
+    invalidAmount: number;
+    missingInTk511: number;
+  };
+  totals: {
+    field: DocumentField;
+    invoiceTotal: MoneyValue;
+    salesRegisterTotal: MoneyValue;
+    variance: MoneyValue;
+    status: "EQUAL" | "MISMATCH" | "NOT_VERIFIED";
+  }[];
+  totalsEqual: boolean;
+  documentsPass: boolean;
+  documents: DocumentIntegrityCase[];
+}
+
 export interface ControlResult {
   controlId: string;
   status: ControlExecutionStatus;
@@ -247,6 +340,7 @@ export interface ControlResult {
   limitations: string[];
   error?: AuditExecutionError;
   reconciliationResult?: ReconciliationResult;
+  documentIntegrityResult?: DocumentIntegrityResult;
 }
 
 export interface SourceReuseEvidence {

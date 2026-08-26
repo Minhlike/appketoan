@@ -1,0 +1,94 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import type { DocumentIntegrityResult } from "../types/dataContract";
+import { DocumentIntegrityPanel } from "./DocumentIntegrityPanel";
+
+const result: DocumentIntegrityResult = {
+  summary: {
+    fullyMatched: 45,
+    dateMismatch: 1,
+    invoiceNumberMismatch: 0,
+    pretaxMismatch: 0,
+    vatMismatch: 0,
+    totalMismatch: 0,
+    missingInBk: 0,
+    extraInBk: 0,
+    duplicateInvoiceNumber: 0,
+    ambiguousMatch: 0,
+    invalidDate: 0,
+    missingInvoiceNumber: 0,
+    invalidAmount: 0,
+    missingInTk511: 1,
+  },
+  totals: [{
+    field: "PRETAX",
+    invoiceTotal: "100",
+    salesRegisterTotal: "100",
+    variance: "0",
+    status: "EQUAL",
+  }],
+  totalsEqual: true,
+  documentsPass: false,
+  documents: [{
+    id: "invoice:233",
+    status: "NEEDS_REVIEW",
+    invoice: {
+      provenance: {
+        sourceId: "invoice",
+        sourceName: "Hóa đơn Thuế",
+        filePath: "invoice.xlsx",
+        sheetName: "Data",
+        recordId: "invoice-233",
+        sourceRow: 48,
+      },
+      date: "2026-07-06",
+      invoiceNumber: "233",
+      pretaxAmount: "105000000",
+      vatAmount: "10500000",
+      totalAmount: "115500000",
+    },
+    salesRegister: {
+      provenance: {
+        sourceId: "register",
+        sourceName: "Bảng kê",
+        filePath: "register.xlsx",
+        sheetName: "Data",
+        recordId: "register-233",
+        sourceRow: 48,
+      },
+      date: "2026-07-06",
+      invoiceNumber: "233",
+      pretaxAmount: "105000000",
+      vatAmount: "10500000",
+      totalAmount: "115500000",
+    },
+    fieldChecks: [{
+      scope: "INVOICE_TO_LEDGER511",
+      field: "VAT",
+      status: "NOT_CHECKED",
+      expectedValue: "10500000",
+    }],
+    errors: [{
+      code: "MISSING_IN_TK511",
+      severity: "HIGH",
+      message: "HIGH: chứng từ #233 thiếu trong TK511.",
+      provenance: [],
+    }],
+  }],
+};
+
+describe("DocumentIntegrityPanel", () => {
+  it("shows field-level summary and opens side-by-side evidence with every error code", () => {
+    render(<DocumentIntegrityPanel result={result} />);
+    expect(screen.getByText("Khớp hoàn toàn")).toBeDefined();
+    expect(screen.getByText(/Tổng bằng nhau không thay thế/)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "233 ↔ 233" }));
+    expect(screen.getByRole("complementary", { name: "Chi tiết đối chiếu chứng từ" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Hóa đơn Thuế" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Bảng kê bán hàng" })).toBeDefined();
+    expect(screen.getByText("CHƯA ĐỐI CHIẾU")).toBeDefined();
+    expect(screen.getAllByText("MISSING_IN_TK511").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/PASS/i)).toBeNull();
+  });
+});
