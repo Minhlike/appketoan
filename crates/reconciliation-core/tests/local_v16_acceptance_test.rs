@@ -184,8 +184,15 @@ fn local_v16_planner_acceptance() {
         );
     }
 
+    // V18 deliberately retains one malformed-date BK row for document-level
+    // provenance. The revenue plan must therefore fail closed to review while
+    // still executing validation; the three independent V16 controls remain
+    // READY.
+    assert_eq!(
+        plan(&report, REVENUE_CONTROL_ID).status,
+        ControlPlanStatus::NeedsReview
+    );
     for id in [
-        REVENUE_CONTROL_ID,
         BANK_CONTROL_ID,
         PARTNER_CONTROL_ID,
         SALES_ANALYSIS_CONTROL_ID,
@@ -232,6 +239,31 @@ fn local_v16_planner_acceptance() {
         .find(|result| result.control_id == REVENUE_CONTROL_ID)
         .expect("revenue control");
     assert_eq!(revenue_control.status, ControlExecutionStatus::NeedsReview);
+    let document_integrity = revenue_control
+        .document_integrity_result
+        .as_ref()
+        .expect("V18 document-integrity result");
+    assert!(document_integrity.summary.invalid_date >= 1);
+    assert_eq!(document_integrity.summary.fully_matched, 45);
+    assert_eq!(document_integrity.summary.missing_in_tk511, 1);
+    assert_eq!(document_integrity.summary.missing_in_bk, 0);
+    assert_eq!(document_integrity.summary.extra_in_bk, 0);
+    assert!(!document_integrity.totals_equal);
+    assert!(document_integrity
+        .totals
+        .iter()
+        .all(|total| total.status == reconciliation_core::TotalsCheckStatus::NotVerified));
+    assert!(!document_integrity.documents_pass);
+    println!(
+        "V18_LOCAL_DOCUMENT_ACCEPTANCE fully_matched={} invalid_date={} missing_bk={} extra_bk={} missing_tk511={} totals_equal={} documents_pass={}",
+        document_integrity.summary.fully_matched,
+        document_integrity.summary.invalid_date,
+        document_integrity.summary.missing_in_bk,
+        document_integrity.summary.extra_in_bk,
+        document_integrity.summary.missing_in_tk511,
+        document_integrity.totals_equal,
+        document_integrity.documents_pass,
+    );
     assert!(revenue_control
         .findings
         .iter()

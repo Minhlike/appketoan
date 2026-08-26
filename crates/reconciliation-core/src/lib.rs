@@ -1,6 +1,7 @@
 pub mod analyzer;
 pub mod audit_resilience;
 pub mod audit_workspace;
+pub mod document_integrity;
 pub mod exporter;
 pub mod intake;
 pub mod matcher;
@@ -11,6 +12,7 @@ pub mod reader;
 pub use analyzer::*;
 pub use audit_resilience::*;
 pub use audit_workspace::*;
+pub use document_integrity::*;
 pub use exporter::*;
 pub use intake::*;
 pub use matcher::*;
