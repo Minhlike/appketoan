@@ -130,3 +130,10 @@
 - The 100k debug benchmark improved to 7.80 seconds cold total and 7.44 seconds warm execution. Sampled peak working set fell to about 1.30 GiB; see `REPORT_V18_FINAL_RC.md` for measurement caveats.
 - Both confidential local harnesses and all mandatory source/UI/build gates passed. The authoritative period exposed beginning-of-period BK evidence that the prior intersection had hidden; it remains review evidence, not a hard-coded oracle.
 - Fresh portable, NSIS, and MSI artifacts were rebuilt, hashed, and kept ignored. The fresh portable executable passed a five-second smoke run. Stop for final ChatGPT review.
+
+## V18 Portable EXE Blank-Window Correction — 2026-08-26
+- A user run proved that the previous process-only smoke could false-pass a blank desktop window. Treat every earlier “alive for five seconds” claim as superseded for UI readiness.
+- The desktop window is hidden until the embedded page-load completion event. `index.html` contains a visible startup/failure surface, and React reports uncaught bootstrap errors there instead of leaving an empty root.
+- `scripts/smoke_release_ui.ps1` verifies the actual Windows accessibility tree and fails if the process lives without rendering the expected AppKetoan heading. The existing audit packaging script now delegates to this rendered-UI smoke.
+- The final portable EXE passed the rendered-UI smoke with 72 elements on both normal and fresh WebView2 profiles. Direct window capture showed the complete dashboard. Current portable SHA256 is `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`.
+- This correction is EXE-only. NSIS/MSI were not rebuilt, no accounting behavior changed, and PR #4 must remain unmerged pending review.

@@ -9,6 +9,12 @@ pub fn run() {
     tauri::Builder::default()
         .manage(audit_runtime::AuditRuntimeState::default())
         .plugin(tauri_plugin_opener::init())
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                // Avoid exposing an empty WebView frame before the local frontend is loaded.
+                let _ = webview.window().show();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             cmd_inspect_excel_file,
             cmd_inspect_excel_bytes,

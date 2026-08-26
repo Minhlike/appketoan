@@ -115,3 +115,10 @@ Reconciliation Core (crates/reconciliation-core/)
 - The Audit Workspace shows document summaries, a field-level table, side-by-side evidence, and every error code without changing the advanced scenario workflow.
 - Audit Workspace no longer runs a duplicate generic revenue reconciliation; its optional legacy result is absent while the advanced scenario path remains unchanged. The same-machine 100k cold total is 7.80 seconds versus 13.43 seconds reproduced immediately before the fix and 78.20 seconds in the reviewed gate record.
 - Synthetic adversarial coverage, both ignored local acceptance harnesses, all Rust/frontend/type/format/Clippy gates, fresh Tauri release packaging, and executable smoke passed. The three local-only RC hashes are recorded in `REPORT_V18_FINAL_RC.md`; automated browser visual inspection remains unverified.
+
+## V18 Portable EXE Startup Correction (2026-08-26)
+- The prior five-second process-only smoke was invalidated after a user-visible blank WebView window was reported. A living process is no longer accepted as executable smoke evidence.
+- The Tauri window now stays hidden until its local page finishes loading. The embedded HTML provides a visible startup state and fail-closed error surface; React marks the shell ready only after its first committed mount.
+- `scripts/smoke_release_ui.ps1` launches the portable EXE and asserts the rendered Windows UI Automation tree contains the AppKetoan heading and does not contain the bootstrap failure screen.
+- The fresh portable EXE passed rendered-UI smoke against both the normal and a fresh WebView2 user-data folder. A direct `PrintWindow` capture also showed the complete accounting dashboard.
+- Portable SHA256: `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`. Installer artifacts were intentionally not rebuilt for this EXE-only correction.

@@ -135,3 +135,13 @@
 - `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
 - `npx tauri build`: SUCCESS; fresh portable, MSI, and NSIS artifacts all had post-build timestamps. Fresh portable executable five-second smoke: SUCCESS.
 - RC SHA256 values are recorded in `REPORT_V18_FINAL_RC.md`. Generated artifacts and confidential workbooks remain ignored. Automated browser visual inspection remains NOT VERIFIED.
+
+### 17. V18 Portable EXE Render Gate (2026-08-26)
+- Previous five-second process-only smoke: INVALIDATED because it did not prove frontend rendering.
+- `cargo test --workspace`: SUCCESS; all default Rust targets passed, with the two confidential local harnesses intentionally ignored by the default command.
+- `npm run test -- --run`: SUCCESS (29/29 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS; portable EXE rebuilt after the startup correction. The known GNU linker `.drectve` warning remains non-fatal.
+- `scripts/smoke_release_ui.ps1`: SUCCESS on the normal WebView2 profile and a fresh isolated profile; 72 UI elements and the expected accounting heading were found.
+- Direct Windows `PrintWindow` capture: SUCCESS; the dashboard rendered with header, workflow, source intake, and period sections. Installer builds were intentionally out of scope.
+- Portable SHA256: `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`.

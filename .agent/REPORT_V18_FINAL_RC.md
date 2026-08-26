@@ -73,3 +73,29 @@ All three artifacts were regenerated after the recorded build start and remain i
 - Automated browser visual inspection and production-process median/p95 memory are not verified.
 
 No correctness blocker remains for final ChatGPT review.
+
+## Portable EXE startup correction — superseding smoke evidence
+
+The prior five-second process-only smoke was invalidated after a live portable run displayed an empty WebView. The source and embedded frontend asset were both present, but the desktop shell exposed the window before frontend readiness and had no visible bootstrap failure surface. The release workflow also had no assertion that React content actually rendered.
+
+The correction is limited to the portable desktop startup path:
+
+- keep the Tauri window hidden until the local page-load completion event;
+- show a local startup indicator and a fail-closed bootstrap error instead of an empty root;
+- report React uncaught bootstrap errors through the visible fallback;
+- verify the Windows UI Automation tree rather than process liveness.
+
+Final EXE-only evidence:
+
+- `cargo test --workspace`: PASS.
+- `npm run test -- --run`: PASS, 29/29.
+- `npm run typecheck`: PASS.
+- `cargo fmt --all -- --check`: PASS.
+- `cargo clippy --workspace --all-targets -- -D warnings`: PASS.
+- `npx tauri build --no-bundle`: PASS.
+- Rendered UI smoke, normal profile: PASS, 72 UI elements.
+- Rendered UI smoke, fresh WebView2 profile: PASS, 72 UI elements.
+- Direct Windows window capture: PASS; full dashboard visible.
+- Portable: `target/release/appketoan.exe` — SHA256 `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`.
+
+NSIS and MSI were intentionally not rebuilt because this correction was explicitly restricted to the portable EXE. Their earlier hashes do not describe the corrected executable.

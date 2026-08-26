@@ -36,7 +36,7 @@ V18 — DOCUMENT INTEGRITY & FIELD-LEVEL RECONCILIATION
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V18 final correctness fixes and Windows RC are verified on `codex/v18-document-integrity`. Stacked PR #4 targets `codex/v17-resilience-ui-foundation`; stop for final ChatGPT source/diff/artifact review. Do not merge PR #3 or PR #4, add TK131/TK3331 behavior, or begin another feature.
+The V18 portable EXE blank-window correction is implemented and rendered-UI smoke verified on `codex/v18-document-integrity`. Push the scoped correction to stacked PR #4, then wait for the user's executable acceptance and final ChatGPT review. Do not merge PR #3 or PR #4, rebuild unrelated installers, add TK131/TK3331 behavior, or begin another feature.
 
 ## V16 Objectives & Status
 1. [x] Add an explicit-period `AuditSession`, `SourceCatalog`, normalized dataset cache, prepared source indexes, and `ControlPlan` collection.
@@ -73,3 +73,4 @@ V18 final correctness fixes and Windows RC are verified on `codex/v18-document-i
 10. [x] Make the user-selected accounting period authoritative for document completeness and cover every first/last-boundary adversarial case while preserving bank fail-closed period behavior.
 11. [x] Reuse the typed invoice lifecycle safeguard so adjusted/replaced/cancelled/unknown invoices never PASS.
 12. [x] Remove duplicate Audit Workspace revenue reconciliation, measure cold/warm/peak working-set evidence, and build/hash/smoke fresh portable, NSIS, and MSI RC artifacts.
+13. [x] Replace process-only EXE smoke with rendered Windows UI verification and prevent the desktop shell from exposing a blank startup frame.
