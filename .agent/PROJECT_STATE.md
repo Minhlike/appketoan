@@ -108,7 +108,7 @@ Reconciliation Core (crates/reconciliation-core/)
 - Local acceptance, full Rust/frontend/type/format/Clippy gates, Tauri production build, and release executable smoke passed. Peak RAM, pure IPC serialization time, inner-loop cancellation, and automated browser visual inspection remain explicitly unverified.
 
 ## V18 Document Integrity / Field-Level Reconciliation (2026-08-26)
-- Status: implementation and release gate complete on `codex/v18-document-integrity`, stacked on the unmerged V17 branch; not merged.
+- Status: implementation and release gate complete on `codex/v18-document-integrity`; stacked PR #4 targets the unmerged V17 branch and is not merged.
 - The revenue tri-source control now has an authoritative typed document result. BK validation, exact five-field Thuế/BK comparison, strict three-field TK511 comparison, diagnostic-only links, independent totals, and provenance-preserving multi-error cases are implemented in the pure Rust core.
 - Invalid-date records stay outside auto-match indexes but remain available to the Review Queue. Valid records retain the narrow per-control period intersection.
 - The Audit Workspace shows document summaries, a field-level table, side-by-side evidence, and every error code without changing the advanced scenario workflow.

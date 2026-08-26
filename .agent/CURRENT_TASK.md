@@ -36,7 +36,7 @@ V18 — DOCUMENT INTEGRITY & FIELD-LEVEL RECONCILIATION
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V18 is implemented and verified on `codex/v18-document-integrity`. Publish it as a PR stacked on `codex/v17-resilience-ui-foundation`, then stop for ChatGPT source/diff review. Do not merge PR #3 or V18, add TK131/TK3331 behavior, or begin another feature.
+V18 is implemented and verified on `codex/v18-document-integrity`. Stacked PR #4 targets `codex/v17-resilience-ui-foundation`; stop for ChatGPT source/diff review. Do not merge PR #3 or PR #4, add TK131/TK3331 behavior, or begin another feature.
 
 ## V16 Objectives & Status
 1. [x] Add an explicit-period `AuditSession`, `SourceCatalog`, normalized dataset cache, prepared source indexes, and `ControlPlan` collection.

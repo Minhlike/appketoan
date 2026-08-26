@@ -115,7 +115,7 @@
 - Generated release artifacts and local accounting workbooks remain ignored. Stop after pushing the stacked PR for ChatGPT source/diff review.
 
 ## V18 Document Integrity / Field-Level Reconciliation — 2026-08-26
-- Branch: `codex/v18-document-integrity`, based exactly on the reviewed V17 head. PR must target `codex/v17-resilience-ui-foundation`; neither PR may be merged by the agent.
+- Branch: `codex/v18-document-integrity`, based exactly on the reviewed V17 head. Stacked PR #4 (`https://github.com/Minhlike/appketoan/pull/4`) targets `codex/v17-resilience-ui-foundation`; neither PR may be merged by the agent.
 - `document_integrity.rs` is the authoritative pure-Rust evaluator for Invoice/Sales Register/TK511. It validates BK first, marks all duplicate rows, uses exact field checks, allows only unique strong diagnostic links, and separates totals from document PASS.
 - `PreparedSourceIndex.review_records` retains missing/unparseable-date rows outside every auto-match index. Planner status stays `NEEDS_REVIEW`; valid evidence retains its narrow effective period.
 - `ControlResult.document_integrity_result` is wired through Tauri serialization into the Audit Workspace. The existing Review Queue receives each typed error; selecting a row opens side-by-side provenance and field checks.

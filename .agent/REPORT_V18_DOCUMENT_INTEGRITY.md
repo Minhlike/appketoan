@@ -3,6 +3,7 @@
 ## Scope
 
 - Branch: `codex/v18-document-integrity`
+- Pull request: `https://github.com/Minhlike/appketoan/pull/4`
 - Base: exact V17 reviewed head on `codex/v17-resilience-ui-foundation`
 - Merge status: not merged
 - No new account control, cloud path, workbook, installer, or generated build directory is part of the source change.
