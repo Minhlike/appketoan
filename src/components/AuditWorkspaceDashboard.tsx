@@ -179,6 +179,11 @@ export function AuditWorkspaceDashboard({ sources, accountingPeriod, report }: P
             const result = report.controlResults.find(
               (candidate) => candidate.controlId === control.controlId
             );
+            // Older/partial IPC payloads may omit empty collections. Keep the
+            // workspace usable even if a backend payload predates the required
+            // ControlResult contract.
+            const summaryMetrics = result?.summaryMetrics ?? {};
+            const limitations = result?.limitations ?? [];
             const sourceNames = control.sourceIds
               .map((id) => catalog.find((source) => source.sourceId === id)?.sourceName)
               .filter(Boolean)
@@ -202,14 +207,14 @@ export function AuditWorkspaceDashboard({ sources, accountingPeriod, report }: P
                       {result.findings.length} phát hiện cần kiểm tra
                     </small>
                   )}
-                  {result && Object.keys(result.summaryMetrics).length > 0 && (
+                  {result && Object.keys(summaryMetrics).length > 0 && (
                     <ul className="control-result-summary" aria-label="Tóm tắt kết quả">
-                      {resultSummary(result.controlId, result.summaryMetrics).map((item) => (
+                      {resultSummary(result.controlId, summaryMetrics).map((item) => (
                         <li key={item}>{item}</li>
                       ))}
                     </ul>
                   )}
-                  {result?.limitations.includes("TK112_RUNNING_BALANCE_NOT_VERIFIED") && (
+                  {limitations.includes("TK112_RUNNING_BALANCE_NOT_VERIFIED") && (
                     <small className="audit-warning">
                       Số dư chạy TK112: chưa đủ dữ liệu để xác minh.
                     </small>

@@ -83,6 +83,7 @@ try {
     $headingFound = $false
     $failureFound = $false
     $elementCount = 0
+    $observedNames = [Collections.Generic.HashSet[string]]::new()
     while ((Get-Date) -lt $deadline -and -not $headingFound -and -not $failureFound) {
         $root = [Windows.Automation.AutomationElement]::FromHandle($window)
         $elements = $root.FindAll(
@@ -91,11 +92,15 @@ try {
         )
         $elementCount = $elements.Count
         for ($index = 0; $index -lt $elements.Count; $index++) {
-            $name = $elements.Item($index).Current.Name
-            if ($name -eq "Đối chiếu số liệu kế toán") {
+            $name = [string]$elements.Item($index).Current.Name
+            if (-not [string]::IsNullOrWhiteSpace($name)) {
+                $observedNames.Add($name) | Out-Null
+            }
+            $normalizedName = ($name -replace "\s+", " ").Trim()
+            if ($normalizedName -eq "APPKETOAN_UI_READY") {
                 $headingFound = $true
             }
-            if ($name -eq "AppKetoan không thể khởi động giao diện") {
+            if ($normalizedName -eq "AppKetoan không thể khởi động giao diện") {
                 $failureFound = $true
             }
         }
@@ -108,13 +113,14 @@ try {
         throw "The executable rendered its bootstrap failure screen."
     }
     if (-not $headingFound) {
-        throw "The executable stayed alive but did not render the AppKetoan UI. UI elements found: $elementCount."
+        $sample = ($observedNames | Select-Object -First 12) -join " | "
+        throw "The executable stayed alive but did not render the AppKetoan UI. UI elements found: $elementCount. Observed names: $sample"
     }
 
     Write-Output "UI_SMOKE=PASS"
     Write-Output "EXE=$resolvedExe"
     Write-Output "UI_ELEMENTS=$elementCount"
-    Write-Output "EXPECTED_HEADING=Đối chiếu số liệu kế toán"
+    Write-Output "EXPECTED_MARKER=APPKETOAN_UI_READY"
 }
 finally {
     if ($null -ne $process -and -not $process.HasExited) {

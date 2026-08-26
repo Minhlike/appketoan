@@ -194,4 +194,61 @@ describe("AuditWorkspaceDashboard", () => {
     expect(screen.getAllByText("Đã dừng").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/Không phát hiện sai lệch/)).toBeNull();
   });
+
+  it("renders a legacy partial IPC result when empty collections are omitted", () => {
+    const legacyWireReport = {
+      sessionId: "legacy-partial-payload",
+      accountingPeriod: { startDate: "2026-07-01", endDate: "2026-08-01" },
+      sourceCatalog: { sources: [] },
+      controlPlans: [{
+        controlId: "RECEIVABLE_CONTROL",
+        title: "Kiểm soát công nợ phải thu",
+        status: "MISSING_SOURCE",
+        sourceIds: [],
+        missingCapabilities: [{ kind: "LEDGER_ENTRY", account: "131" }],
+        warnings: [],
+      }],
+      controlResults: [{
+        controlId: "RECEIVABLE_CONTROL",
+        status: "NOT_RUN",
+        evidence: [],
+        findings: [],
+        sourceIds: [],
+        missingCapabilities: [{ kind: "LEDGER_ENTRY", account: "131" }],
+        elapsedMs: 0,
+      }],
+      sourceReuse: [],
+      runStatus: "COMPLETED",
+      errors: [],
+      metrics: {
+        stages: {
+          fileReadMs: 0,
+          excelParseMs: 0,
+          normalizationMs: 0,
+          periodFilteringMs: 0,
+          capabilityDetectionMs: 0,
+          indexConstructionMs: 0,
+          controlPlanningMs: 0,
+          resultSerializationMs: 0,
+          totalBackendMs: 0,
+        },
+        controlExecution: [],
+        sourceCount: 0,
+        normalizedRecordCount: 0,
+        cacheHits: 0,
+        cacheMisses: 0,
+        estimatedCacheBytes: 0,
+      },
+    } as unknown as AuditWorkspaceReport;
+
+    expect(() => render(
+      <AuditWorkspaceDashboard
+        sources={[]}
+        accountingPeriod={legacyWireReport.accountingPeriod}
+        report={legacyWireReport}
+      />
+    )).not.toThrow();
+    expect(screen.getAllByText("Chưa chạy").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/Không phát hiện sai lệch/)).toBeNull();
+  });
 });

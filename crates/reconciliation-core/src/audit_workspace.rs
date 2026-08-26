@@ -178,9 +178,9 @@ pub struct ControlResult {
     pub missing_capabilities: Vec<SourceCapability>,
     pub effective_period: Option<AccountingPeriod>,
     pub elapsed_ms: u64,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     pub summary_metrics: BTreeMap<String, u64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub limitations: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<AuditExecutionError>,
@@ -1737,4 +1737,35 @@ pub fn execute_audit_session_with_cancellation(
         errors,
         metrics,
     })
+}
+
+#[cfg(test)]
+mod control_result_serialization_tests {
+    use super::*;
+
+    #[test]
+    fn empty_collections_remain_present_in_ipc_contract() {
+        let result = ControlResult {
+            control_id: RECEIVABLE_CONTROL_ID.to_string(),
+            status: ControlExecutionStatus::NotRun,
+            evidence: vec![],
+            findings: vec![],
+            source_ids: vec![],
+            missing_capabilities: vec![SourceCapability::LedgerEntry {
+                account: "131".to_string(),
+            }],
+            effective_period: None,
+            elapsed_ms: 0,
+            summary_metrics: BTreeMap::new(),
+            limitations: vec![],
+            error: None,
+            reconciliation_result: None,
+            document_integrity_result: None,
+        };
+
+        let json = serde_json::to_value(result).expect("ControlResult must serialize");
+
+        assert_eq!(json["summaryMetrics"], serde_json::json!({}));
+        assert_eq!(json["limitations"], serde_json::json!([]));
+    }
 }

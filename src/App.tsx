@@ -421,7 +421,7 @@ export function App() {
         hasResults={Boolean(result)}
       />
 
-      <main className="app-main-content">
+      <main className="app-main-content" aria-label="APPKETOAN_UI_READY">
         {errorMessage && (
           <div className="alert-banner alert-error" role="alert">
             <span>⚠️ {errorMessage}</span>

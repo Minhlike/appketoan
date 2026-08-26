@@ -145,3 +145,14 @@
 - `scripts/smoke_release_ui.ps1`: SUCCESS on the normal WebView2 profile and a fresh isolated profile; 72 UI elements and the expected accounting heading were found.
 - Direct Windows `PrintWindow` capture: SUCCESS; the dashboard rendered with header, workflow, source intake, and period sections. Installer builds were intentionally out of scope.
 - Portable SHA256: `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`.
+
+### 18. V18 Post-Execution IPC Crash Gate (2026-08-26)
+- Rust serialization regression: PASS; empty required collections remain present in camelCase IPC JSON.
+- React legacy/partial-payload regression: PASS; omitted `summaryMetrics` and `limitations` render safely and never imply PASS.
+- `cargo test --workspace`: SUCCESS; 136 executed tests passed and two confidential harnesses were ignored by default.
+- Both ignored local acceptance harnesses: SUCCESS; all established assertions and conservation checks remained unchanged. No workbook was committed.
+- `npm run test`: SUCCESS (30/30 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS. The known GNU `.drectve` linker warning remained non-fatal.
+- Rendered portable smoke: SUCCESS; 72 UI elements and `APPKETOAN_UI_READY` were observed, with no bootstrap failure screen.
+- Portable SHA256: `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`.

@@ -122,3 +122,9 @@ Reconciliation Core (crates/reconciliation-core/)
 - `scripts/smoke_release_ui.ps1` launches the portable EXE and asserts the rendered Windows UI Automation tree contains the AppKetoan heading and does not contain the bootstrap failure screen.
 - The fresh portable EXE passed rendered-UI smoke against both the normal and a fresh WebView2 user-data folder. A direct `PrintWindow` capture also showed the complete accounting dashboard.
 - Portable SHA256: `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`. Installer artifacts were intentionally not rebuilt for this EXE-only correction.
+
+## V18 Audit Result IPC Crash Correction (2026-08-26)
+- A live two-register-plus-invoice run exposed a post-execution React crash: Rust omitted empty `summaryMetrics` and `limitations` collections while the required TypeScript contract dereferenced them.
+- `ControlResult` now always serializes those required collections. The dashboard also defaults absent collections for backward/partial-payload compatibility, so a missing-source or not-run control cannot take down the workspace or imply PASS.
+- Rust serialization and React legacy-payload regressions cover the exact failure. Both ignored local acceptance harnesses and all source gates passed.
+- The portable-only release was rebuilt and passed rendered-UI smoke using an explicit ASCII readiness marker. Current portable SHA256: `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`. PR #4 remains unmerged.

@@ -99,3 +99,27 @@ Final EXE-only evidence:
 - Portable: `target/release/appketoan.exe` — SHA256 `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`.
 
 NSIS and MSI were intentionally not rebuilt because this correction was explicitly restricted to the portable EXE. Their earlier hashes do not describe the corrected executable.
+
+## Post-execution IPC crash correction — superseding portable hash
+
+A live Audit Workspace run reached the visible bootstrap failure surface with `Object.keys` receiving `undefined`. This was not a workbook parser or period-boundary failure. Empty result collections were omitted by Rust serialization although the TypeScript `ControlResult` contract requires them.
+
+The portable-only correction:
+
+- always serializes required `summaryMetrics` and `limitations` collections;
+- defensively normalizes legacy/partial IPC payloads in the dashboard;
+- proves the exact JSON contract in Rust and the omitted-field render path in React;
+- preserves fail-closed statuses and never converts a not-run control to PASS;
+- uses an explicit ASCII React readiness marker for rendered-UI smoke.
+
+Final evidence:
+
+- `cargo test --workspace`: PASS, 136 executed tests; two confidential harnesses ignored by default.
+- Both ignored local acceptance harnesses: PASS.
+- `npm run test`: PASS, 30/30.
+- `npm run typecheck`, Rust format check, and strict Clippy: PASS.
+- `npx tauri build --no-bundle`: PASS.
+- Rendered portable smoke: PASS, 72 UI elements.
+- Portable: `target/release/appketoan.exe` — SHA256 `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`.
+
+Installer binaries remain intentionally out of scope. PR #4 remains unmerged pending the user's repeat of the triggering workflow.

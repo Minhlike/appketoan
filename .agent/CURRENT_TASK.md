@@ -74,3 +74,7 @@ The V18 portable EXE blank-window correction is implemented and rendered-UI smok
 11. [x] Reuse the typed invoice lifecycle safeguard so adjusted/replaced/cancelled/unknown invoices never PASS.
 12. [x] Remove duplicate Audit Workspace revenue reconciliation, measure cold/warm/peak working-set evidence, and build/hash/smoke fresh portable, NSIS, and MSI RC artifacts.
 13. [x] Replace process-only EXE smoke with rendered Windows UI verification and prevent the desktop shell from exposing a blank startup frame.
+14. [x] Fix the required `ControlResult` IPC collection contract so partial/not-run controls cannot crash the Audit Workspace after execution; add backend/frontend regressions and rebuild the portable EXE.
+
+## Next Task
+Wait for the user to retest the rebuilt portable EXE with the same local source set and accounting period. If the visible fail-closed screen reports another stack, diagnose that exact payload without starting a feature, rebuilding installers, or merging PR #4.

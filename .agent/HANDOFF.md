@@ -137,3 +137,10 @@
 - `scripts/smoke_release_ui.ps1` verifies the actual Windows accessibility tree and fails if the process lives without rendering the expected AppKetoan heading. The existing audit packaging script now delegates to this rendered-UI smoke.
 - The final portable EXE passed the rendered-UI smoke with 72 elements on both normal and fresh WebView2 profiles. Direct window capture showed the complete dashboard. Current portable SHA256 is `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`.
 - This correction is EXE-only. NSIS/MSI were not rebuilt, no accounting behavior changed, and PR #4 must remain unmerged pending review.
+
+## V18 Audit Result IPC Crash Correction — 2026-08-26
+- The startup fallback successfully exposed a real post-run error instead of a white window: `Object.keys` received an omitted `summaryMetrics` collection from a not-run/missing-source control.
+- Root cause was a cross-language contract mismatch: Rust used `skip_serializing_if` for fields that TypeScript marks required. Rust now always emits `{}` and `[]`; React also treats those fields as optional at the wire boundary for compatibility.
+- Regression coverage includes exact Rust JSON shape and rendering a legacy partial payload with both collections omitted. No control is promoted to PASS.
+- Full source gate and both ignored local acceptance harnesses passed. The portable EXE was rebuilt without installers and passed rendered-UI smoke with 72 UI elements.
+- Current local-only portable: `target/release/appketoan.exe`; SHA256 `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`. Await the user's reproduction test; do not merge PR #4.
