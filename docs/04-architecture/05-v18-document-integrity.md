@@ -28,11 +28,11 @@ The V18 evaluator is additive to the Audit Workspace. It reuses the same normali
 
 ## Period safety
 
-Missing/unparseable dates remain outside all auto-match indexes. They are retained in a separate review-only collection so V18 can report file, sheet, and row provenance. The planner remains `NEEDS_REVIEW`; valid records still use the narrow intersection of required-source date evidence. When no valid intersection exists, V18 may run diagnostic validation over the explicit session period, but any cross-date link remains review-only.
+Missing/unparseable dates remain outside all auto-match indexes. They are retained in a separate review-only collection so V18 can report file, sheet, and row provenance. For document completeness, the explicit user-selected `AccountingPeriod` is authoritative; source earliest/latest values are evidence and warnings only. This prevents a late-start or early-end source from hiding missing/extra evidence at a period boundary. The bank control retains its separate intersection-based fail-closed policy.
 
 ## Complexity
 
-Document-number, date-money, partner-money, and ledger indexes are built in linear time. Normal execution is O(n) expected time and O(n) additional memory. The legacy compatibility reconciliation result is still generated beside the V18 typed result, so the 100k V16 benchmark now includes both result models; removing that duplication requires a separate compatibility migration.
+Document-number, date-money, partner-money, and ledger indexes are built in linear time. Normal execution is O(n) expected time and O(n) additional memory. Audit Workspace revenue now runs only the authoritative typed evaluator and borrows prepared period-filtered slices when possible. The optional legacy result is not materialized there; the unchanged advanced scenario path remains the compatibility route for the generic matcher.
 
 ## UI
 

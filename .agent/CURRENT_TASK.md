@@ -36,7 +36,7 @@ V18 — DOCUMENT INTEGRITY & FIELD-LEVEL RECONCILIATION
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V18 is implemented and verified on `codex/v18-document-integrity`. Stacked PR #4 targets `codex/v17-resilience-ui-foundation`; stop for ChatGPT source/diff review. Do not merge PR #3 or PR #4, add TK131/TK3331 behavior, or begin another feature.
+V18 final correctness fixes and Windows RC are verified on `codex/v18-document-integrity`. Stacked PR #4 targets `codex/v17-resilience-ui-foundation`; stop for final ChatGPT source/diff/artifact review. Do not merge PR #3 or PR #4, add TK131/TK3331 behavior, or begin another feature.
 
 ## V16 Objectives & Status
 1. [x] Add an explicit-period `AuditSession`, `SourceCatalog`, normalized dataset cache, prepared source indexes, and `ControlPlan` collection.
@@ -70,3 +70,6 @@ V18 is implemented and verified on `codex/v18-document-integrity`. Stacked PR #4
 7. [x] Add synthetic duplicate/date/number/money/missing/extra/ambiguous/totals/cancellation/partial/bank regressions.
 8. [x] Run ignored local acceptance without committing workbooks and preserve the immutable record-count oracle.
 9. [x] Complete Rust/frontend/type/format/Clippy/Tauri build/executable smoke gates.
+10. [x] Make the user-selected accounting period authoritative for document completeness and cover every first/last-boundary adversarial case while preserving bank fail-closed period behavior.
+11. [x] Reuse the typed invoice lifecycle safeguard so adjusted/replaced/cancelled/unknown invoices never PASS.
+12. [x] Remove duplicate Audit Workspace revenue reconciliation, measure cold/warm/peak working-set evidence, and build/hash/smoke fresh portable, NSIS, and MSI RC artifacts.

@@ -248,7 +248,8 @@ export type DocumentErrorCode =
   | "MISSING_INVOICE_NUMBER"
   | "INVALID_AMOUNT"
   | "MISSING_IN_TK511"
-  | "EXTRA_IN_TK511";
+  | "EXTRA_IN_TK511"
+  | "INVOICE_LIFECYCLE_NEEDS_REVIEW";
 
 export type DocumentField = "DATE" | "INVOICE_NUMBER" | "PRETAX" | "VAT" | "TOTAL";
 export type FieldCheckStatus = "MATCH" | "MISMATCH" | "NOT_CHECKED";
@@ -300,6 +301,9 @@ export interface DocumentIntegrityCase {
 
 export interface DocumentIntegrityResult {
   summary: {
+    invoiceRecords: number;
+    salesRegisterRecords: number;
+    ledger511Records: number;
     fullyMatched: number;
     dateMismatch: number;
     invoiceNumberMismatch: number;
@@ -314,6 +318,7 @@ export interface DocumentIntegrityResult {
     missingInvoiceNumber: number;
     invalidAmount: number;
     missingInTk511: number;
+    invoiceLifecycleNeedsReview: number;
   };
   totals: {
     field: DocumentField;
@@ -323,6 +328,12 @@ export interface DocumentIntegrityResult {
     status: "EQUAL" | "MISMATCH" | "NOT_VERIFIED";
   }[];
   totalsEqual: boolean;
+  ledger511Revenue: {
+    invoiceTotal: MoneyValue;
+    ledgerTotal: MoneyValue;
+    variance: MoneyValue;
+    status: "EQUAL" | "MISMATCH" | "NOT_VERIFIED";
+  };
   documentsPass: boolean;
   documents: DocumentIntegrityCase[];
 }

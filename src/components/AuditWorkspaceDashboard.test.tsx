@@ -134,4 +134,64 @@ describe("AuditWorkspaceDashboard", () => {
     expect(screen.getByText(/Mở thiết lập cột và kiểm tra lại/)).toBeDefined();
     expect(screen.queryByText(/PRIMARY|REQUIRED_SECONDARY/)).toBeNull();
   });
+
+  it("renders cancelled workspace and control states without implying PASS", () => {
+    const cancelledReport: AuditWorkspaceReport = {
+      sessionId: "cancelled",
+      accountingPeriod: { startDate: "2026-07-01", endDate: "2026-07-31" },
+      sourceCatalog: { sources: [] },
+      controlPlans: [{
+        controlId: "REVENUE_INVOICE_REGISTER_LEDGER",
+        title: "Hóa đơn ↔ Bảng kê ↔ Sổ doanh thu",
+        status: "READY",
+        sourceIds: [],
+        missingCapabilities: [],
+        warnings: [],
+        effectivePeriod: { startDate: "2026-07-01", endDate: "2026-07-31" },
+      }],
+      controlResults: [{
+        controlId: "REVENUE_INVOICE_REGISTER_LEDGER",
+        status: "CANCELLED",
+        evidence: [],
+        findings: [],
+        sourceIds: [],
+        missingCapabilities: [],
+        effectivePeriod: { startDate: "2026-07-01", endDate: "2026-07-31" },
+        elapsedMs: 0,
+        summaryMetrics: {},
+        limitations: [],
+      }],
+      sourceReuse: [],
+      runStatus: "CANCELLED",
+      errors: [],
+      metrics: {
+        stages: {
+          fileReadMs: 0,
+          excelParseMs: 0,
+          normalizationMs: 0,
+          periodFilteringMs: 0,
+          capabilityDetectionMs: 0,
+          indexConstructionMs: 0,
+          controlPlanningMs: 0,
+          resultSerializationMs: 0,
+          totalBackendMs: 0,
+        },
+        controlExecution: [],
+        sourceCount: 0,
+        normalizedRecordCount: 0,
+        cacheHits: 0,
+        cacheMisses: 0,
+        estimatedCacheBytes: 0,
+      },
+    };
+    render(
+      <AuditWorkspaceDashboard
+        sources={[]}
+        accountingPeriod={cancelledReport.accountingPeriod}
+        report={cancelledReport}
+      />
+    );
+    expect(screen.getAllByText("Đã dừng").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/Không phát hiện sai lệch/)).toBeNull();
+  });
 });

@@ -1,6 +1,6 @@
 # ADR 0013: Fail-Closed Document Integrity Matching
 
-- Status: Accepted
+- Status: Accepted; period and compatibility-result clauses superseded by ADR 0014
 - Date: 2026-08-26
 
 ## Context

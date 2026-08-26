@@ -210,29 +210,6 @@ fn local_v16_planner_acceptance() {
         source.read_count == 1 && source.normalize_count == 1 && source.index_count == 1
     }));
 
-    let revenue = report
-        .control_results
-        .iter()
-        .find(|result| result.control_id == REVENUE_CONTROL_ID)
-        .and_then(|result| result.reconciliation_result.as_ref())
-        .expect("revenue reconciliation result");
-    assert_eq!(revenue.summary.total_source_records, 46);
-    assert_eq!(revenue.summary.exact_matches_count, 45);
-    let document_233 = revenue
-        .groups
-        .iter()
-        .find(|group| {
-            group.doc_no.as_deref() == Some("233") && !group.primary_source_record_ids.is_empty()
-        })
-        .expect("document 233");
-    assert_eq!(
-        document_233.status,
-        reconciliation_core::MatchStatus::NeedsReview
-    );
-    assert!(document_233.semantic_comparisons.iter().any(|comparison| {
-        comparison.secondary_source_kind == DataSourceKind::Ledger511
-            && comparison.variance == Decimal::from(105_000_000u64)
-    }));
     let revenue_control = report
         .control_results
         .iter()
@@ -243,17 +220,42 @@ fn local_v16_planner_acceptance() {
         .document_integrity_result
         .as_ref()
         .expect("V18 document-integrity result");
+    assert!(revenue_control.reconciliation_result.is_none());
+    assert_eq!(document_integrity.summary.invoice_records, 46);
+    assert_eq!(document_integrity.summary.ledger_511_records, 45);
     assert!(document_integrity.summary.invalid_date >= 1);
     assert_eq!(document_integrity.summary.fully_matched, 45);
     assert_eq!(document_integrity.summary.missing_in_tk511, 1);
     assert_eq!(document_integrity.summary.missing_in_bk, 0);
-    assert_eq!(document_integrity.summary.extra_in_bk, 0);
     assert!(!document_integrity.totals_equal);
     assert!(document_integrity
         .totals
         .iter()
         .all(|total| total.status == reconciliation_core::TotalsCheckStatus::NotVerified));
     assert!(!document_integrity.documents_pass);
+    assert_eq!(
+        document_integrity.ledger_511_revenue.variance,
+        Decimal::from(105_000_000u64)
+    );
+    let document_233 = document_integrity
+        .documents
+        .iter()
+        .find(|document| {
+            document
+                .invoice
+                .as_ref()
+                .and_then(|record| record.invoice_number.as_deref())
+                == Some("233")
+        })
+        .expect("document 233");
+    assert_eq!(
+        document_233.status,
+        reconciliation_core::DocumentCaseStatus::NeedsReview
+    );
+    assert!(document_233.errors.iter().any(|error| {
+        error.code == reconciliation_core::DocumentErrorCode::MissingInTk511
+            && error.severity == "HIGH"
+    }));
     println!(
         "V18_LOCAL_DOCUMENT_ACCEPTANCE fully_matched={} invalid_date={} missing_bk={} extra_bk={} missing_tk511={} totals_equal={} documents_pass={}",
         document_integrity.summary.fully_matched,

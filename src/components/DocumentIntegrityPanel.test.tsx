@@ -6,6 +6,9 @@ import { DocumentIntegrityPanel } from "./DocumentIntegrityPanel";
 
 const result: DocumentIntegrityResult = {
   summary: {
+    invoiceRecords: 1,
+    salesRegisterRecords: 1,
+    ledger511Records: 1,
     fullyMatched: 45,
     dateMismatch: 1,
     invoiceNumberMismatch: 0,
@@ -20,6 +23,7 @@ const result: DocumentIntegrityResult = {
     missingInvoiceNumber: 0,
     invalidAmount: 0,
     missingInTk511: 1,
+    invoiceLifecycleNeedsReview: 0,
   },
   totals: [{
     field: "PRETAX",
@@ -29,6 +33,12 @@ const result: DocumentIntegrityResult = {
     status: "EQUAL",
   }],
   totalsEqual: true,
+  ledger511Revenue: {
+    invoiceTotal: "100",
+    ledgerTotal: "0",
+    variance: "100",
+    status: "MISMATCH",
+  },
   documentsPass: false,
   documents: [{
     id: "invoice:233",
@@ -89,6 +99,39 @@ describe("DocumentIntegrityPanel", () => {
     expect(screen.getByRole("heading", { name: "Bảng kê bán hàng" })).toBeDefined();
     expect(screen.getByText("CHƯA ĐỐI CHIẾU")).toBeDefined();
     expect(screen.getAllByText("MISSING_IN_TK511").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/PASS/i)).toBeNull();
+  });
+
+  it("renders every simultaneous document error including lifecycle review", () => {
+    const errorCodes = [
+      "DUPLICATE_INVOICE_NUMBER",
+      "MISSING_IN_BK",
+      "EXTRA_IN_BK",
+      "DATE_MISMATCH",
+      "INVOICE_NUMBER_MISMATCH",
+      "PRETAX_MISMATCH",
+      "VAT_MISMATCH",
+      "TOTAL_MISMATCH",
+      "INVOICE_LIFECYCLE_NEEDS_REVIEW",
+    ] as const;
+    const multiErrorResult: DocumentIntegrityResult = {
+      ...result,
+      summary: { ...result.summary, invoiceLifecycleNeedsReview: 1 },
+      documents: [{
+        ...result.documents[0],
+        errors: errorCodes.map((code) => ({
+          code,
+          severity: "HIGH",
+          message: `${code}: cần rà soát`,
+          provenance: [],
+        })),
+      }],
+    };
+    render(<DocumentIntegrityPanel result={multiErrorResult} />);
+    fireEvent.click(screen.getByRole("button", { name: "233 ↔ 233" }));
+    for (const code of errorCodes) {
+      expect(screen.getAllByText(code).length).toBeGreaterThanOrEqual(1);
+    }
     expect(screen.queryByText(/PASS/i)).toBeNull();
   });
 });

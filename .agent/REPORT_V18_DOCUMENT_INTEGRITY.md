@@ -1,5 +1,7 @@
 # V18 Document Integrity — Verification Report
 
+> Historical initial V18 report. Period-boundary and performance conclusions are superseded by `REPORT_V18_FINAL_RC.md` and ADR 0014.
+
 ## Scope
 
 - Branch: `codex/v18-document-integrity`
@@ -36,7 +38,7 @@ All V18 adversarial cases passed:
 
 ## Local acceptance
 
-The ignored local harness passed against the existing local workbook set. It asserted the unchanged record-count oracle, 45 fully matched documents, no missing/extra BK document in the valid effective period, and exactly one missing TK511 document (#233).
+The ignored local harness passed against the existing local workbook set. The initial gate used a required-source date intersection; the final RC correctly replaced that boundary for document completeness and exposed additional beginning-of-period BK evidence. See `REPORT_V18_FINAL_RC.md`.
 
 One BK row has an unparseable/missing required date. V18 now retains it with provenance, so the revenue control plan and result are `NEEDS_REVIEW`. Period totals are `NOT_VERIFIED`; they are not mislabeled as equal because the row cannot safely be scoped to a period. No workbook content was persisted or committed.
 
@@ -53,7 +55,7 @@ One BK row has an unparseable/missing required date. V18 now retains it with pro
 
 ## Known limitations
 
-- The legacy `ReconciliationResult` is still produced alongside the V18 typed result for V15/V16 compatibility. The final debug 100k reuse benchmark took 78.20 seconds on this gate run; it is a performance/contract migration follow-up, not a correctness relaxation.
+- This initial gate produced both legacy and typed results and recorded a 78.20-second debug run. The final RC removed the duplicate Audit Workspace revenue pipeline; current evidence is in `REPORT_V18_FINAL_RC.md`.
 - The local BK row with an unknown date prevents period totals from being verified until the source date is corrected.
 - TK511 has no VAT or receivable evidence; those fields remain intentionally `NOT_CHECKED`.
 - Cancellation remains cooperative at source/control boundaries, not inside every evaluator loop.

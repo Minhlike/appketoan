@@ -33,10 +33,10 @@ Reconciliation Core (crates/reconciliation-core/)
 - **Application Status**: Fully functional, tested with rigorous regression test suite against real-world accounting datasets.
 
 ## Production Artifacts
-- **NSIS Setup Installer**: `src-tauri/target/release/bundle/nsis/appketoan_0.1.0_x64-setup.exe` (4.99 MB)
-- **WiX MSI Installer**: `src-tauri/target/release/bundle/msi/appketoan_0.1.0_x64_en-US.msi` (7.78 MB)
-- **Portable Executable**: `src-tauri/target/release/tauri-app.exe` (26.4 MB)
-- **Source Archive**: `D:\appketoan-source.zip` (404.67 KB)
+- **NSIS Setup Installer**: local ignored `target/release/bundle/nsis/appketoan_0.1.0_x64-setup.exe`
+- **WiX MSI Installer**: local ignored `target/release/bundle/msi/appketoan_0.1.0_x64_en-US.msi`
+- **Portable Executable**: local ignored `target/release/appketoan.exe`
+- **Integrity Evidence**: SHA256 values are recorded in `.agent/REPORT_V18_FINAL_RC.md`; artifacts are never committed.
 
 ## Blockers
 - No correctness or build blocker. Multi-control execution time and unmeasured peak memory remain performance follow-up items.
@@ -108,8 +108,10 @@ Reconciliation Core (crates/reconciliation-core/)
 - Local acceptance, full Rust/frontend/type/format/Clippy gates, Tauri production build, and release executable smoke passed. Peak RAM, pure IPC serialization time, inner-loop cancellation, and automated browser visual inspection remain explicitly unverified.
 
 ## V18 Document Integrity / Field-Level Reconciliation (2026-08-26)
-- Status: implementation and release gate complete on `codex/v18-document-integrity`; stacked PR #4 targets the unmerged V17 branch and is not merged.
+- Status: final correctness fixes and RC gate complete on `codex/v18-document-integrity`; stacked PR #4 targets the unmerged V17 branch and is not merged.
 - The revenue tri-source control now has an authoritative typed document result. BK validation, exact five-field Thuế/BK comparison, strict three-field TK511 comparison, diagnostic-only links, independent totals, and provenance-preserving multi-error cases are implemented in the pure Rust core.
-- Invalid-date records stay outside auto-match indexes but remain available to the Review Queue. Valid records retain the narrow per-control period intersection.
+- Invalid-date records stay outside auto-match indexes but remain available to the Review Queue. The user-selected accounting period is authoritative for document completeness; source date coverage is warning evidence and cannot hide first/last-period discrepancies. Bank control keeps its separate fail-closed intersection.
+- Non-regular or unknown mapped invoice lifecycle is a typed high-priority review and can never be fully matched.
 - The Audit Workspace shows document summaries, a field-level table, side-by-side evidence, and every error code without changing the advanced scenario workflow.
-- Synthetic adversarial coverage, local ignored acceptance, all Rust/frontend/type/format/Clippy gates, Tauri release build, and executable smoke passed. The legacy compatibility result still adds material 100k runtime and automated browser visual inspection remains unverified.
+- Audit Workspace no longer runs a duplicate generic revenue reconciliation; its optional legacy result is absent while the advanced scenario path remains unchanged. The same-machine 100k cold total is 7.80 seconds versus 13.43 seconds reproduced immediately before the fix and 78.20 seconds in the reviewed gate record.
+- Synthetic adversarial coverage, both ignored local acceptance harnesses, all Rust/frontend/type/format/Clippy gates, fresh Tauri release packaging, and executable smoke passed. The three local-only RC hashes are recorded in `REPORT_V18_FINAL_RC.md`; automated browser visual inspection remains unverified.

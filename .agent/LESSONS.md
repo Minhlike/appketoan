@@ -28,6 +28,7 @@
 - Adding managed Tauri runtime state can make the synthetic library test harness load WebView2 symbols and fail before running tests with `STATUS_ENTRYPOINT_NOT_FOUND` on the supported GNU toolchain.
 - Keep accounting and resilience unit/integration tests in the pure Rust core. The Tauri shell has no lib unit tests, so its synthetic lib/doctest target is disabled; validate that boundary with workspace check, strict Clippy, production Tauri build, executable smoke, frontend tests, and static privacy/IPC contract tests.
 
-## V18 Invalid-Date Provenance and Period Intersection (2026-08-26)
+## V18 Document-Completeness Boundary (2026-08-26)
 - Dropping unparseable-date rows during period filtering makes later field validation impossible. Retain them in a review-only collection that is never indexed for matching.
-- A review-only row must not force valid records back to the full session range. Preserve the safe intersection calculated from valid required-source evidence and append only the rejected row for diagnostics; otherwise a broad BK workbook can create false cross-period extras.
+- A required-source date intersection is not safe for a completeness control: it can hide the missing document that caused a source to start late or end early. Filter once to the explicit user period, keep source coverage as warning evidence, and compare the entire selected period. Bank reconciliation retains its distinct fail-closed intersection policy.
+- When a typed result is authoritative, do not materialize a second full legacy result in the same default pipeline. Preserve compatibility through an explicit legacy path or a lazy adapter, not duplicate execution.

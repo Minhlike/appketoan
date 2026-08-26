@@ -112,6 +112,7 @@ export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityRe
     ["Thừa BK", summary.extraInBk],
     ["Trùng Số ct", summary.duplicateInvoiceNumber],
     ["Mơ hồ", summary.ambiguousMatch],
+    ["Lifecycle cần rà soát", summary.invoiceLifecycleNeedsReview],
   ] as const;
 
   return (

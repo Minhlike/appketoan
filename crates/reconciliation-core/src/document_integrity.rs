@@ -4,7 +4,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::{CanonicalRecord, DataSource, ValueOrigin};
+use crate::{invoice_lifecycle_for_record, CanonicalRecord, DataSource, ValueOrigin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -23,6 +23,7 @@ pub enum DocumentErrorCode {
     InvalidAmount,
     MissingInTk511,
     ExtraInTk511,
+    InvoiceLifecycleNeedsReview,
 }
 
 impl DocumentErrorCode {
@@ -42,6 +43,7 @@ impl DocumentErrorCode {
             Self::InvalidAmount => "INVALID_AMOUNT",
             Self::MissingInTk511 => "MISSING_IN_TK511",
             Self::ExtraInTk511 => "EXTRA_IN_TK511",
+            Self::InvoiceLifecycleNeedsReview => "INVOICE_LIFECYCLE_NEEDS_REVIEW",
         }
     }
 }
@@ -136,6 +138,9 @@ pub struct DocumentIntegrityCase {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentIntegritySummary {
+    pub invoice_records: usize,
+    pub sales_register_records: usize,
+    pub ledger_511_records: usize,
     pub fully_matched: usize,
     pub date_mismatch: usize,
     pub invoice_number_mismatch: usize,
@@ -150,6 +155,7 @@ pub struct DocumentIntegritySummary {
     pub missing_invoice_number: usize,
     pub invalid_amount: usize,
     pub missing_in_tk511: usize,
+    pub invoice_lifecycle_needs_review: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,10 +178,20 @@ pub struct DocumentTotalCheck {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LedgerRevenueCheck {
+    pub invoice_total: Decimal,
+    pub ledger_total: Decimal,
+    pub variance: Decimal,
+    pub status: TotalsCheckStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DocumentIntegrityResult {
     pub summary: DocumentIntegritySummary,
     pub totals: Vec<DocumentTotalCheck>,
     pub totals_equal: bool,
+    pub ledger_511_revenue: LedgerRevenueCheck,
     pub documents_pass: bool,
     pub documents: Vec<DocumentIntegrityCase>,
 }
@@ -338,6 +354,30 @@ fn validate_document_record(
         ));
     }
     errors
+}
+
+fn validate_invoice_lifecycle(
+    source: &DataSource,
+    record: &CanonicalRecord,
+) -> Vec<DocumentIntegrityError> {
+    let Some(lifecycle) = invoice_lifecycle_for_record(record, &source.column_mapping) else {
+        // A source without a mapped lifecycle column retains the established
+        // compatibility behavior. Once mapped, unknown/non-regular values are
+        // always fail-closed by the shared typed lifecycle evaluator.
+        return Vec::new();
+    };
+    if lifecycle.is_regular() {
+        return Vec::new();
+    }
+    vec![error(
+        DocumentErrorCode::InvoiceLifecycleNeedsReview,
+        "HIGH",
+        format!(
+            "INVOICE_LIFECYCLE_NEEDS_REVIEW: trạng thái hóa đơn {:?} không được coi là hóa đơn thường.",
+            lifecycle
+        ),
+        vec![provenance(source, record)],
+    )]
 }
 
 fn validate_ledger_record(
@@ -634,6 +674,7 @@ pub fn evaluate_document_integrity(
             total_is_source_value(invoice),
         );
         let mut errors = validate_document_record(invoice_source.source, invoice, true);
+        errors.extend(validate_invoice_lifecycle(invoice_source.source, invoice));
         let mut checks = Vec::new();
         let mut linked_register = None;
         let mut linked_ledger = None;
@@ -955,11 +996,17 @@ pub fn evaluate_document_integrity(
         ));
     }
 
-    let summary = summarize(&documents);
+    let summary = summarize(
+        &documents,
+        invoice_source.records.len(),
+        register_source.records.len(),
+        ledger_source.records.len(),
+    );
     let totals = totals(invoice_source.records, register_source.records);
     let totals_equal = totals
         .iter()
         .all(|check| check.status == TotalsCheckStatus::Equal);
+    let ledger_511_revenue = ledger_revenue_total(invoice_source.records, ledger_source.records);
     let documents_pass = documents
         .iter()
         .all(|document| document.status == DocumentCaseStatus::FullyMatched);
@@ -967,12 +1014,18 @@ pub fn evaluate_document_integrity(
         summary,
         totals,
         totals_equal,
+        ledger_511_revenue,
         documents_pass,
         documents,
     }
 }
 
-fn summarize(documents: &[DocumentIntegrityCase]) -> DocumentIntegritySummary {
+fn summarize(
+    documents: &[DocumentIntegrityCase],
+    invoice_records: usize,
+    sales_register_records: usize,
+    ledger_511_records: usize,
+) -> DocumentIntegritySummary {
     let count_cases = |code| {
         documents
             .iter()
@@ -980,6 +1033,9 @@ fn summarize(documents: &[DocumentIntegrityCase]) -> DocumentIntegritySummary {
             .count()
     };
     DocumentIntegritySummary {
+        invoice_records,
+        sales_register_records,
+        ledger_511_records,
         fully_matched: documents
             .iter()
             .filter(|document| {
@@ -1008,6 +1064,40 @@ fn summarize(documents: &[DocumentIntegrityCase]) -> DocumentIntegritySummary {
         missing_invoice_number: count_cases(DocumentErrorCode::MissingInvoiceNumber),
         invalid_amount: count_cases(DocumentErrorCode::InvalidAmount),
         missing_in_tk511: count_cases(DocumentErrorCode::MissingInTk511),
+        invoice_lifecycle_needs_review: count_cases(DocumentErrorCode::InvoiceLifecycleNeedsReview),
+    }
+}
+
+fn ledger_revenue_total(
+    invoices: &[CanonicalRecord],
+    ledger: &[CanonicalRecord],
+) -> LedgerRevenueCheck {
+    let invoice_total = invoices
+        .iter()
+        .filter_map(|record| record.pretax_amount)
+        .sum();
+    let ledger_total = ledger
+        .iter()
+        .filter_map(|record| record.credit_amount)
+        .sum();
+    let variance = invoice_total - ledger_total;
+    let invalid = invoices
+        .iter()
+        .any(|record| strict_date(record).is_none() || record.pretax_amount.is_none())
+        || ledger
+            .iter()
+            .any(|record| strict_date(record).is_none() || record.credit_amount.is_none());
+    LedgerRevenueCheck {
+        invoice_total,
+        ledger_total,
+        variance,
+        status: if invalid {
+            TotalsCheckStatus::NotVerified
+        } else if variance.is_zero() {
+            TotalsCheckStatus::Equal
+        } else {
+            TotalsCheckStatus::Mismatch
+        },
     }
 }
 

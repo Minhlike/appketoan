@@ -42,6 +42,14 @@ const resultLabel = (status: ControlExecutionStatus) =>
     CANCELLED: "Đã dừng",
   })[status];
 
+const runStatusLabel = (status: AuditWorkspaceReport["runStatus"]) =>
+  ({
+    COMPLETED: "Đã hoàn tất",
+    PARTIAL: "Hoàn tất một phần",
+    FAILED: "Không thể hoàn tất",
+    CANCELLED: "Đã dừng",
+  })[status];
+
 const resultSummary = (controlId: string, metrics: Record<string, number>) => {
   if (controlId === "REVENUE_INVOICE_REGISTER_LEDGER") {
     return [
@@ -164,7 +172,7 @@ export function AuditWorkspaceDashboard({ sources, accountingPeriod, report }: P
           <div className="section-title-row">
             <h2 className="section-title">Kế hoạch kiểm tra</h2>
             <span className={`control-status status-${report.runStatus.toLowerCase()}`}>
-              {report.runStatus === "PARTIAL" ? "Hoàn tất một phần" : "Đã lập kế hoạch"}
+              {runStatusLabel(report.runStatus)}
             </span>
           </div>
           {report.controlPlans.map((control) => {

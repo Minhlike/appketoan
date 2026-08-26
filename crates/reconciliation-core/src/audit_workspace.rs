@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Instant;
 
@@ -664,6 +665,82 @@ pub fn plan_controls(catalog: &SourceCatalog) -> Vec<ControlPlan> {
         .collect()
 }
 
+fn apply_authoritative_revenue_period(
+    catalog: &SourceCatalog,
+    accounting_period: &AccountingPeriod,
+    plans: &mut [ControlPlan],
+) {
+    let required = [
+        SourceCapability::Invoice,
+        SourceCapability::SalesTransaction,
+        ledger_capability("511"),
+    ];
+    if required
+        .iter()
+        .any(|capability| sources_for_capability(catalog, capability).len() != 1)
+    {
+        return;
+    }
+    let Some(plan) = plans
+        .iter_mut()
+        .find(|plan| plan.control_id == REVENUE_CONTROL_ID)
+    else {
+        return;
+    };
+    if !plan.missing_capabilities.is_empty() {
+        return;
+    }
+
+    let matched = required
+        .iter()
+        .filter_map(|capability| source_for_capability(catalog, capability))
+        .collect::<Vec<_>>();
+    let missing_dates = matched
+        .iter()
+        .map(|source| source.period_evidence.missing_or_unparseable_dates)
+        .sum::<usize>();
+    let records_in_period = matched
+        .iter()
+        .map(|source| source.period_evidence.records_in_period)
+        .sum::<usize>();
+
+    // Source earliest/latest values are evidence only. They must never shrink
+    // the user-selected accounting period for document completeness controls.
+    plan.effective_period = Some(accounting_period.clone());
+    plan.warnings.clear();
+    for source in &matched {
+        match (
+            source.period_evidence.earliest_date.as_deref(),
+            source.period_evidence.latest_date.as_deref(),
+        ) {
+            (Some(earliest), Some(latest)) => plan.warnings.push(format!(
+                "SOURCE_PERIOD_EVIDENCE: {} có dữ liệu từ {} đến {}; boundary kiểm soát vẫn là kỳ người dùng chọn {} đến {}.",
+                source.source_name,
+                earliest,
+                latest,
+                accounting_period.start_date,
+                accounting_period.end_date
+            )),
+            _ => plan.warnings.push(format!(
+                "SOURCE_PERIOD_EVIDENCE: {} không có đủ date evidence trong kỳ; boundary kiểm soát vẫn là kỳ người dùng chọn.",
+                source.source_name
+            )),
+        }
+    }
+    if missing_dates > 0 {
+        plan.warnings.push(format!(
+            "PERIOD_DATE_NEEDS_REVIEW: {missing_dates} record thiếu hoặc không đọc được ngày."
+        ));
+        plan.status = ControlPlanStatus::NeedsReview;
+    } else if records_in_period == 0 {
+        plan.status = ControlPlanStatus::NotApplicable;
+    } else {
+        // A required source with no rows in the selected period is executable
+        // evidence of missing documents, not a reason to suppress the control.
+        plan.status = ControlPlanStatus::Ready;
+    }
+}
+
 pub fn prepare_audit_session(
     session_id: String,
     accounting_period: AccountingPeriod,
@@ -781,7 +858,8 @@ pub fn prepare_audit_session(
         .map(|source| source.normalized_record_count)
         .sum();
     let planning_started = Instant::now();
-    let control_plans = plan_controls(&catalog);
+    let mut control_plans = plan_controls(&catalog);
+    apply_authoritative_revenue_period(&catalog, &accounting_period, &mut control_plans);
     metrics.stages.control_planning_ms = planning_started.elapsed().as_millis() as u64;
     metrics.stages.total_backend_ms = prepare_started.elapsed().as_millis() as u64;
     Ok(AuditSession {
@@ -1068,11 +1146,11 @@ fn reconciliation_control_result(
     }
 }
 
-fn document_records_for_capability(
-    audit: &AuditSession,
+fn document_records_for_capability<'a>(
+    audit: &'a AuditSession,
     plan: &ControlPlan,
     capability: &SourceCapability,
-) -> Result<(DataSource, Vec<CanonicalRecord>), String> {
+) -> Result<(&'a DataSource, Cow<'a, [CanonicalRecord]>), String> {
     let catalog_entry = source_for_capability(&audit.source_catalog, capability)
         .ok_or_else(|| format!("CAPABILITY_MISSING: {}", capability.display_name()))?;
     if !plan.source_ids.contains(&catalog_entry.source_id) {
@@ -1081,39 +1159,44 @@ fn document_records_for_capability(
             catalog_entry.source_id
         ));
     }
-    let source = source_by_id(audit, &catalog_entry.source_id)?.clone();
+    let source = source_by_id(audit, &catalog_entry.source_id)?;
     let prepared = audit
         .normalized_datasets
         .transactional
         .get(&catalog_entry.source_id)
         .ok_or_else(|| format!("TRANSACTION_DATASET_MISSING: {}", catalog_entry.source_id))?;
-    let period = plan
-        .effective_period
-        .as_ref()
-        .unwrap_or(&audit.accounting_period);
-    let (start, end) = period.validate()?;
+    // `PreparedSourceIndex.records` was already filtered once by the
+    // authoritative session period. Borrow the full prepared slice whenever
+    // the source capability owns every record, avoiding a second 100k clone.
+    let capability_owns_all = prepared
+        .records
+        .iter()
+        .all(|record| record_belongs_to_capability(record, capability, &source.kind));
+    if capability_owns_all && prepared.review_records.is_empty() {
+        return Ok((source, Cow::Borrowed(&prepared.records)));
+    }
     let mut records: Vec<CanonicalRecord> = prepared
         .records
         .iter()
-        .filter(|record| {
-            let in_period = effective_record_date(record)
-                .and_then(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok())
-                .is_some_and(|date| date >= start && date <= end);
-            in_period && record_belongs_to_capability(record, capability, &source.kind)
-        })
+        .filter(|record| record_belongs_to_capability(record, capability, &source.kind))
         .cloned()
         .collect();
     // These records failed the period-date boundary and therefore can only be
     // validated/reviewed. They are deliberately absent from every matcher
     // index, but V18 still reports their field-level provenance.
-    records.extend(prepared.review_records.iter().cloned());
-    Ok((source, records))
+    records.extend(
+        prepared
+            .review_records
+            .iter()
+            .filter(|record| record_belongs_to_capability(record, capability, &source.kind))
+            .cloned(),
+    );
+    Ok((source, Cow::Owned(records)))
 }
 
 fn document_integrity_control_result(
     definition: &ControlDefinition,
     plan: &ControlPlan,
-    reconciliation_result: ReconciliationResult,
     audit: &AuditSession,
 ) -> Result<ControlResult, String> {
     let (invoice_source, invoices) =
@@ -1124,15 +1207,15 @@ fn document_integrity_control_result(
     let (ledger_source, ledger) = document_records_for_capability(audit, plan, &ledger_capability)?;
     let document_result = crate::evaluate_document_integrity(
         DocumentIntegritySource {
-            source: &invoice_source,
+            source: invoice_source,
             records: &invoices,
         },
         DocumentIntegritySource {
-            source: &register_source,
+            source: register_source,
             records: &registers,
         },
         DocumentIntegritySource {
-            source: &ledger_source,
+            source: ledger_source,
             records: &ledger,
         },
     );
@@ -1149,6 +1232,15 @@ fn document_integrity_control_result(
         .collect();
     let summary = &document_result.summary;
     let summary_metrics = BTreeMap::from([
+        ("invoiceRecords".to_string(), summary.invoice_records as u64),
+        (
+            "salesRegisterRecords".to_string(),
+            summary.sales_register_records as u64,
+        ),
+        (
+            "ledger511Records".to_string(),
+            summary.ledger_511_records as u64,
+        ),
         ("fullyMatched".to_string(), summary.fully_matched as u64),
         ("dateMismatch".to_string(), summary.date_mismatch as u64),
         (
@@ -1175,6 +1267,10 @@ fn document_integrity_control_result(
             "missingInTk511".to_string(),
             summary.missing_in_tk511 as u64,
         ),
+        (
+            "invoiceLifecycleNeedsReview".to_string(),
+            summary.invoice_lifecycle_needs_review as u64,
+        ),
     ]);
     Ok(ControlResult {
         control_id: definition.id.clone(),
@@ -1187,6 +1283,7 @@ fn document_integrity_control_result(
             format!("documents_pass={}", document_result.documents_pass),
             format!("totals_equal={}", document_result.totals_equal),
             format!("fully_matched={}", summary.fully_matched),
+            "legacy_reconciliation_materialized=false".to_string(),
         ],
         findings,
         source_ids: plan.source_ids.clone(),
@@ -1199,7 +1296,7 @@ fn document_integrity_control_result(
             "TK511_RECEIVABLE_NOT_CHECKED".to_string(),
         ],
         error: None,
-        reconciliation_result: Some(reconciliation_result),
+        reconciliation_result: None,
         document_integrity_result: Some(document_result),
     })
 }
@@ -1432,11 +1529,11 @@ pub fn execute_audit_session_with_cancellation(
         let revenue_date_validation_run = plan.control_id == REVENUE_CONTROL_ID
             && plan.status == ControlPlanStatus::NeedsReview
             && plan.missing_capabilities.is_empty()
-            && !plan.warnings.is_empty()
-            && plan.warnings.iter().all(|warning| {
-                warning.contains("PERIOD_DATE_NEEDS_REVIEW")
-                    || warning.contains("PERIOD_INTERSECTION_EMPTY")
-            });
+            && plan.effective_period.is_some()
+            && plan
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("PERIOD_DATE_NEEDS_REVIEW"));
         if plan.status != ControlPlanStatus::Ready && !revenue_date_validation_run {
             control_results.push(not_run_result(plan));
             continue;
@@ -1452,16 +1549,9 @@ pub fn execute_audit_session_with_cancellation(
                 .get(&plan.control_id)
                 .ok_or_else(|| format!("CONTROL_DEFINITION_NOT_FOUND: {}", plan.control_id))?;
             match executable_plan.control_id.as_str() {
-                REVENUE_CONTROL_ID => compile_transaction_control(
-                    &audit,
-                    definition,
-                    executable_plan,
-                    Decimal::ZERO,
-                    0,
-                )
-                .and_then(|result| {
-                    document_integrity_control_result(definition, executable_plan, result, &audit)
-                }),
+                REVENUE_CONTROL_ID => {
+                    document_integrity_control_result(definition, executable_plan, &audit)
+                }
                 BANK_CONTROL_ID => compile_transaction_control(
                     &audit,
                     definition,

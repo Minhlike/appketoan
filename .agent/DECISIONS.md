@@ -71,3 +71,7 @@
 ## Decision 016: Dedicated Fail-Closed Document Integrity Control
 - **Decision**: Keep the generic matcher unchanged for other controls and add a deterministic document-integrity evaluator for Invoice/Sales Register/TK511. Validate BK before matching, use exact five-field Thuế/BK checks, require non-amount evidence for diagnostic links, retain invalid-date rows outside auto-match indexes, and keep total equality independent from document PASS.
 - **Rationale**: Configurable transactional tolerance and amount-oriented matching cannot prove document identity. A separate typed result preserves V17 cache/provenance/error boundaries while preventing duplicates, compensating totals, and diagnostic links from becoming accepted evidence. See ADR 0013.
+
+## Decision 017: User Period Is Authoritative for Document Completeness
+- **Decision**: For `REVENUE_INVOICE_REGISTER_LEDGER`, reconcile the full user-selected `AccountingPeriod`; use source earliest/latest only as evidence. Run only the typed document evaluator in Audit Workspace and leave the optional legacy result absent. Preserve the generic matcher in advanced scenarios and preserve bank intersection fail-closed behavior.
+- **Rationale**: Intersecting source coverage can hide missing first/last-period documents. Materializing two full revenue result graphs duplicates work and memory without adding authority. See ADR 0014.

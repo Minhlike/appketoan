@@ -123,3 +123,15 @@
 - `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
 - `npx tauri build`: SUCCESS; production frontend, release executable, MSI, and NSIS completed. Fresh release executable five-second smoke: SUCCESS.
 - The final debug 100k reuse benchmark completed in 78.20 seconds while materializing both V18 and legacy compatibility results. Automated browser visual inspection was not rerun and remains NOT VERIFIED.
+
+### 16. V18 Final Correctness and Windows RC Gate (2026-08-26)
+- `cargo test --workspace`: SUCCESS; 134 executed Rust tests passed and two confidential local harnesses were ignored by default. The existing GNU WebView2 linker warning remained non-fatal.
+- Explicit `local_real_acceptance_test`: SUCCESS; immutable baseline and bank classification conservation remained unchanged.
+- Explicit `local_v16_acceptance_test`: SUCCESS; #233 remained high-priority review, partner/sales controls passed, and authoritative period handling exposed beginning-of-period BK evidence previously hidden by intersection.
+- Boundary/lifecycle suite: SUCCESS; four period adversarial cases, one multi-lifecycle regression, and an independent bank-period fail-closed regression passed.
+- 100k debug benchmark: SUCCESS; cold total 7.80s, warm execution 7.44s, exact typed document count preserved. Same-machine reproduced pre-fix cold total was 13.43s; reviewed historical gate was 78.20s.
+- Sampled benchmark working set: 1,365,471,232 bytes after versus 2,355,978,240 bytes reproduced before. This is a single debug test-process sample, not production median/p95.
+- `npm run test`: SUCCESS (29/29 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh portable, MSI, and NSIS artifacts all had post-build timestamps. Fresh portable executable five-second smoke: SUCCESS.
+- RC SHA256 values are recorded in `REPORT_V18_FINAL_RC.md`. Generated artifacts and confidential workbooks remain ignored. Automated browser visual inspection remains NOT VERIFIED.

@@ -117,7 +117,16 @@
 ## V18 Document Integrity / Field-Level Reconciliation — 2026-08-26
 - Branch: `codex/v18-document-integrity`, based exactly on the reviewed V17 head. Stacked PR #4 (`https://github.com/Minhlike/appketoan/pull/4`) targets `codex/v17-resilience-ui-foundation`; neither PR may be merged by the agent.
 - `document_integrity.rs` is the authoritative pure-Rust evaluator for Invoice/Sales Register/TK511. It validates BK first, marks all duplicate rows, uses exact field checks, allows only unique strong diagnostic links, and separates totals from document PASS.
-- `PreparedSourceIndex.review_records` retains missing/unparseable-date rows outside every auto-match index. Planner status stays `NEEDS_REVIEW`; valid evidence retains its narrow effective period.
+- `PreparedSourceIndex.review_records` retains missing/unparseable-date rows outside every auto-match index. ADR 0014 supersedes the initial intersection rule for document completeness: the explicit user period is authoritative, while bank matching retains its distinct fail-closed intersection.
 - `ControlResult.document_integrity_result` is wired through Tauri serialization into the Audit Workspace. The existing Review Queue receives each typed error; selecting a row opens side-by-side provenance and field checks.
 - The unchanged record-count oracle and #233 review condition passed against ignored local workbooks. One BK row has no parseable required date, so period totals are correctly `NOT_VERIFIED`.
-- All mandatory gates and release executable smoke passed. Generated artifacts and confidential workbooks remain ignored. The 100k compatibility path is slower because V18 and the legacy result are both materialized; do not optimize or remove the legacy contract without a separate reviewed task.
+- Initial V18 gates passed, but the final RC task superseded the initial performance/period conclusions. See the final block below.
+
+## V18 Final Correctness Fix and RC — 2026-08-26
+- Continued on PR #4 from reviewed head `a759d8a1a10f0d093b694bcf571546ba780eefd3`; do not merge.
+- Revenue document completeness now covers the full user-selected accounting period. Four synthetic boundary regressions prove late/early source evidence cannot produce false PASS; bank period behavior has an explicit fail-closed regression.
+- The existing typed invoice lifecycle evaluator is reused. Adjusted, affected-by-adjustment, replaced, cancelled, and unknown mapped values emit `INVOICE_LIFECYCLE_NEEDS_REVIEW` and never become fully matched.
+- Audit Workspace revenue no longer materializes a second generic reconciliation result. Prepared datasets are borrowed when possible; advanced legacy scenario execution is unchanged.
+- The 100k debug benchmark improved to 7.80 seconds cold total and 7.44 seconds warm execution. Sampled peak working set fell to about 1.30 GiB; see `REPORT_V18_FINAL_RC.md` for measurement caveats.
+- Both confidential local harnesses and all mandatory source/UI/build gates passed. The authoritative period exposed beginning-of-period BK evidence that the prior intersection had hidden; it remains review evidence, not a hard-coded oracle.
+- Fresh portable, NSIS, and MSI artifacts were rebuilt, hashed, and kept ignored. The fresh portable executable passed a five-second smoke run. Stop for final ChatGPT review.

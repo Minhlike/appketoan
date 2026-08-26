@@ -701,6 +701,330 @@ fn audit_workspace_enforces_strict_document_date_despite_session_tolerance() {
     );
 }
 
+fn execute_period_boundary_case(
+    invoices: Vec<CanonicalRecord>,
+    registers: Vec<CanonicalRecord>,
+    ledgers: Vec<CanonicalRecord>,
+) -> reconciliation_core::ControlResult {
+    let audit = prepare_audit_session(
+        "period-boundary".to_string(),
+        AccountingPeriod {
+            start_date: "2026-07-01".to_string(),
+            end_date: "2026-07-31".to_string(),
+        },
+        vec![
+            source("invoice", DataSourceKind::EInvoice),
+            source("register", DataSourceKind::SalesRegister),
+            source("ledger", DataSourceKind::Ledger511),
+        ],
+        HashMap::from([
+            ("invoice".to_string(), invoices),
+            ("register".to_string(), registers),
+            ("ledger".to_string(), ledgers),
+        ]),
+        HashMap::new(),
+        HashMap::new(),
+        HashMap::new(),
+    )
+    .expect("prepare boundary audit");
+    let revenue_plan = audit
+        .control_plans
+        .iter()
+        .find(|plan| plan.control_id == REVENUE_CONTROL_ID)
+        .expect("revenue plan");
+    assert_eq!(
+        revenue_plan.effective_period,
+        Some(AccountingPeriod {
+            start_date: "2026-07-01".to_string(),
+            end_date: "2026-07-31".to_string(),
+        })
+    );
+    reconciliation_core::execute_audit_session(audit, Decimal::ZERO, 0)
+        .expect("execute boundary audit")
+        .control_results
+        .into_iter()
+        .find(|result| result.control_id == REVENUE_CONTROL_ID)
+        .expect("revenue result")
+}
+
+#[test]
+fn accounting_period_reports_missing_bk_on_first_day() {
+    let result = execute_period_boundary_case(
+        vec![
+            transaction(
+                "invoice-first",
+                "invoice",
+                Some("100"),
+                Some("2026-07-01"),
+                Some(dec!(100)),
+                Some(dec!(10)),
+                dec!(110),
+            ),
+            transaction(
+                "invoice-mid",
+                "invoice",
+                Some("101"),
+                Some("2026-07-15"),
+                Some(dec!(200)),
+                Some(dec!(20)),
+                dec!(220),
+            ),
+        ],
+        vec![transaction(
+            "register-mid",
+            "register",
+            Some("101"),
+            Some("2026-07-15"),
+            Some(dec!(200)),
+            Some(dec!(20)),
+            dec!(220),
+        )],
+        vec![
+            ledger("ledger-first", "100", "2026-07-01", dec!(100)),
+            ledger("ledger-mid", "101", "2026-07-15", dec!(200)),
+        ],
+    );
+    let integrity = result.document_integrity_result.expect("document result");
+    assert_eq!(result.status, ControlExecutionStatus::NeedsReview);
+    assert_eq!(integrity.summary.missing_in_bk, 1);
+    assert!(integrity.documents.iter().any(|document| {
+        document
+            .invoice
+            .as_ref()
+            .and_then(|row| row.invoice_number.as_deref())
+            == Some("100")
+            && document
+                .errors
+                .iter()
+                .any(|error| error.code == DocumentErrorCode::MissingInBk)
+    }));
+}
+
+#[test]
+fn accounting_period_reports_missing_bk_on_last_day() {
+    let result = execute_period_boundary_case(
+        vec![
+            transaction(
+                "invoice-mid",
+                "invoice",
+                Some("101"),
+                Some("2026-07-15"),
+                Some(dec!(200)),
+                Some(dec!(20)),
+                dec!(220),
+            ),
+            transaction(
+                "invoice-last",
+                "invoice",
+                Some("102"),
+                Some("2026-07-31"),
+                Some(dec!(300)),
+                Some(dec!(30)),
+                dec!(330),
+            ),
+        ],
+        vec![transaction(
+            "register-mid",
+            "register",
+            Some("101"),
+            Some("2026-07-15"),
+            Some(dec!(200)),
+            Some(dec!(20)),
+            dec!(220),
+        )],
+        vec![
+            ledger("ledger-mid", "101", "2026-07-15", dec!(200)),
+            ledger("ledger-last", "102", "2026-07-31", dec!(300)),
+        ],
+    );
+    let integrity = result.document_integrity_result.expect("document result");
+    assert_eq!(result.status, ControlExecutionStatus::NeedsReview);
+    assert_eq!(integrity.summary.missing_in_bk, 1);
+    assert!(integrity.documents.iter().any(|document| {
+        document
+            .invoice
+            .as_ref()
+            .and_then(|row| row.invoice_number.as_deref())
+            == Some("102")
+            && document
+                .errors
+                .iter()
+                .any(|error| error.code == DocumentErrorCode::MissingInBk)
+    }));
+}
+
+#[test]
+fn accounting_period_reports_missing_tk511_on_boundary() {
+    let result = execute_period_boundary_case(
+        vec![
+            transaction(
+                "invoice-first",
+                "invoice",
+                Some("100"),
+                Some("2026-07-01"),
+                Some(dec!(100)),
+                Some(dec!(10)),
+                dec!(110),
+            ),
+            transaction(
+                "invoice-mid",
+                "invoice",
+                Some("101"),
+                Some("2026-07-15"),
+                Some(dec!(200)),
+                Some(dec!(20)),
+                dec!(220),
+            ),
+        ],
+        vec![
+            transaction(
+                "register-first",
+                "register",
+                Some("100"),
+                Some("2026-07-01"),
+                Some(dec!(100)),
+                Some(dec!(10)),
+                dec!(110),
+            ),
+            transaction(
+                "register-mid",
+                "register",
+                Some("101"),
+                Some("2026-07-15"),
+                Some(dec!(200)),
+                Some(dec!(20)),
+                dec!(220),
+            ),
+        ],
+        vec![ledger("ledger-mid", "101", "2026-07-15", dec!(200))],
+    );
+    let integrity = result.document_integrity_result.expect("document result");
+    assert_eq!(result.status, ControlExecutionStatus::NeedsReview);
+    assert_eq!(integrity.summary.missing_in_tk511, 1);
+    assert!(integrity.documents.iter().any(|document| {
+        document
+            .invoice
+            .as_ref()
+            .and_then(|row| row.invoice_number.as_deref())
+            == Some("100")
+            && document
+                .errors
+                .iter()
+                .any(|error| error.code == DocumentErrorCode::MissingInTk511)
+    }));
+}
+
+#[test]
+fn late_start_and_early_end_sources_are_evidence_not_reconciliation_boundaries() {
+    let result = execute_period_boundary_case(
+        vec![
+            transaction(
+                "invoice-first",
+                "invoice",
+                Some("100"),
+                Some("2026-07-01"),
+                Some(dec!(100)),
+                Some(dec!(10)),
+                dec!(110),
+            ),
+            transaction(
+                "invoice-mid",
+                "invoice",
+                Some("101"),
+                Some("2026-07-15"),
+                Some(dec!(200)),
+                Some(dec!(20)),
+                dec!(220),
+            ),
+            transaction(
+                "invoice-last",
+                "invoice",
+                Some("102"),
+                Some("2026-07-31"),
+                Some(dec!(300)),
+                Some(dec!(30)),
+                dec!(330),
+            ),
+        ],
+        vec![transaction(
+            "register-mid",
+            "register",
+            Some("101"),
+            Some("2026-07-15"),
+            Some(dec!(200)),
+            Some(dec!(20)),
+            dec!(220),
+        )],
+        vec![ledger("ledger-mid", "101", "2026-07-15", dec!(200))],
+    );
+    let integrity = result.document_integrity_result.expect("document result");
+    assert!(!integrity.documents_pass);
+    assert_eq!(integrity.summary.missing_in_bk, 2);
+    assert_eq!(integrity.summary.missing_in_tk511, 2);
+}
+
+#[test]
+fn non_regular_invoice_lifecycle_never_becomes_fully_matched() {
+    for (index, lifecycle) in [
+        "Hóa đơn điều chỉnh",
+        "Hóa đơn bị điều chỉnh",
+        "Hóa đơn thay thế",
+        "Hóa đơn hủy",
+        "Trạng thái lạ",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut invoice_source = source("invoice", DataSourceKind::EInvoice);
+        invoice_source.column_mapping.invoice_status_column = Some("status".to_string());
+        let register_source = source("register", DataSourceKind::SalesRegister);
+        let ledger_source = source("ledger", DataSourceKind::Ledger511);
+        let mut invoice = transaction(
+            "invoice-1",
+            "invoice",
+            Some("100"),
+            Some("2026-07-15"),
+            Some(dec!(100)),
+            Some(dec!(10)),
+            dec!(110),
+        );
+        invoice
+            .raw_fields
+            .insert("status".to_string(), lifecycle.to_string());
+        let register = transaction(
+            "register-1",
+            "register",
+            Some("100"),
+            Some("2026-07-15"),
+            Some(dec!(100)),
+            Some(dec!(10)),
+            dec!(110),
+        );
+        let ledger = ledger("ledger-1", "100", "2026-07-15", dec!(100));
+        let result = evaluate_document_integrity(
+            DocumentIntegritySource {
+                source: &invoice_source,
+                records: &[invoice],
+            },
+            DocumentIntegritySource {
+                source: &register_source,
+                records: &[register],
+            },
+            DocumentIntegritySource {
+                source: &ledger_source,
+                records: &[ledger],
+            },
+        );
+        assert!(!result.documents_pass, "case {index}: {lifecycle}");
+        assert_eq!(result.summary.fully_matched, 0, "case {index}: {lifecycle}");
+        assert_eq!(
+            result.summary.invoice_lifecycle_needs_review, 1,
+            "case {index}: {lifecycle}"
+        );
+        assert!(codes(&result).contains(&DocumentErrorCode::InvoiceLifecycleNeedsReview));
+    }
+}
+
 #[test]
 fn malformed_bk_row_survives_normalization_and_review_plan_executes_validation() {
     let mut register_source = source("register", DataSourceKind::SalesRegister);

@@ -10,6 +10,7 @@ This directory contains system architecture diagrams, module breakdown, IPC cont
 - [ADR 0011: Bounded In-Process Prepared Source Cache](adr/0011-bounded-in-process-prepared-source-cache.md)
 - [ADR 0012: Audit Workspace UI and Unified Review Queue](adr/0012-audit-workspace-ui-and-review-queue.md)
 - [ADR 0013: Fail-Closed Document Integrity Matching](adr/0013-document-integrity-fail-closed-matching.md)
+- [ADR 0014: Authoritative Document Period and Single Revenue Evaluator](adr/0014-authoritative-document-period-and-single-evaluator.md)
 
 ## V16
 
