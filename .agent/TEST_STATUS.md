@@ -115,3 +115,11 @@
 - Equivalent debug benchmark evidence is recorded in the V17 architecture note; it is one iteration and is not labeled median/p95. Peak memory remains unmeasured.
 - `npx tauri build`: SUCCESS; fresh ignored MSI/NSIS and release executable generated. Five-second release executable smoke: SUCCESS.
 - Automated local browser visual inspection: NOT VERIFIED because the Codex browser runtime could not initialize its local kernel assets. Component behavior tests, production frontend build, Tauri build, and executable smoke passed; no substitute automation was misreported as visual evidence.
+
+### 15. V18 Document Integrity / Field-Level Gate (2026-08-26)
+- `cargo test --workspace`: SUCCESS; 129 executed tests passed, including 13 V18 adversarial/integration tests. Two confidential local harnesses remained ignored by the default command. The known GNU WebView2 linker warning remained non-fatal.
+- Explicit ignored local acceptance: SUCCESS. The immutable record-count and #233 oracles passed. V18 asserted 45 fully matched documents, no valid-period missing/extra BK document, one missing TK511 document, and one review-only BK invalid-date row. Period totals are fail-closed `NOT_VERIFIED`.
+- `npm run test`: SUCCESS (27/27 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build`: SUCCESS; production frontend, release executable, MSI, and NSIS completed. Fresh release executable five-second smoke: SUCCESS.
+- The final debug 100k reuse benchmark completed in 78.20 seconds while materializing both V18 and legacy compatibility results. Automated browser visual inspection was not rerun and remains NOT VERIFIED.

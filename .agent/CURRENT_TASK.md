@@ -1,7 +1,7 @@
 # Current Task
 
 ## Task Name
-V17 — FUTURE-READY PRODUCT / RESILIENCE / UI FOUNDATION
+V18 — DOCUMENT INTEGRITY & FIELD-LEVEL RECONCILIATION
 
 ## Objectives & Status
 1. [x] Migrate all monetary values to `rust_decimal::Decimal` (eliminating `f64` float rounding issues across ingestion, models, rules, engine, discrepancies, and export).
@@ -36,7 +36,7 @@ V17 — FUTURE-READY PRODUCT / RESILIENCE / UI FOUNDATION
 5. [x] Kept generated portable artifacts out of source control.
 
 ## Next Task
-V17 is implemented and verified on `codex/v17-resilience-ui-foundation`. Publish it as a PR stacked on `codex/v16-control-planner`, then stop for ChatGPT source/diff review. Do not merge either PR, add TK131/TK3331 behavior, or begin another feature.
+V18 is implemented and verified on `codex/v18-document-integrity`. Publish it as a PR stacked on `codex/v17-resilience-ui-foundation`, then stop for ChatGPT source/diff review. Do not merge PR #3 or V18, add TK131/TK3331 behavior, or begin another feature.
 
 ## V16 Objectives & Status
 1. [x] Add an explicit-period `AuditSession`, `SourceCatalog`, normalized dataset cache, prepared source indexes, and `ControlPlan` collection.
@@ -59,3 +59,14 @@ V17 is implemented and verified on `codex/v17-resilience-ui-foundation`. Publish
 7. [x] Add resilience, cache, privacy, source-order, invalid-date, and frontend behavior tests.
 8. [x] Preserve all V15/V16 correctness and local acceptance policies.
 9. [x] Complete Rust/frontend/type/format/Clippy/build/smoke gates without tracking confidential or generated artifacts.
+
+## V18 Objectives & Status
+1. [x] Validate BK document number/date/three monetary fields before matching and mark every duplicate row.
+2. [x] Enforce strict exact five-field Thuế/BK reconciliation with multiple simultaneous typed errors.
+3. [x] Prevent amount-only identity and keep unique strong-evidence number/date diagnostics review-only.
+4. [x] Check TK511 date/document/credit separately while rendering VAT/receivable as `NOT_CHECKED`.
+5. [x] Keep total equality independent from document PASS and preserve #233 as high-priority review.
+6. [x] Add the ten-category summary, document table, side-by-side detail, and Review Queue findings.
+7. [x] Add synthetic duplicate/date/number/money/missing/extra/ambiguous/totals/cancellation/partial/bank regressions.
+8. [x] Run ignored local acceptance without committing workbooks and preserve the immutable record-count oracle.
+9. [x] Complete Rust/frontend/type/format/Clippy/Tauri build/executable smoke gates.

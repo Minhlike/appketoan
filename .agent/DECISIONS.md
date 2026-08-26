@@ -67,3 +67,7 @@
 ## Decision 015: Accounting-First Default UI
 - **Decision**: Use a four-step Vietnamese audit workspace and unified actionable review queue as the default; keep role/scenario controls in the preserved advanced workflow.
 - **Rationale**: Accounting users should understand what is present, missing, reviewed, and actionable without learning engine terminology. See ADR 0012.
+
+## Decision 016: Dedicated Fail-Closed Document Integrity Control
+- **Decision**: Keep the generic matcher unchanged for other controls and add a deterministic document-integrity evaluator for Invoice/Sales Register/TK511. Validate BK before matching, use exact five-field Thuế/BK checks, require non-amount evidence for diagnostic links, retain invalid-date rows outside auto-match indexes, and keep total equality independent from document PASS.
+- **Rationale**: Configurable transactional tolerance and amount-oriented matching cannot prove document identity. A separate typed result preserves V17 cache/provenance/error boundaries while preventing duplicates, compensating totals, and diagnostic links from becoming accepted evidence. See ADR 0013.

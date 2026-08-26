@@ -113,3 +113,11 @@
 - Native drag/drop sends local file paths; file-picker/browser fallback still uses byte arrays. The backend enforces duplicate, lock-file, and source-size policies regardless of UI path.
 - Full local acceptance and mandatory release gates passed. Exact benchmark numbers and limitations are recorded in `docs/04-architecture/04-v17-resilience-ui-foundation.md`.
 - Generated release artifacts and local accounting workbooks remain ignored. Stop after pushing the stacked PR for ChatGPT source/diff review.
+
+## V18 Document Integrity / Field-Level Reconciliation — 2026-08-26
+- Branch: `codex/v18-document-integrity`, based exactly on the reviewed V17 head. PR must target `codex/v17-resilience-ui-foundation`; neither PR may be merged by the agent.
+- `document_integrity.rs` is the authoritative pure-Rust evaluator for Invoice/Sales Register/TK511. It validates BK first, marks all duplicate rows, uses exact field checks, allows only unique strong diagnostic links, and separates totals from document PASS.
+- `PreparedSourceIndex.review_records` retains missing/unparseable-date rows outside every auto-match index. Planner status stays `NEEDS_REVIEW`; valid evidence retains its narrow effective period.
+- `ControlResult.document_integrity_result` is wired through Tauri serialization into the Audit Workspace. The existing Review Queue receives each typed error; selecting a row opens side-by-side provenance and field checks.
+- The unchanged record-count oracle and #233 review condition passed against ignored local workbooks. One BK row has no parseable required date, so period totals are correctly `NOT_VERIFIED`.
+- All mandatory gates and release executable smoke passed. Generated artifacts and confidential workbooks remain ignored. The 100k compatibility path is slower because V18 and the legacy result are both materialized; do not optimize or remove the legacy contract without a separate reviewed task.

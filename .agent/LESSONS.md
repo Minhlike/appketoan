@@ -27,3 +27,7 @@
 ## V17 GNU Tauri Test Harness Boundary (2026-08-26)
 - Adding managed Tauri runtime state can make the synthetic library test harness load WebView2 symbols and fail before running tests with `STATUS_ENTRYPOINT_NOT_FOUND` on the supported GNU toolchain.
 - Keep accounting and resilience unit/integration tests in the pure Rust core. The Tauri shell has no lib unit tests, so its synthetic lib/doctest target is disabled; validate that boundary with workspace check, strict Clippy, production Tauri build, executable smoke, frontend tests, and static privacy/IPC contract tests.
+
+## V18 Invalid-Date Provenance and Period Intersection (2026-08-26)
+- Dropping unparseable-date rows during period filtering makes later field validation impossible. Retain them in a review-only collection that is never indexed for matching.
+- A review-only row must not force valid records back to the full session range. Preserve the safe intersection calculated from valid required-source evidence and append only the rejected row for diagnostics; otherwise a broad BK workbook can create false cross-period extras.
