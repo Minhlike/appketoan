@@ -156,3 +156,12 @@
 - `npx tauri build --no-bundle`: SUCCESS. The known GNU `.drectve` linker warning remained non-fatal.
 - Rendered portable smoke: SUCCESS; 72 UI elements and `APPKETOAN_UI_READY` were observed, with no bootstrap failure screen.
 - Portable SHA256: `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`.
+
+### 19. V18 Two-Source Document Control Gate (2026-08-26)
+- Synthetic two-source planner/execution regression: PASS; Invoice-to-Register executes without TK511, missing capability is preserved, all ledger fields are `NOT_CHECKED`, and overall PASS is impossible.
+- Ignored local two-source acceptance for the user-selected period: PASS; both recognized sources produced exact document evidence and TK511 remained unverified. No workbook data was committed.
+- Full `cargo test --workspace`: SUCCESS; 137 executed tests passed, with two confidential harnesses ignored by default.
+- `npm run test`: SUCCESS (32/32 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check` and strict workspace Clippy: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS; rendered portable smoke passed with 72 UI elements.
+- Portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`.

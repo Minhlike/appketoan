@@ -53,7 +53,8 @@ const runStatusLabel = (status: AuditWorkspaceReport["runStatus"]) =>
 const resultSummary = (controlId: string, metrics: Record<string, number>) => {
   if (controlId === "REVENUE_INVOICE_REGISTER_LEDGER") {
     return [
-      `Khớp hoàn toàn: ${metrics.fullyMatched || 0}`,
+      `Thuế ↔ BK khớp chính xác: ${metrics.invoiceSalesRegisterExact || 0}`,
+      `Khớp đủ 3 nguồn: ${metrics.fullyMatched || 0}`,
       `Sai ngày: ${metrics.dateMismatch || 0}`,
       `Sai số HĐ: ${metrics.invoiceNumberMismatch || 0}`,
       `Sai tiền/VAT/Phải thu: ${(metrics.pretaxMismatch || 0)}/${(metrics.vatMismatch || 0)}/${(metrics.totalMismatch || 0)}`,

@@ -144,3 +144,10 @@
 - Regression coverage includes exact Rust JSON shape and rendering a legacy partial payload with both collections omitted. No control is promoted to PASS.
 - Full source gate and both ignored local acceptance harnesses passed. The portable EXE was rebuilt without installers and passed rendered-UI smoke with 72 UI elements.
 - Current local-only portable: `target/release/appketoan.exe`; SHA256 `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`. Await the user's reproduction test; do not merge PR #4.
+
+## V18 Two-Source Document Control Correction — 2026-08-26
+- A user run with only Invoice and Sales Register exposed that the tri-source planner returned `NOT_RUN` solely because TK511 was absent, suppressing valid two-source evidence.
+- ADR 0015 makes Invoice plus Sales Register the minimum executable set while keeping TK511 required for complete assurance. Missing TK511 remains in plan/result capability evidence; every ledger field is `NOT_CHECKED`; `documentsPass` and the control remain fail-closed.
+- The result distinguishes exact Invoice-to-Register pairs from fully matched three-source documents. A missing ledger source is not misreported as every individual document being absent from TK511.
+- The Review Queue now omits unrelated controls with no loaded source while the full Control Plan still shows them.
+- Synthetic regression, ignored local two-source acceptance, full source gates, portable build, and rendered smoke passed. Current portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`. PR #4 remains unmerged.

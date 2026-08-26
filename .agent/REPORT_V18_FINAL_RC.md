@@ -123,3 +123,28 @@ Final evidence:
 - Portable: `target/release/appketoan.exe` — SHA256 `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`.
 
 Installer binaries remain intentionally out of scope. PR #4 remains unmerged pending the user's repeat of the triggering workflow.
+
+## Two-source Invoice/Register correction — superseding portable hash
+
+The planner previously suppressed the complete revenue document evaluator when TK511 was absent. This was incorrect for a partial dossier because Invoice and Sales Register already provide authoritative document-level evidence.
+
+The corrected behavior is fail-closed partial execution:
+
+- exact Invoice-to-Register date, number, pretax, VAT, and total checks run;
+- TK511 remains an explicit missing capability;
+- all ledger fields are `NOT_CHECKED` and no missing-ledger document is fabricated;
+- exact two-source pairs are reported separately from fully matched tri-source documents;
+- control status stays `NEEDS_REVIEW` and `documentsPass` stays false;
+- unrelated controls without any loaded source stay in the Control Plan but not the Review Queue.
+
+Verification:
+
+- synthetic two-source regression: PASS;
+- ignored local two-source acceptance for the selected period: PASS;
+- full Rust workspace gate: PASS, 137 executed tests;
+- frontend: PASS, 32/32; typecheck/format/strict Clippy: PASS;
+- portable build and rendered-UI smoke: PASS.
+
+Portable: `target/release/appketoan.exe` — SHA256 `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`.
+
+Installers remain out of scope and PR #4 remains unmerged.

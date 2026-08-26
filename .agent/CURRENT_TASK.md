@@ -75,6 +75,7 @@ The V18 portable EXE blank-window correction is implemented and rendered-UI smok
 12. [x] Remove duplicate Audit Workspace revenue reconciliation, measure cold/warm/peak working-set evidence, and build/hash/smoke fresh portable, NSIS, and MSI RC artifacts.
 13. [x] Replace process-only EXE smoke with rendered Windows UI verification and prevent the desktop shell from exposing a blank startup frame.
 14. [x] Fix the required `ControlResult` IPC collection contract so partial/not-run controls cannot crash the Audit Workspace after execution; add backend/frontend regressions and rebuild the portable EXE.
+15. [x] Execute Invoice-to-Sales-Register document checks when TK511 is absent while retaining fail-closed missing capability, `NOT_CHECKED` ledger evidence, and no partial PASS.
 
 ## Next Task
-Wait for the user to retest the rebuilt portable EXE with the same local source set and accounting period. If the visible fail-closed screen reports another stack, diagnose that exact payload without starting a feature, rebuilding installers, or merging PR #4.
+Wait for the user to retest the rebuilt portable EXE with the same two-source local dossier and accounting period. Expected behavior: visible Invoice-to-Register results, explicit missing TK511, no overall PASS, and no unrelated empty-source controls in the Review Queue. Do not rebuild installers or merge PR #4.

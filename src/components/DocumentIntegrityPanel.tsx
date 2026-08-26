@@ -101,8 +101,12 @@ export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityRe
     [result.documents, selectedId]
   );
   const summary = result.summary;
+  const ledger511Checked = result.ledger511Checked ?? (summary.ledger511Records > 0);
+  const invoiceSalesRegisterExact =
+    summary.invoiceSalesRegisterExact ?? summary.fullyMatched;
   const summaryItems = [
-    ["Khớp hoàn toàn", summary.fullyMatched],
+    ["Thuế ↔ BK khớp", invoiceSalesRegisterExact],
+    ["Khớp đủ 3 nguồn", summary.fullyMatched],
     ["Sai ngày", summary.dateMismatch],
     ["Sai số HĐ", summary.invoiceNumberMismatch],
     ["Sai tiền", summary.pretaxMismatch],
@@ -127,7 +131,9 @@ export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityRe
       </div>
       <div className="document-total-note" role="status">
         Tổng Thuế ↔ BK: {result.totalsEqual ? "bằng nhau" : "có chênh lệch hoặc chưa đủ dữ liệu"} ·
-        Chứng từ: {result.documentsPass ? "đạt" : "không đạt"}.
+        {ledger511Checked
+          ? ` Chứng từ ba nguồn: ${result.documentsPass ? "đạt" : "không đạt"}.`
+          : " Thuế ↔ BK đã được đối chiếu; chưa có TK511 nên kết quả tổng thể CHƯA ĐỦ BẰNG CHỨNG."}
         {result.totalsEqual && !result.documentsPass && " Tổng bằng nhau không thay thế kiểm tra từng chứng từ."}
       </div>
       <div className="document-table-wrap">
@@ -156,7 +162,11 @@ export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityRe
                 <td>{valuePair(document.invoice?.pretaxAmount, document.salesRegister?.pretaxAmount, true)}</td>
                 <td>{valuePair(document.invoice?.vatAmount, document.salesRegister?.vatAmount, true)}</td>
                 <td>{valuePair(document.invoice?.totalAmount, document.salesRegister?.totalAmount, true)}</td>
-                <td>{document.status === "FULLY_MATCHED" ? "Khớp hoàn toàn" : document.errors.map((error) => error.code).join(", ") || "Cần rà soát"}</td>
+                <td>{document.status === "FULLY_MATCHED"
+                  ? "Khớp đủ 3 nguồn"
+                  : !ledger511Checked && document.errors.length === 0
+                    ? "Thuế ↔ BK khớp · TK511 chưa kiểm tra"
+                    : document.errors.map((error) => error.code).join(", ") || "Cần rà soát"}</td>
               </tr>
             ))}
           </tbody>

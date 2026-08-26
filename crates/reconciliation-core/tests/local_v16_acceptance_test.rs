@@ -156,6 +156,82 @@ fn local_v16_planner_acceptance() {
     transactional.retain(|source_id, _| !subset_source_ids.contains(source_id));
     assert_eq!(sources.len(), 7, "expected seven logical local sources");
 
+    // Reproduce the normal user's minimal July workflow: one invoice source
+    // and one sales register, without TK511. The available two-source control
+    // must execute and retain the missing ledger as review evidence.
+    let two_source_inputs = sources
+        .iter()
+        .filter(|source| {
+            matches!(
+                source.kind,
+                DataSourceKind::EInvoice | DataSourceKind::SalesRegister
+            )
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(two_source_inputs.len(), 2);
+    let two_source_ids = two_source_inputs
+        .iter()
+        .map(|source| source.id.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let two_source_records = transactional
+        .iter()
+        .filter(|(source_id, _)| two_source_ids.contains(*source_id))
+        .map(|(source_id, records)| (source_id.clone(), records.clone()))
+        .collect::<HashMap<_, _>>();
+    let two_source_audit = prepare_audit_session(
+        "local-v18-two-source".to_string(),
+        AccountingPeriod {
+            start_date: "2026-07-01".to_string(),
+            end_date: "2026-08-01".to_string(),
+        },
+        two_source_inputs,
+        two_source_records,
+        HashMap::new(),
+        HashMap::new(),
+        HashMap::new(),
+    )
+    .expect("prepare local two-source audit");
+    let two_source_report = execute_audit_session(two_source_audit, Decimal::ZERO, 0)
+        .expect("execute local two-source audit");
+    let two_source_plan = plan(&two_source_report, REVENUE_CONTROL_ID);
+    assert_eq!(two_source_plan.status, ControlPlanStatus::NeedsReview);
+    assert_eq!(
+        two_source_plan.missing_capabilities,
+        vec![reconciliation_core::SourceCapability::LedgerEntry {
+            account: "511".to_string(),
+        }]
+    );
+    let two_source_control = two_source_report
+        .control_results
+        .iter()
+        .find(|result| result.control_id == REVENUE_CONTROL_ID)
+        .expect("two-source revenue result");
+    assert_eq!(
+        two_source_control.status,
+        ControlExecutionStatus::NeedsReview
+    );
+    let two_source_integrity = two_source_control
+        .document_integrity_result
+        .as_ref()
+        .expect("two-source document integrity");
+    assert!(!two_source_integrity.ledger_511_checked);
+    assert!(!two_source_integrity.documents_pass);
+    assert_eq!(two_source_integrity.summary.ledger_511_records, 0);
+    assert!(two_source_integrity.summary.invoice_records > 0);
+    assert!(two_source_integrity.summary.sales_register_records > 0);
+    assert!(two_source_integrity.summary.invoice_sales_register_exact > 0);
+    assert_eq!(two_source_integrity.summary.fully_matched, 0);
+    assert_eq!(two_source_integrity.summary.missing_in_tk511, 0);
+    println!(
+        "V18_LOCAL_TWO_SOURCE invoice={} register={} invoice_register_exact={} ledger_checked={} overall_pass={}",
+        two_source_integrity.summary.invoice_records,
+        two_source_integrity.summary.sales_register_records,
+        two_source_integrity.summary.invoice_sales_register_exact,
+        two_source_integrity.ledger_511_checked,
+        two_source_integrity.documents_pass,
+    );
+
     let audit = prepare_audit_session(
         "local-v16".to_string(),
         AccountingPeriod {

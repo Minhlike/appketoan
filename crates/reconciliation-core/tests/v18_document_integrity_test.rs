@@ -1200,3 +1200,114 @@ fn partial_control_failure_cannot_turn_document_error_into_pass() {
         ControlExecutionStatus::NeedsReview
     );
 }
+
+#[test]
+fn invoice_and_sales_register_execute_without_tk511_but_never_pass_overall() {
+    let audit = prepare_audit_session(
+        "two-source-document-control".to_string(),
+        AccountingPeriod {
+            start_date: "2026-07-01".to_string(),
+            end_date: "2026-08-01".to_string(),
+        },
+        vec![
+            source("invoice", DataSourceKind::EInvoice),
+            source("register", DataSourceKind::SalesRegister),
+        ],
+        HashMap::from([
+            (
+                "invoice".to_string(),
+                vec![transaction(
+                    "invoice-1",
+                    "invoice",
+                    Some("001"),
+                    Some("2026-07-15"),
+                    Some(dec!(100)),
+                    Some(dec!(10)),
+                    dec!(110),
+                )],
+            ),
+            (
+                "register".to_string(),
+                vec![transaction(
+                    "register-1",
+                    "register",
+                    Some("001"),
+                    Some("2026-07-15"),
+                    Some(dec!(100)),
+                    Some(dec!(10)),
+                    dec!(110),
+                )],
+            ),
+        ]),
+        HashMap::new(),
+        HashMap::new(),
+        HashMap::new(),
+    )
+    .expect("prepare two-source audit");
+
+    let plan = audit
+        .control_plans
+        .iter()
+        .find(|plan| plan.control_id == REVENUE_CONTROL_ID)
+        .expect("revenue plan");
+    assert_eq!(plan.status, ControlPlanStatus::NeedsReview);
+    assert_eq!(
+        plan.missing_capabilities,
+        vec![reconciliation_core::SourceCapability::LedgerEntry {
+            account: "511".to_string(),
+        }]
+    );
+    assert_eq!(
+        plan.effective_period.as_ref(),
+        Some(&AccountingPeriod {
+            start_date: "2026-07-01".to_string(),
+            end_date: "2026-08-01".to_string(),
+        })
+    );
+    let expected_missing = plan.missing_capabilities.clone();
+
+    let report = reconciliation_core::execute_audit_session(audit, Decimal::ZERO, 0)
+        .expect("execute two-source audit");
+    let control = report
+        .control_results
+        .iter()
+        .find(|result| result.control_id == REVENUE_CONTROL_ID)
+        .expect("executed revenue control");
+    assert_eq!(control.status, ControlExecutionStatus::NeedsReview);
+    assert_eq!(control.missing_capabilities, expected_missing);
+    let integrity = control
+        .document_integrity_result
+        .as_ref()
+        .expect("Thuế/BK result must be produced");
+    assert!(!integrity.ledger_511_checked);
+    assert!(!integrity.documents_pass);
+    assert_eq!(integrity.summary.invoice_sales_register_exact, 1);
+    assert_eq!(integrity.summary.fully_matched, 0);
+    assert_eq!(integrity.summary.missing_in_tk511, 0);
+    assert_eq!(
+        integrity.ledger_511_revenue.status,
+        reconciliation_core::TotalsCheckStatus::NotVerified
+    );
+    let document = integrity
+        .documents
+        .iter()
+        .find(|document| document.invoice.is_some())
+        .expect("invoice document");
+    assert_eq!(
+        document.status,
+        reconciliation_core::DocumentCaseStatus::NeedsReview
+    );
+    assert_eq!(
+        document
+            .field_checks
+            .iter()
+            .filter(|check| check.scope == DocumentComparisonScope::InvoiceToLedger511)
+            .count(),
+        5
+    );
+    assert!(document
+        .field_checks
+        .iter()
+        .filter(|check| check.scope == DocumentComparisonScope::InvoiceToLedger511)
+        .all(|check| check.status == FieldCheckStatus::NotChecked));
+}

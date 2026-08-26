@@ -128,3 +128,9 @@ Reconciliation Core (crates/reconciliation-core/)
 - `ControlResult` now always serializes those required collections. The dashboard also defaults absent collections for backward/partial-payload compatibility, so a missing-source or not-run control cannot take down the workspace or imply PASS.
 - Rust serialization and React legacy-payload regressions cover the exact failure. Both ignored local acceptance harnesses and all source gates passed.
 - The portable-only release was rebuilt and passed rendered-UI smoke using an explicit ASCII readiness marker. Current portable SHA256: `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`. PR #4 remains unmerged.
+
+## V18 Two-Source Document Control Correction (2026-08-26)
+- Invoice and Sales Register now form the minimum executable evidence for the revenue document control. Missing TK511 remains explicit and prevents control/document PASS.
+- The pure Rust evaluator checks all five Invoice-to-Register fields, marks all ledger fields `NOT_CHECKED` when TK511 is absent, and does not fabricate per-document missing-ledger findings without a ledger dataset.
+- The Review Queue contains partially loaded actionable controls but excludes unrelated controls with no loaded source; every control remains visible in the Control Plan.
+- Synthetic and ignored local two-source regressions passed for the selected user period. Full Rust/frontend/type/format/Clippy gates, portable build, and rendered-UI smoke passed. Portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`. PR #4 remains unmerged.

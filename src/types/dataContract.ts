@@ -304,6 +304,7 @@ export interface DocumentIntegrityResult {
     invoiceRecords: number;
     salesRegisterRecords: number;
     ledger511Records: number;
+    invoiceSalesRegisterExact: number;
     fullyMatched: number;
     dateMismatch: number;
     invoiceNumberMismatch: number;
@@ -334,6 +335,7 @@ export interface DocumentIntegrityResult {
     variance: MoneyValue;
     status: "EQUAL" | "MISMATCH" | "NOT_VERIFIED";
   };
+  ledger511Checked: boolean;
   documentsPass: boolean;
   documents: DocumentIntegrityCase[];
 }

@@ -37,3 +37,8 @@
 - Do not combine `skip_serializing_if` with a frontend field declared as required. An empty Rust map/vector then disappears from IPC JSON and ordinary frontend collection operations can crash the entire WebView.
 - Keep required wire collections present even when empty, add a serialization-shape regression, and still normalize at the rendering boundary so an older or partial payload fails closed instead of replacing the whole application with an error screen.
 - Rendered-UI smoke needs a stable ASCII readiness marker. Human-language UI text can be represented inconsistently by Windows accessibility APIs even when the visible page is correct.
+
+## V18 Partial Evidence Is Not Partial PASS (2026-08-26)
+- A multi-source control should declare both its minimum executable evidence and its complete assurance evidence. Refusing to run when one later-stage source is absent hides valid checks; silently making that source optional can create a false PASS.
+- Run the independent available comparison, preserve missing capabilities, mark unavailable fields `NOT_CHECKED`, and require complete evidence before any overall PASS.
+- Keep inventory-level missing controls in the Control Plan. Put only loaded, actionable controls in the Review Queue so absent unrelated workflows do not look like failures of the current dossier.

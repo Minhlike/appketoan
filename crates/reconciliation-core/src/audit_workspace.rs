@@ -670,14 +670,12 @@ fn apply_authoritative_revenue_period(
     accounting_period: &AccountingPeriod,
     plans: &mut [ControlPlan],
 ) {
-    let required = [
-        SourceCapability::Invoice,
-        SourceCapability::SalesTransaction,
-        ledger_capability("511"),
-    ];
-    if required
-        .iter()
-        .any(|capability| sources_for_capability(catalog, capability).len() != 1)
+    let invoice = SourceCapability::Invoice;
+    let register = SourceCapability::SalesTransaction;
+    let ledger_511 = ledger_capability("511");
+    if sources_for_capability(catalog, &invoice).len() != 1
+        || sources_for_capability(catalog, &register).len() != 1
+        || sources_for_capability(catalog, &ledger_511).len() > 1
     {
         return;
     }
@@ -687,11 +685,12 @@ fn apply_authoritative_revenue_period(
     else {
         return;
     };
-    if !plan.missing_capabilities.is_empty() {
+    let missing_only_ledger = plan.missing_capabilities == [ledger_511.clone()];
+    if !plan.missing_capabilities.is_empty() && !missing_only_ledger {
         return;
     }
 
-    let matched = required
+    let matched = [invoice, register, ledger_511]
         .iter()
         .filter_map(|capability| source_for_capability(catalog, capability))
         .collect::<Vec<_>>();
@@ -708,6 +707,12 @@ fn apply_authoritative_revenue_period(
     // the user-selected accounting period for document completeness controls.
     plan.effective_period = Some(accounting_period.clone());
     plan.warnings.clear();
+    if missing_only_ledger {
+        plan.warnings.push(
+            "PARTIAL_CONTROL_READY: Đã đủ Hóa đơn Thuế và Bảng kê để đối chiếu; chưa có TK511 nên phần sổ doanh thu sẽ ở trạng thái CHƯA ĐỐI CHIẾU."
+                .to_string(),
+        );
+    }
     for source in &matched {
         match (
             source.period_evidence.earliest_date.as_deref(),
@@ -727,13 +732,15 @@ fn apply_authoritative_revenue_period(
             )),
         }
     }
-    if missing_dates > 0 {
-        plan.warnings.push(format!(
-            "PERIOD_DATE_NEEDS_REVIEW: {missing_dates} record thiếu hoặc không đọc được ngày."
-        ));
-        plan.status = ControlPlanStatus::NeedsReview;
-    } else if records_in_period == 0 {
+    if records_in_period == 0 {
         plan.status = ControlPlanStatus::NotApplicable;
+    } else if missing_dates > 0 || missing_only_ledger {
+        if missing_dates > 0 {
+            plan.warnings.push(format!(
+                "PERIOD_DATE_NEEDS_REVIEW: {missing_dates} record thiếu hoặc không đọc được ngày."
+            ));
+        }
+        plan.status = ControlPlanStatus::NeedsReview;
     } else {
         // A required source with no rows in the selected period is executable
         // evidence of missing documents, not a reason to suppress the control.
@@ -1204,8 +1211,16 @@ fn document_integrity_control_result(
     let (register_source, registers) =
         document_records_for_capability(audit, plan, &SourceCapability::SalesTransaction)?;
     let ledger_capability = ledger_capability("511");
-    let (ledger_source, ledger) = document_records_for_capability(audit, plan, &ledger_capability)?;
-    let document_result = crate::evaluate_document_integrity(
+    let ledger = if source_for_capability(&audit.source_catalog, &ledger_capability).is_some() {
+        Some(document_records_for_capability(
+            audit,
+            plan,
+            &ledger_capability,
+        )?)
+    } else {
+        None
+    };
+    let document_result = crate::evaluate_document_integrity_with_optional_ledger(
         DocumentIntegritySource {
             source: invoice_source,
             records: &invoices,
@@ -1214,10 +1229,9 @@ fn document_integrity_control_result(
             source: register_source,
             records: &registers,
         },
-        DocumentIntegritySource {
-            source: ledger_source,
-            records: &ledger,
-        },
+        ledger
+            .as_ref()
+            .map(|(source, records)| DocumentIntegritySource { source, records }),
     );
     let findings = document_result
         .documents
@@ -1241,7 +1255,15 @@ fn document_integrity_control_result(
             "ledger511Records".to_string(),
             summary.ledger_511_records as u64,
         ),
+        (
+            "ledger511Checked".to_string(),
+            u64::from(document_result.ledger_511_checked),
+        ),
         ("fullyMatched".to_string(), summary.fully_matched as u64),
+        (
+            "invoiceSalesRegisterExact".to_string(),
+            summary.invoice_sales_register_exact as u64,
+        ),
         ("dateMismatch".to_string(), summary.date_mismatch as u64),
         (
             "invoiceNumberMismatch".to_string(),
@@ -1287,14 +1309,18 @@ fn document_integrity_control_result(
         ],
         findings,
         source_ids: plan.source_ids.clone(),
-        missing_capabilities: vec![],
+        missing_capabilities: plan.missing_capabilities.clone(),
         effective_period: plan.effective_period.clone(),
         elapsed_ms: 0,
         summary_metrics,
-        limitations: vec![
-            "TK511_VAT_NOT_CHECKED".to_string(),
-            "TK511_RECEIVABLE_NOT_CHECKED".to_string(),
-        ],
+        limitations: if document_result.ledger_511_checked {
+            vec![
+                "TK511_VAT_NOT_CHECKED".to_string(),
+                "TK511_RECEIVABLE_NOT_CHECKED".to_string(),
+            ]
+        } else {
+            vec!["TK511_SOURCE_NOT_PROVIDED".to_string()]
+        },
         error: None,
         reconciliation_result: None,
         document_integrity_result: Some(document_result),
@@ -1526,23 +1552,24 @@ pub fn execute_audit_session_with_cancellation(
             }
             continue;
         }
-        let revenue_date_validation_run = plan.control_id == REVENUE_CONTROL_ID
+        let revenue_review_run = plan.control_id == REVENUE_CONTROL_ID
             && plan.status == ControlPlanStatus::NeedsReview
-            && plan.missing_capabilities.is_empty()
             && plan.effective_period.is_some()
-            && plan
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("PERIOD_DATE_NEEDS_REVIEW"));
-        if plan.status != ControlPlanStatus::Ready && !revenue_date_validation_run {
+            && sources_for_capability(&audit.source_catalog, &SourceCapability::Invoice).len() == 1
+            && sources_for_capability(&audit.source_catalog, &SourceCapability::SalesTransaction)
+                .len()
+                == 1
+            && plan.missing_capabilities.iter().all(|capability| {
+                capability
+                    == &SourceCapability::LedgerEntry {
+                        account: "511".to_string(),
+                    }
+            });
+        if plan.status != ControlPlanStatus::Ready && !revenue_review_run {
             control_results.push(not_run_result(plan));
             continue;
         }
-        let mut executable_plan = plan.clone();
-        if revenue_date_validation_run && executable_plan.effective_period.is_none() {
-            executable_plan.effective_period = Some(audit.accounting_period.clone());
-        }
-        let executable_plan = &executable_plan;
+        let executable_plan = plan;
         let control_started = Instant::now();
         let result: Result<ControlResult, String> = (|| {
             let definition = definitions

@@ -141,6 +141,10 @@ pub struct DocumentIntegritySummary {
     pub invoice_records: usize,
     pub sales_register_records: usize,
     pub ledger_511_records: usize,
+    /// Invoice and sales-register rows whose five authoritative document
+    /// fields match exactly, regardless of whether TK511 was supplied.
+    #[serde(default)]
+    pub invoice_sales_register_exact: usize,
     pub fully_matched: usize,
     pub date_mismatch: usize,
     pub invoice_number_mismatch: usize,
@@ -192,6 +196,8 @@ pub struct DocumentIntegrityResult {
     pub totals: Vec<DocumentTotalCheck>,
     pub totals_equal: bool,
     pub ledger_511_revenue: LedgerRevenueCheck,
+    #[serde(default)]
+    pub ledger_511_checked: bool,
     pub documents_pass: bool,
     pub documents: Vec<DocumentIntegrityCase>,
 }
@@ -514,10 +520,12 @@ fn document_case(
     ledger_511: Option<DocumentSnapshot>,
     field_checks: Vec<DocumentFieldCheck>,
     errors: Vec<DocumentIntegrityError>,
+    required_sources_available: bool,
 ) -> DocumentIntegrityCase {
     DocumentIntegrityCase {
         id,
-        status: if errors.is_empty()
+        status: if required_sources_available
+            && errors.is_empty()
             && field_checks
                 .iter()
                 .all(|check| check.status != FieldCheckStatus::Mismatch)
@@ -532,6 +540,42 @@ fn document_case(
         field_checks,
         errors,
     }
+}
+
+fn not_checked_missing_ledger_fields(invoice: &CanonicalRecord) -> [DocumentFieldCheck; 5] {
+    [
+        DocumentFieldCheck {
+            scope: DocumentComparisonScope::InvoiceToLedger511,
+            field: DocumentField::Date,
+            status: FieldCheckStatus::NotChecked,
+            expected_value: strict_date(invoice).map(str::to_string),
+            actual_value: None,
+            error_code: None,
+        },
+        DocumentFieldCheck {
+            scope: DocumentComparisonScope::InvoiceToLedger511,
+            field: DocumentField::InvoiceNumber,
+            status: FieldCheckStatus::NotChecked,
+            expected_value: document_number(invoice),
+            actual_value: None,
+            error_code: None,
+        },
+        unchecked(
+            DocumentComparisonScope::InvoiceToLedger511,
+            DocumentField::Pretax,
+            invoice.pretax_amount,
+        ),
+        unchecked(
+            DocumentComparisonScope::InvoiceToLedger511,
+            DocumentField::Vat,
+            invoice.vat_amount,
+        ),
+        unchecked(
+            DocumentComparisonScope::InvoiceToLedger511,
+            DocumentField::Total,
+            total_is_source_value(invoice).then_some(invoice.total_amount),
+        ),
+    ]
 }
 
 fn not_checked_ledger_fields(invoice: &CanonicalRecord) -> [DocumentFieldCheck; 2] {
@@ -554,6 +598,26 @@ pub fn evaluate_document_integrity(
     register_source: DocumentIntegritySource<'_>,
     ledger_source: DocumentIntegritySource<'_>,
 ) -> DocumentIntegrityResult {
+    evaluate_document_integrity_with_optional_ledger(
+        invoice_source,
+        register_source,
+        Some(ledger_source),
+    )
+}
+
+/// Runs the authoritative Thuế ↔ BK document checks even when TK511 has not
+/// been supplied. Missing TK511 is represented as NOT_CHECKED evidence and the
+/// overall control remains fail-closed; it is never treated as a passed
+/// tri-source control.
+pub fn evaluate_document_integrity_with_optional_ledger(
+    invoice_source: DocumentIntegritySource<'_>,
+    register_source: DocumentIntegritySource<'_>,
+    ledger_source: Option<DocumentIntegritySource<'_>>,
+) -> DocumentIntegrityResult {
+    let ledger_511_checked = ledger_source.is_some();
+    let ledger_records = ledger_source
+        .as_ref()
+        .map_or(&[][..], |source| source.records);
     let mut documents = Vec::new();
     let mut register_by_document: HashMap<String, Vec<usize>> = HashMap::new();
     let mut ledger_by_document: HashMap<String, Vec<usize>> = HashMap::new();
@@ -565,7 +629,7 @@ pub fn evaluate_document_integrity(
                 .push(index);
         }
     }
-    for (index, record) in ledger_source.records.iter().enumerate() {
+    for (index, record) in ledger_records.iter().enumerate() {
         if let Some(document) = document_number(record) {
             ledger_by_document.entry(document).or_default().push(index);
         }
@@ -583,10 +647,15 @@ pub fn evaluate_document_integrity(
         .map(|record| validate_document_record(register_source.source, record, true))
         .collect();
     let ledger_validation: Vec<Vec<DocumentIntegrityError>> = ledger_source
-        .records
-        .iter()
-        .map(|record| validate_ledger_record(ledger_source.source, record))
-        .collect();
+        .as_ref()
+        .map(|source| {
+            source
+                .records
+                .iter()
+                .map(|record| validate_ledger_record(source.source, record))
+                .collect()
+        })
+        .unwrap_or_default();
     for indices in register_by_document
         .values()
         .filter(|indices| indices.len() > 1)
@@ -622,6 +691,7 @@ pub fn evaluate_document_integrity(
             None,
             Vec::new(),
             errors.clone(),
+            true,
         ));
     }
 
@@ -873,7 +943,9 @@ pub fn evaluate_document_integrity(
             }
         }
 
-        if let Some(document) = invoice_document.as_ref() {
+        if let (Some(document), Some(ledger_source)) =
+            (invoice_document.as_ref(), ledger_source.as_ref())
+        {
             let candidates = ledger_by_document
                 .get(document)
                 .cloned()
@@ -939,7 +1011,11 @@ pub fn evaluate_document_integrity(
                 ));
             }
         }
-        checks.extend(not_checked_ledger_fields(invoice));
+        if ledger_511_checked {
+            checks.extend(not_checked_ledger_fields(invoice));
+        } else {
+            checks.extend(not_checked_missing_ledger_fields(invoice));
+        }
 
         documents.push(document_case(
             format!("invoice:{}", invoice.id),
@@ -948,6 +1024,7 @@ pub fn evaluate_document_integrity(
             linked_ledger,
             checks,
             errors,
+            ledger_511_checked,
         ));
     }
 
@@ -971,50 +1048,57 @@ pub fn evaluate_document_integrity(
                 "EXTRA_IN_BK: chứng từ chỉ có trong bảng kê bán hàng.",
                 vec![provenance(register_source.source, register)],
             )],
+            true,
         ));
     }
-    for (index, ledger) in ledger_source.records.iter().enumerate() {
-        if used_ledger.contains(&index) {
-            continue;
+    if let Some(ledger_source) = ledger_source.as_ref() {
+        for (index, ledger) in ledger_source.records.iter().enumerate() {
+            if used_ledger.contains(&index) {
+                continue;
+            }
+            documents.push(document_case(
+                format!("ledger-extra:{}", ledger.id),
+                None,
+                None,
+                Some(ledger_snapshot(ledger_source.source, ledger)),
+                Vec::new(),
+                {
+                    let mut errors = ledger_validation[index].clone();
+                    errors.push(error(
+                        DocumentErrorCode::ExtraInTk511,
+                        "MEDIUM",
+                        "EXTRA_IN_TK511: chứng từ chỉ có trong TK511.",
+                        vec![provenance(ledger_source.source, ledger)],
+                    ));
+                    errors
+                },
+                true,
+            ));
         }
-        documents.push(document_case(
-            format!("ledger-extra:{}", ledger.id),
-            None,
-            None,
-            Some(ledger_snapshot(ledger_source.source, ledger)),
-            Vec::new(),
-            {
-                let mut errors = ledger_validation[index].clone();
-                errors.push(error(
-                    DocumentErrorCode::ExtraInTk511,
-                    "MEDIUM",
-                    "EXTRA_IN_TK511: chứng từ chỉ có trong TK511.",
-                    vec![provenance(ledger_source.source, ledger)],
-                ));
-                errors
-            },
-        ));
     }
 
     let summary = summarize(
         &documents,
         invoice_source.records.len(),
         register_source.records.len(),
-        ledger_source.records.len(),
+        ledger_records.len(),
     );
     let totals = totals(invoice_source.records, register_source.records);
     let totals_equal = totals
         .iter()
         .all(|check| check.status == TotalsCheckStatus::Equal);
-    let ledger_511_revenue = ledger_revenue_total(invoice_source.records, ledger_source.records);
-    let documents_pass = documents
-        .iter()
-        .all(|document| document.status == DocumentCaseStatus::FullyMatched);
+    let ledger_511_revenue =
+        ledger_revenue_total(invoice_source.records, ledger_records, ledger_511_checked);
+    let documents_pass = ledger_511_checked
+        && documents
+            .iter()
+            .all(|document| document.status == DocumentCaseStatus::FullyMatched);
     DocumentIntegrityResult {
         summary,
         totals,
         totals_equal,
         ledger_511_revenue,
+        ledger_511_checked,
         documents_pass,
         documents,
     }
@@ -1036,6 +1120,28 @@ fn summarize(
         invoice_records,
         sales_register_records,
         ledger_511_records,
+        invoice_sales_register_exact: documents
+            .iter()
+            .filter(|document| {
+                document.invoice.is_some()
+                    && document.sales_register.is_some()
+                    && document
+                        .field_checks
+                        .iter()
+                        .filter(|check| {
+                            check.scope == DocumentComparisonScope::InvoiceToSalesRegister
+                        })
+                        .count()
+                        == 5
+                    && document
+                        .field_checks
+                        .iter()
+                        .filter(|check| {
+                            check.scope == DocumentComparisonScope::InvoiceToSalesRegister
+                        })
+                        .all(|check| check.status == FieldCheckStatus::Match)
+            })
+            .count(),
         fully_matched: documents
             .iter()
             .filter(|document| {
@@ -1071,6 +1177,7 @@ fn summarize(
 fn ledger_revenue_total(
     invoices: &[CanonicalRecord],
     ledger: &[CanonicalRecord],
+    ledger_available: bool,
 ) -> LedgerRevenueCheck {
     let invoice_total = invoices
         .iter()
@@ -1081,9 +1188,10 @@ fn ledger_revenue_total(
         .filter_map(|record| record.credit_amount)
         .sum();
     let variance = invoice_total - ledger_total;
-    let invalid = invoices
-        .iter()
-        .any(|record| strict_date(record).is_none() || record.pretax_amount.is_none())
+    let invalid = !ledger_available
+        || invoices
+            .iter()
+            .any(|record| strict_date(record).is_none() || record.pretax_amount.is_none())
         || ledger
             .iter()
             .any(|record| strict_date(record).is_none() || record.credit_amount.is_none());

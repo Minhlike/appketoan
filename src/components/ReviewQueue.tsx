@@ -30,6 +30,15 @@ function errorItem(error: AuditExecutionError): ReviewItem {
 }
 
 function missingItem(plan: ControlPlan): ReviewItem {
+  const missing = plan.missingCapabilities
+    .map((capability) => capability.kind === "LEDGER_ENTRY"
+      ? `Sổ kế toán TK ${capability.account}`
+      : capability.kind === "INVOICE"
+        ? "Hóa đơn Thuế"
+        : capability.kind === "SALES_TRANSACTION"
+          ? "Bảng kê bán hàng"
+          : capability.kind)
+    .join(", ");
   return {
     id: `plan:${plan.controlId}:${plan.status}`,
     severity: plan.status === "NEEDS_REVIEW" ? "HIGH" : "MEDIUM",
@@ -37,9 +46,9 @@ function missingItem(plan: ControlPlan): ReviewItem {
     reason:
       plan.warnings[0] ||
       (plan.status === "MISSING_SOURCE"
-        ? "Thiếu chứng từ hoặc sổ cần thiết để chạy kiểm tra."
+        ? `Thiếu nguồn: ${missing || "chứng từ hoặc sổ cần thiết"}.`
         : "Cần xác định dữ liệu trước khi chạy."),
-    action: "Bổ sung hoặc xác định lại nguồn dữ liệu.",
+    action: missing ? `Bổ sung ${missing} để hoàn tất kiểm tra.` : "Bổ sung hoặc xác định lại nguồn dữ liệu.",
     targetId: plan.controlId,
   };
 }
@@ -60,7 +69,9 @@ export function reviewItems(report: AuditWorkspaceReport | null): ReviewItem[] {
   const errors = report.errors.map(errorItem);
   const plans = report.controlPlans
     .filter((plan) =>
-      ["MISSING_SOURCE", "NEEDS_MAPPING", "NEEDS_REVIEW"].includes(plan.status)
+      plan.status === "NEEDS_REVIEW"
+      || plan.status === "NEEDS_MAPPING"
+      || (plan.status === "MISSING_SOURCE" && plan.sourceIds.length > 0)
     )
     .map(missingItem);
   const findings = report.controlResults.flatMap((result) =>

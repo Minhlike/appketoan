@@ -9,6 +9,7 @@ const result: DocumentIntegrityResult = {
     invoiceRecords: 1,
     salesRegisterRecords: 1,
     ledger511Records: 1,
+    invoiceSalesRegisterExact: 1,
     fullyMatched: 45,
     dateMismatch: 1,
     invoiceNumberMismatch: 0,
@@ -39,6 +40,7 @@ const result: DocumentIntegrityResult = {
     variance: "100",
     status: "MISMATCH",
   },
+  ledger511Checked: true,
   documentsPass: false,
   documents: [{
     id: "invoice:233",
@@ -91,7 +93,8 @@ const result: DocumentIntegrityResult = {
 describe("DocumentIntegrityPanel", () => {
   it("shows field-level summary and opens side-by-side evidence with every error code", () => {
     render(<DocumentIntegrityPanel result={result} />);
-    expect(screen.getByText("Khớp hoàn toàn")).toBeDefined();
+    expect(screen.getByText("Thuế ↔ BK khớp")).toBeDefined();
+    expect(screen.getByText("Khớp đủ 3 nguồn")).toBeDefined();
     expect(screen.getByText(/Tổng bằng nhau không thay thế/)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "233 ↔ 233" }));
     expect(screen.getByRole("complementary", { name: "Chi tiết đối chiếu chứng từ" })).toBeDefined();
@@ -99,6 +102,51 @@ describe("DocumentIntegrityPanel", () => {
     expect(screen.getByRole("heading", { name: "Bảng kê bán hàng" })).toBeDefined();
     expect(screen.getByText("CHƯA ĐỐI CHIẾU")).toBeDefined();
     expect(screen.getAllByText("MISSING_IN_TK511").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/PASS/i)).toBeNull();
+  });
+
+  it("shows useful Thuế ↔ BK results without claiming PASS when TK511 is absent", () => {
+    const partialResult: DocumentIntegrityResult = {
+      ...result,
+      summary: {
+        ...result.summary,
+        ledger511Records: 0,
+        invoiceSalesRegisterExact: 1,
+        fullyMatched: 0,
+        missingInTk511: 0,
+      },
+      ledger511Checked: false,
+      ledger511Revenue: {
+        invoiceTotal: "100",
+        ledgerTotal: "0",
+        variance: "100",
+        status: "NOT_VERIFIED",
+      },
+      documents: [{
+        ...result.documents[0],
+        errors: [],
+        fieldChecks: [
+          {
+            scope: "INVOICE_TO_SALES_REGISTER",
+            field: "DATE",
+            status: "MATCH",
+            expectedValue: "2026-07-06",
+            actualValue: "2026-07-06",
+          },
+          {
+            scope: "INVOICE_TO_LEDGER511",
+            field: "DATE",
+            status: "NOT_CHECKED",
+            expectedValue: "2026-07-06",
+          },
+        ],
+      }],
+    };
+
+    render(<DocumentIntegrityPanel result={partialResult} />);
+    expect(screen.getByText(/Thuế ↔ BK đã được đối chiếu/)).toBeDefined();
+    expect(screen.getByText(/Thuế ↔ BK khớp · TK511 chưa kiểm tra/)).toBeDefined();
+    expect(screen.queryByText(/Chứng từ ba nguồn: đạt/)).toBeNull();
     expect(screen.queryByText(/PASS/i)).toBeNull();
   });
 
