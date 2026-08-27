@@ -165,3 +165,17 @@
 - `cargo fmt --all -- --check` and strict workspace Clippy: SUCCESS.
 - `npx tauri build --no-bundle`: SUCCESS; rendered portable smoke passed with 72 UI elements.
 - Portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`.
+
+### 20. Independent Direct BK/Tax Workbook Audit (2026-08-27)
+- Spreadsheet-only comparison: PASS; source workbooks were read locally without AppKetoan code or IPC.
+- Every in-period pair matched date, normalized document identity, pretax, VAT, and total. No duplicate, missing, extra, field-mismatch, or lifecycle-review classification was observed in scope.
+- The local detailed report passed formula-error scanning and visual verification for its summary, detail, and method sheets. It remains ignored with the confidential inputs and was not committed.
+
+### 21. V18 Document Evidence Navigation Gate (2026-08-27)
+- Focused `DocumentIntegrityPanel` acceptance suite: SUCCESS (5/5). It covers source-specific field semantics, fail-closed missing TK511, multiple simultaneous errors, exact-pair filtering, and missing-register filtering/restoration.
+- `npm run test`: SUCCESS (34/34 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo test --workspace`: SUCCESS; all default Rust targets passed, with two confidential harnesses ignored by default. Both ignored local acceptance harnesses passed explicitly.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS. The known non-fatal GNU WebView2 `.drectve` warning remains.
+- Direct portable EXE acceptance via Windows computer control: SUCCESS. The app rendered without a blank frame or bootstrap crash, recognized the two ignored workbooks, executed the selected period, showed explicit Invoice/Register versus TK511 provenance, applied exact/missing filters, and restored all rows.
+- Portable SHA256: `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. Installers intentionally remain out of scope.

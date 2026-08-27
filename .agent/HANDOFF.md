@@ -151,3 +151,17 @@
 - The result distinguishes exact Invoice-to-Register pairs from fully matched three-source documents. A missing ledger source is not misreported as every individual document being absent from TK511.
 - The Review Queue now omits unrelated controls with no loaded source while the full Control Plan still shows them.
 - Synthetic regression, ignored local two-source acceptance, full source gates, portable build, and rendered smoke passed. Current portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`. PR #4 remains unmerged.
+
+## V18 Independent Two-Workbook Audit — 2026-08-27
+- The ignored BK and tax workbooks were reconciled directly with a separate local spreadsheet workflow; no AppKetoan source, engine, planner, IPC, or UI path was used.
+- The independent audit found complete agreement for every in-period pair across date, document identity, pretax, VAT, and total. End-boundary inclusive/exclusive interpretation did not change the conclusion for these files.
+- A detailed local workbook was generated beneath ignored `.local-testdata/`; it contains real accounting evidence and must not be committed or copied into agent memory.
+- Treat this as the external oracle for the next EXE reproduction. If the EXE does not show the available two-source evidence, continue root-cause debugging in the application path; do not blame the source files.
+
+## V18 Document Evidence Navigation — 2026-08-27
+- Root cause of the inert summary was presentational: totals were rendered as passive cards and were not connected to the typed document cases. They are now actionable filters whose counts are derived from `DocumentIntegrityResult.documents`, with visible filtered/total conservation and reset.
+- Root cause of the misleading TK511 wording was conflated value semantics and source provenance. Invoice pretax is compared with Sales Register `Tiền` as revenue, while a separate General Ledger TK511 source is still required before ledger posting is checked or overall assurance can pass.
+- The table, status, side-by-side evidence, and `NOT_CHECKED` reasons now use source-specific accounting labels. Missing TK511 remains fail-closed; VAT and receivable remain outside TK511 scope.
+- Exactly five focused component acceptance cases pass, including synthetic reproduction of the reported exact/missing card counts. Full Rust/frontend/type/format/Clippy gates and both ignored local harnesses pass.
+- The fresh portable EXE was controlled directly against the ignored local workbooks and selected period. It rendered, recognized both sources, reconciled available Invoice/Register evidence, filtered exact and missing groups, restored all rows, and never promoted absent TK511 evidence to PASS.
+- Portable path: `target/release/appketoan.exe`; SHA256 `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. No installer was rebuilt. PR #4 must remain unmerged for review.

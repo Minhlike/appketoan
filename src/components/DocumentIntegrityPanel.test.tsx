@@ -4,6 +4,14 @@ import { describe, expect, it } from "vitest";
 import type { DocumentIntegrityResult } from "../types/dataContract";
 import { DocumentIntegrityPanel } from "./DocumentIntegrityPanel";
 
+const exactInvoiceRegisterChecks = [
+  { scope: "INVOICE_TO_SALES_REGISTER", field: "DATE", status: "MATCH", expectedValue: "2026-07-06", actualValue: "2026-07-06" },
+  { scope: "INVOICE_TO_SALES_REGISTER", field: "INVOICE_NUMBER", status: "MATCH", expectedValue: "233", actualValue: "233" },
+  { scope: "INVOICE_TO_SALES_REGISTER", field: "PRETAX", status: "MATCH", expectedValue: "105000000", actualValue: "105000000" },
+  { scope: "INVOICE_TO_SALES_REGISTER", field: "VAT", status: "MATCH", expectedValue: "10500000", actualValue: "10500000" },
+  { scope: "INVOICE_TO_SALES_REGISTER", field: "TOTAL", status: "MATCH", expectedValue: "115500000", actualValue: "115500000" },
+] as const;
+
 const result: DocumentIntegrityResult = {
   summary: {
     invoiceRecords: 1,
@@ -75,12 +83,15 @@ const result: DocumentIntegrityResult = {
       vatAmount: "10500000",
       totalAmount: "115500000",
     },
-    fieldChecks: [{
-      scope: "INVOICE_TO_LEDGER511",
-      field: "VAT",
-      status: "NOT_CHECKED",
-      expectedValue: "10500000",
-    }],
+    fieldChecks: [
+      ...exactInvoiceRegisterChecks,
+      {
+        scope: "INVOICE_TO_LEDGER511",
+        field: "VAT",
+        status: "NOT_CHECKED",
+        expectedValue: "10500000",
+      },
+    ],
     errors: [{
       code: "MISSING_IN_TK511",
       severity: "HIGH",
@@ -89,6 +100,38 @@ const result: DocumentIntegrityResult = {
     }],
   }],
 };
+
+const makeExactDocument = (index: number) => ({
+  ...result.documents[0],
+  id: `invoice:exact-${index}`,
+  errors: [],
+  invoice: {
+    ...result.documents[0].invoice!,
+    invoiceNumber: `E${String(index).padStart(3, "0")}`,
+  },
+  salesRegister: {
+    ...result.documents[0].salesRegister!,
+    invoiceNumber: `E${String(index).padStart(3, "0")}`,
+  },
+  fieldChecks: [...exactInvoiceRegisterChecks],
+});
+
+const makeMissingDocument = (index: number) => ({
+  ...result.documents[0],
+  id: `invoice:missing-${index}`,
+  salesRegister: undefined,
+  fieldChecks: [],
+  errors: [{
+    code: "MISSING_IN_BK" as const,
+    severity: "HIGH",
+    message: "Thiếu BK",
+    provenance: [],
+  }],
+  invoice: {
+    ...result.documents[0].invoice!,
+    invoiceNumber: `M${String(index).padStart(3, "0")}`,
+  },
+});
 
 describe("DocumentIntegrityPanel", () => {
   it("shows field-level summary and opens side-by-side evidence with every error code", () => {
@@ -99,8 +142,10 @@ describe("DocumentIntegrityPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "233 ↔ 233" }));
     expect(screen.getByRole("complementary", { name: "Chi tiết đối chiếu chứng từ" })).toBeDefined();
     expect(screen.getByRole("heading", { name: "Hóa đơn Thuế" })).toBeDefined();
-    expect(screen.getByRole("heading", { name: "Bảng kê bán hàng" })).toBeDefined();
-    expect(screen.getByText("CHƯA ĐỐI CHIẾU")).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Bảng kê bán hàng (Tiền / Thuế / Phải thu)" })).toBeDefined();
+    expect(screen.getByText("Tiền (doanh thu)")).toBeDefined();
+    expect(screen.getByText("Phát sinh Có (TK511)")).toBeDefined();
+    expect(screen.getByText("KHÔNG THUỘC PHẠM VI TK511")).toBeDefined();
     expect(screen.getAllByText("MISSING_IN_TK511").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/PASS/i)).toBeNull();
   });
@@ -126,13 +171,7 @@ describe("DocumentIntegrityPanel", () => {
         ...result.documents[0],
         errors: [],
         fieldChecks: [
-          {
-            scope: "INVOICE_TO_SALES_REGISTER",
-            field: "DATE",
-            status: "MATCH",
-            expectedValue: "2026-07-06",
-            actualValue: "2026-07-06",
-          },
+          ...exactInvoiceRegisterChecks,
           {
             scope: "INVOICE_TO_LEDGER511",
             field: "DATE",
@@ -145,7 +184,10 @@ describe("DocumentIntegrityPanel", () => {
 
     render(<DocumentIntegrityPanel result={partialResult} />);
     expect(screen.getByText(/Thuế ↔ BK đã được đối chiếu/)).toBeDefined();
-    expect(screen.getByText(/Thuế ↔ BK khớp · TK511 chưa kiểm tra/)).toBeDefined();
+    expect(screen.getByText(/Tiền chưa thuế trên hóa đơn Thuế ↔ cột Tiền của BK/)).toBeDefined();
+    expect(screen.getByText(/Thuế ↔ BK khớp 5 trường · Chưa tải Sổ cái TK511/)).toBeDefined();
+    expect(screen.getByRole("columnheader", { name: "Doanh thu (Chưa thuế Thuế ↔ Tiền BK)" })).toBeDefined();
+    expect(screen.queryByText(/TK511 chưa kiểm tra/)).toBeNull();
     expect(screen.queryByText(/Chứng từ ba nguồn: đạt/)).toBeNull();
     expect(screen.queryByText(/PASS/i)).toBeNull();
   });
@@ -181,5 +223,42 @@ describe("DocumentIntegrityPanel", () => {
       expect(screen.getAllByText(code).length).toBeGreaterThanOrEqual(1);
     }
     expect(screen.queryByText(/PASS/i)).toBeNull();
+  });
+
+  it("filters the table to only exact Thuế ↔ BK cases when the exact summary is pressed", () => {
+    const documents = [
+      ...Array.from({ length: 35 }, (_, index) => makeExactDocument(index + 1)),
+      ...Array.from({ length: 4 }, (_, index) => makeMissingDocument(index + 1)),
+    ];
+    const { container } = render(<DocumentIntegrityPanel result={{ ...result, documents }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Lọc Thuế ↔ BK khớp: 35 chứng từ" }));
+    expect(screen.getByRole("status", { name: "Bộ lọc chứng từ" }).textContent)
+      .toContain("Thuế ↔ BK khớp: hiển thị 35/39 chứng từ");
+    expect(container.querySelectorAll(".document-open-button")).toHaveLength(35);
+    expect(screen.getByRole("button", { name: "E001 ↔ E001" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "M001 ↔ —" })).toBeNull();
+  });
+
+  it("filters the table to the complete missing-BK evidence and can restore all rows", () => {
+    const documents = [
+      ...Array.from({ length: 35 }, (_, index) => makeExactDocument(index + 1)),
+      ...Array.from({ length: 4 }, (_, index) => makeMissingDocument(index + 1)),
+    ];
+    const { container } = render(<DocumentIntegrityPanel result={{ ...result, documents }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Lọc Thiếu BK: 4 chứng từ" }));
+    expect(screen.getByRole("status", { name: "Bộ lọc chứng từ" }).textContent)
+      .toContain("Thiếu BK: hiển thị 4/39 chứng từ");
+    expect(container.querySelectorAll(".document-open-button")).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "M001 ↔ —" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "E001 ↔ E001" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hiển thị tất cả" }));
+    expect(screen.getByRole("status", { name: "Bộ lọc chứng từ" }).textContent)
+      .toContain("Tất cả chứng từ: hiển thị 39/39 chứng từ");
+    expect(container.querySelectorAll(".document-open-button")).toHaveLength(39);
+    expect(screen.getByRole("button", { name: "E001 ↔ E001" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "M001 ↔ —" })).toBeDefined();
   });
 });

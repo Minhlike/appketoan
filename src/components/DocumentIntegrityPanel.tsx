@@ -1,27 +1,33 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type {
-  DocumentField,
   DocumentIntegrityCase,
   DocumentIntegrityResult,
   DocumentSnapshot,
 } from "../types/dataContract";
 import { formatVND } from "../utils/money";
-
-const fieldLabel: Record<DocumentField, string> = {
-  DATE: "Ngày",
-  INVOICE_NUMBER: "Số HĐ / Số CT",
-  PRETAX: "Chưa thuế",
-  VAT: "VAT",
-  TOTAL: "Phải thu",
-};
+import {
+  documentCheckLabel,
+  documentFilterItems,
+  documentStatusLabel,
+  matchesDocumentFilter,
+  notCheckedReason,
+  type DocumentFilterId,
+} from "./documentIntegrityView";
 
 const valuePair = (left?: string, right?: string, money = false) => {
   const format = (value?: string) => value === undefined ? "—" : money ? formatVND(value) : value;
   return `${format(left)} ↔ ${format(right)}`;
 };
 
-function snapshotFields(record?: DocumentSnapshot) {
+type SnapshotKind = "INVOICE" | "SALES_REGISTER" | "LEDGER_511";
+
+function snapshotFields(record: DocumentSnapshot | undefined, kind: SnapshotKind) {
+  const labels = kind === "INVOICE"
+    ? ["Tiền chưa thuế", "VAT", "Tổng thanh toán"]
+    : kind === "SALES_REGISTER"
+      ? ["Tiền (doanh thu)", "Thuế", "Phải thu"]
+      : ["Phát sinh Có (TK511)", "VAT (không thuộc TK511)", "Phải thu (không thuộc TK511)"];
   return [
     ["Nguồn", record?.provenance.sourceName || "—"],
     ["File / sheet / dòng", record
@@ -29,13 +35,19 @@ function snapshotFields(record?: DocumentSnapshot) {
       : "—"],
     ["Ngày", record?.date || "—"],
     ["Số chứng từ", record?.invoiceNumber || "—"],
-    ["Chưa thuế", record?.pretaxAmount ? formatVND(record.pretaxAmount) : "—"],
-    ["VAT", record?.vatAmount ? formatVND(record.vatAmount) : "—"],
-    ["Phải thu", record?.totalAmount ? formatVND(record.totalAmount) : "—"],
+    [labels[0], record?.pretaxAmount ? formatVND(record.pretaxAmount) : "—"],
+    [labels[1], record?.vatAmount ? formatVND(record.vatAmount) : "—"],
+    [labels[2], record?.totalAmount ? formatVND(record.totalAmount) : "—"],
   ];
 }
 
-function DocumentDetail({ document }: { document: DocumentIntegrityCase }) {
+function DocumentDetail({
+  document,
+  ledger511Checked,
+}: {
+  document: DocumentIntegrityCase;
+  ledger511Checked: boolean;
+}) {
   return (
     <aside className="document-detail" aria-label="Chi tiết đối chiếu chứng từ">
       <div className="section-title-row">
@@ -46,14 +58,14 @@ function DocumentDetail({ document }: { document: DocumentIntegrityCase }) {
       </div>
       <div className="document-side-by-side">
         {[
-          ["Hóa đơn Thuế", document.invoice],
-          ["Bảng kê bán hàng", document.salesRegister],
-          ["TK511", document.ledger511],
-        ].map(([title, record]) => (
+          ["Hóa đơn Thuế", document.invoice, "INVOICE"],
+          ["Bảng kê bán hàng (Tiền / Thuế / Phải thu)", document.salesRegister, "SALES_REGISTER"],
+          ["Sổ cái TK511 (nguồn riêng)", document.ledger511, "LEDGER_511"],
+        ].map(([title, record, kind]) => (
           <section key={String(title)}>
             <h4>{String(title)}</h4>
             <dl>
-              {snapshotFields(record as DocumentSnapshot | undefined).map(([label, value]) => (
+              {snapshotFields(record as DocumentSnapshot | undefined, kind as SnapshotKind).map(([label, value]) => (
                 <div key={label}>
                   <dt>{label}</dt>
                   <dd>{value}</dd>
@@ -69,10 +81,10 @@ function DocumentDetail({ document }: { document: DocumentIntegrityCase }) {
             <span aria-label={check.status === "MATCH" ? "Khớp" : check.status === "NOT_CHECKED" ? "Chưa đối chiếu" : "Không khớp"}>
               {check.status === "MATCH" ? "✓" : check.status === "NOT_CHECKED" ? "—" : "✗"}
             </span>
-            <strong>{check.scope === "INVOICE_TO_SALES_REGISTER" ? "Thuế ↔ BK" : "Thuế ↔ TK511"}: {fieldLabel[check.field]}</strong>
+            <strong>{documentCheckLabel(check)}</strong>
             <small>
               {check.status === "NOT_CHECKED"
-                ? "CHƯA ĐỐI CHIẾU"
+                ? notCheckedReason(check, ledger511Checked)
                 : `${check.expectedValue || "—"} ↔ ${check.actualValue || "—"}`}
             </small>
           </div>
@@ -96,37 +108,46 @@ function DocumentDetail({ document }: { document: DocumentIntegrityCase }) {
 
 export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityResult }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<DocumentFilterId>("ALL");
+  useEffect(() => {
+    setSelectedId(null);
+    setActiveFilter("ALL");
+  }, [result]);
+  const filteredDocuments = useMemo(
+    () => result.documents.filter((document) => matchesDocumentFilter(document, activeFilter)),
+    [activeFilter, result.documents]
+  );
   const selected = useMemo(
-    () => result.documents.find((document) => document.id === selectedId),
-    [result.documents, selectedId]
+    () => filteredDocuments.find((document) => document.id === selectedId),
+    [filteredDocuments, selectedId]
   );
   const summary = result.summary;
   const ledger511Checked = result.ledger511Checked ?? (summary.ledger511Records > 0);
-  const invoiceSalesRegisterExact =
-    summary.invoiceSalesRegisterExact ?? summary.fullyMatched;
-  const summaryItems = [
-    ["Thuế ↔ BK khớp", invoiceSalesRegisterExact],
-    ["Khớp đủ 3 nguồn", summary.fullyMatched],
-    ["Sai ngày", summary.dateMismatch],
-    ["Sai số HĐ", summary.invoiceNumberMismatch],
-    ["Sai tiền", summary.pretaxMismatch],
-    ["Sai VAT", summary.vatMismatch],
-    ["Sai phải thu", summary.totalMismatch],
-    ["Thiếu BK", summary.missingInBk],
-    ["Thừa BK", summary.extraInBk],
-    ["Trùng Số ct", summary.duplicateInvoiceNumber],
-    ["Mơ hồ", summary.ambiguousMatch],
-    ["Lifecycle cần rà soát", summary.invoiceLifecycleNeedsReview],
-  ] as const;
+  const summaryItems = useMemo(() => documentFilterItems(result), [result]);
+  const activeFilterLabel = activeFilter === "ALL"
+    ? "Tất cả chứng từ"
+    : summaryItems.find((item) => item.id === activeFilter)?.label || "Chứng từ đã lọc";
+
+  const selectFilter = (filterId: DocumentFilterId) => {
+    setSelectedId(null);
+    setActiveFilter((current) => current === filterId ? "ALL" : filterId);
+  };
 
   return (
     <section className="document-integrity-panel" aria-label="Kiểm soát chi tiết chứng từ">
       <div className="document-summary-grid">
-        {summaryItems.map(([label, value]) => (
-          <div key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
-          </div>
+        {summaryItems.map((item) => (
+          <button
+            type="button"
+            className="document-summary-filter"
+            key={item.id}
+            aria-label={`Lọc ${item.label}: ${item.count} chứng từ`}
+            aria-pressed={activeFilter === item.id}
+            onClick={() => selectFilter(item.id)}
+          >
+            <span>{item.label}</span>
+            <strong>{item.count}</strong>
+          </button>
         ))}
       </div>
       <div className="document-total-note" role="status">
@@ -136,6 +157,17 @@ export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityRe
           : " Thuế ↔ BK đã được đối chiếu; chưa có TK511 nên kết quả tổng thể CHƯA ĐỦ BẰNG CHỨNG."}
         {result.totalsEqual && !result.documentsPass && " Tổng bằng nhau không thay thế kiểm tra từng chứng từ."}
       </div>
+      <div className="document-source-scope-note">
+        <strong>Phạm vi đang đối chiếu:</strong> Tiền chưa thuế trên hóa đơn Thuế ↔ cột Tiền của BK
+        (doanh thu); VAT Thuế ↔ cột Thuế BK; Tổng thanh toán ↔ cột Phải thu BK.
+        {!ledger511Checked && " BK chứng minh bảng kê bán hàng, không thay thế file Sổ cái TK511; muốn xác nhận đã ghi sổ phải tải thêm nguồn TK511."}
+      </div>
+      <div className="document-filter-status" role="status" aria-label="Bộ lọc chứng từ">
+        <span><strong>{activeFilterLabel}:</strong> hiển thị {filteredDocuments.length}/{result.documents.length} chứng từ.</span>
+        {activeFilter !== "ALL" && (
+          <button type="button" onClick={() => selectFilter("ALL")}>Hiển thị tất cả</button>
+        )}
+      </div>
       <div className="document-table-wrap">
         <table className="document-table">
           <thead>
@@ -143,14 +175,14 @@ export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityRe
               <th>Ngày Thuế</th>
               <th>Ngày BK</th>
               <th>Số HĐ / Số CT</th>
-              <th>Chưa thuế</th>
-              <th>VAT</th>
-              <th>Phải thu</th>
+              <th>Doanh thu (Chưa thuế Thuế ↔ Tiền BK)</th>
+              <th>VAT (Thuế ↔ BK)</th>
+              <th>Phải thu (Tổng thanh toán ↔ BK)</th>
               <th>Trạng thái</th>
             </tr>
           </thead>
           <tbody>
-            {result.documents.map((document) => (
+            {filteredDocuments.map((document) => (
               <tr key={document.id} className={selectedId === document.id ? "is-selected" : ""}>
                 <td>{document.invoice?.date || "—"}</td>
                 <td>{document.salesRegister?.date || "—"}</td>
@@ -162,17 +194,18 @@ export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityRe
                 <td>{valuePair(document.invoice?.pretaxAmount, document.salesRegister?.pretaxAmount, true)}</td>
                 <td>{valuePair(document.invoice?.vatAmount, document.salesRegister?.vatAmount, true)}</td>
                 <td>{valuePair(document.invoice?.totalAmount, document.salesRegister?.totalAmount, true)}</td>
-                <td>{document.status === "FULLY_MATCHED"
-                  ? "Khớp đủ 3 nguồn"
-                  : !ledger511Checked && document.errors.length === 0
-                    ? "Thuế ↔ BK khớp · TK511 chưa kiểm tra"
-                    : document.errors.map((error) => error.code).join(", ") || "Cần rà soát"}</td>
+                <td>{documentStatusLabel(document, ledger511Checked)}</td>
               </tr>
             ))}
+            {filteredDocuments.length === 0 && (
+              <tr>
+                <td colSpan={7} className="document-filter-empty">Không có chứng từ thuộc nhóm này.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
-      {selected && <DocumentDetail document={selected} />}
+      {selected && <DocumentDetail document={selected} ledger511Checked={ledger511Checked} />}
     </section>
   );
 }

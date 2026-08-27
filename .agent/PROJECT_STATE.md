@@ -134,3 +134,15 @@ Reconciliation Core (crates/reconciliation-core/)
 - The pure Rust evaluator checks all five Invoice-to-Register fields, marks all ledger fields `NOT_CHECKED` when TK511 is absent, and does not fabricate per-document missing-ledger findings without a ledger dataset.
 - The Review Queue contains partially loaded actionable controls but excludes unrelated controls with no loaded source; every control remains visible in the Control Plan.
 - Synthetic and ignored local two-source regressions passed for the selected user period. Full Rust/frontend/type/format/Clippy gates, portable build, and rendered-UI smoke passed. Portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`. PR #4 remains unmerged.
+
+## V18 Independent Two-Workbook Audit (2026-08-27)
+- A local spreadsheet-only audit read the ignored BK and tax workbooks directly, without invoking AppKetoan code, IPC, planner, or UI.
+- Every in-period invoice/register pair agreed on date, normalized document identity, pretax, VAT, and total; both inclusive and exclusive interpretations of the selected end boundary produced the same conclusion for these inputs.
+- The detailed workbook report remains under the ignored `.local-testdata/` tree and must never be committed. This independent oracle establishes that any empty/no-result application state is an application-path defect rather than source incompatibility.
+
+## V18 Document Evidence Navigation Correction (2026-08-27)
+- Document summary totals are now derived from the same typed cases used by the table and act as keyboard-accessible filters; filtered row conservation is visible and can be reset without rerunning reconciliation.
+- Labels distinguish Invoice pretax from Sales Register revenue and from independent General Ledger TK511 posting evidence. Sales Register evidence can establish the five-field Invoice-to-Register comparison but can never masquerade as a loaded TK511 source or complete assurance.
+- Five focused frontend acceptance tests cover source-specific evidence, fail-closed partial results, multiple simultaneous errors, exact-pair filtering, and complete missing-register filtering/restoration.
+- All source gates and both ignored local harnesses passed. A fresh portable-only EXE was built and controlled directly with the ignored local workbooks: startup, source recognition, period execution, scope disclosure, exact filtering, missing filtering, and restoration all rendered correctly.
+- Current portable SHA256: `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. PR #4 remains unmerged.

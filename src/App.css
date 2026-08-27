@@ -473,14 +473,39 @@ body {
   gap: 0.5rem;
 }
 
-.document-summary-grid div {
+.document-summary-filter {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 0.5rem;
   padding: 0.55rem 0.7rem;
   border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #f8fafc;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.document-summary-filter:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.document-summary-filter:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.3);
+  outline-offset: 2px;
+}
+
+.document-summary-filter[aria-pressed="true"] {
+  border-color: #1d4ed8;
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px #1d4ed8;
+}
+
+.document-summary-filter strong {
+  font-variant-numeric: tabular-nums;
 }
 
 .document-total-note {
@@ -488,6 +513,35 @@ body {
   padding: 0.65rem 0.75rem;
   border-left: 4px solid #64748b;
   background: #f8fafc;
+}
+
+.document-source-scope-note {
+  margin: -0.25rem 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-left: 4px solid #0f766e;
+  background: #f0fdfa;
+  color: #134e4a;
+  line-height: 1.45;
+}
+
+.document-filter-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 0.55rem;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+.document-filter-status button {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  background: #fff;
+  color: #1d4ed8;
+  font: inherit;
+  cursor: pointer;
 }
 
 .document-table-wrap {
@@ -518,8 +572,20 @@ body {
   background: #f1f5f9;
 }
 
+.document-table th:nth-child(4),
+.document-table th:nth-child(5),
+.document-table th:nth-child(6) {
+  min-width: 170px;
+}
+
 .document-table tr.is-selected {
   background: #eff6ff;
+}
+
+.document-filter-empty {
+  padding: 1rem !important;
+  color: #64748b;
+  text-align: center !important;
 }
 
 .document-open-button {

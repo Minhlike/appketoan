@@ -76,6 +76,7 @@ The V18 portable EXE blank-window correction is implemented and rendered-UI smok
 13. [x] Replace process-only EXE smoke with rendered Windows UI verification and prevent the desktop shell from exposing a blank startup frame.
 14. [x] Fix the required `ControlResult` IPC collection contract so partial/not-run controls cannot crash the Audit Workspace after execution; add backend/frontend regressions and rebuild the portable EXE.
 15. [x] Execute Invoice-to-Sales-Register document checks when TK511 is absent while retaining fail-closed missing capability, `NOT_CHECKED` ledger evidence, and no partial PASS.
+16. [x] Replace passive document-summary totals with evidence-derived filters, make the Invoice/BK/TK511 provenance explicit in every table/detail label, and validate the portable EXE directly with the two ignored local workbooks.
 
 ## Next Task
-Wait for the user to retest the rebuilt portable EXE with the same two-source local dossier and accounting period. Expected behavior: visible Invoice-to-Register results, explicit missing TK511, no overall PASS, and no unrelated empty-source controls in the Review Queue. Do not rebuild installers or merge PR #4.
+Await user and ChatGPT review of the rebuilt portable EXE. Preserve the fail-closed distinction between Sales Register revenue semantics and independent General Ledger TK511 evidence. Do not rebuild installers, add features, or merge PR #4.
