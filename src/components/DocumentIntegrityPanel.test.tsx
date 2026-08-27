@@ -34,13 +34,29 @@ const result: DocumentIntegrityResult = {
     missingInTk511: 1,
     invoiceLifecycleNeedsReview: 0,
   },
-  totals: [{
-    field: "PRETAX",
-    invoiceTotal: "100",
-    salesRegisterTotal: "100",
-    variance: "0",
-    status: "EQUAL",
-  }],
+  totals: [
+    {
+      field: "PRETAX",
+      invoiceTotal: "100",
+      salesRegisterTotal: "100",
+      variance: "0",
+      status: "EQUAL",
+    },
+    {
+      field: "VAT",
+      invoiceTotal: "8",
+      salesRegisterTotal: "7",
+      variance: "1",
+      status: "MISMATCH",
+    },
+    {
+      field: "TOTAL",
+      invoiceTotal: "108",
+      salesRegisterTotal: "107",
+      variance: "1",
+      status: "NOT_VERIFIED",
+    },
+  ],
   totalsEqual: true,
   ledger511Revenue: {
     invoiceTotal: "100",
@@ -139,6 +155,13 @@ describe("DocumentIntegrityPanel", () => {
     expect(screen.getByText("Thuế ↔ BK khớp")).toBeDefined();
     expect(screen.getByText("Khớp đủ 3 nguồn")).toBeDefined();
     expect(screen.getByText(/Tổng bằng nhau không thay thế/)).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Tổng cộng trong kỳ đã chọn" })).toBeDefined();
+    expect(screen.getByRole("columnheader", { name: "Hóa đơn Thuế" })).toBeDefined();
+    expect(screen.getByRole("columnheader", { name: "Bảng kê bán hàng" })).toBeDefined();
+    expect(screen.getByRole("rowheader", { name: "Doanh thu chưa thuế / Tiền BK" })).toBeDefined();
+    expect(screen.getByRole("rowheader", { name: "VAT hóa đơn / Thuế BK" })).toBeDefined();
+    expect(screen.getByRole("rowheader", { name: "Tổng thanh toán / Phải thu BK" })).toBeDefined();
+    expect(screen.getByText(/không cộng dòng “Tổng cộng” sẵn có/)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "233 ↔ 233" }));
     expect(screen.getByRole("complementary", { name: "Chi tiết đối chiếu chứng từ" })).toBeDefined();
     expect(screen.getByRole("heading", { name: "Hóa đơn Thuế" })).toBeDefined();

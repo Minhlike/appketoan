@@ -146,3 +146,10 @@ Reconciliation Core (crates/reconciliation-core/)
 - Five focused frontend acceptance tests cover source-specific evidence, fail-closed partial results, multiple simultaneous errors, exact-pair filtering, and complete missing-register filtering/restoration.
 - All source gates and both ignored local harnesses passed. A fresh portable-only EXE was built and controlled directly with the ignored local workbooks: startup, source recognition, period execution, scope disclosure, exact filtering, missing filtering, and restoration all rendered correctly.
 - Current portable SHA256: `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. PR #4 remains unmerged.
+
+## V18 Period Totals Presentation (2026-08-27)
+- The frontend now renders the existing typed Rust totals for pretax/revenue, VAT/tax, and total/receivable with separate Invoice, Sales Register, variance, and status columns.
+- Totals are recomputed from normalized detail rows within the authoritative accounting period. Workbook subtotal/total rows remain excluded, preventing double counting and cross-period leakage.
+- A separate row reports Invoice pretax versus General Ledger TK511 credit evidence. Missing TK511 stays explicit and cannot be inferred from Sales Register totals.
+- Equal displayed sums remain `NOT_VERIFIED` when any required date/value evidence is incomplete and never override document-level findings.
+- Frontend tests, typecheck, Rust workspace tests, format, strict Clippy, portable build, and direct rendered EXE verification passed. Portable SHA256: `5A9E9162A2055955F085DCBD385E3D8586603C2DFB3438BF5076D88D10077A1B`.

@@ -102,6 +102,18 @@ export function documentCheckLabel(check: DocumentFieldCheck) {
     : invoiceLedgerLabels[check.field];
 }
 
+export const documentTotalLabel: Record<"PRETAX" | "VAT" | "TOTAL", string> = {
+  PRETAX: "Doanh thu chưa thuế / Tiền BK",
+  VAT: "VAT hóa đơn / Thuế BK",
+  TOTAL: "Tổng thanh toán / Phải thu BK",
+};
+
+export const totalStatusLabel = {
+  EQUAL: "Bằng nhau",
+  MISMATCH: "Có chênh lệch",
+  NOT_VERIFIED: "Chưa xác minh",
+} as const;
+
 export function notCheckedReason(check: DocumentFieldCheck, ledger511Checked: boolean) {
   if (check.scope !== "INVOICE_TO_LEDGER511") return "CHƯA ĐỐI CHIẾU";
   if (check.field === "VAT" || check.field === "TOTAL") {

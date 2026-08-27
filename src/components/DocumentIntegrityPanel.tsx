@@ -10,8 +10,10 @@ import {
   documentCheckLabel,
   documentFilterItems,
   documentStatusLabel,
+  documentTotalLabel,
   matchesDocumentFilter,
   notCheckedReason,
+  totalStatusLabel,
   type DocumentFilterId,
 } from "./documentIntegrityView";
 
@@ -157,6 +159,54 @@ export function DocumentIntegrityPanel({ result }: { result: DocumentIntegrityRe
           : " Thuế ↔ BK đã được đối chiếu; chưa có TK511 nên kết quả tổng thể CHƯA ĐỦ BẰNG CHỨNG."}
         {result.totalsEqual && !result.documentsPass && " Tổng bằng nhau không thay thế kiểm tra từng chứng từ."}
       </div>
+      <section className="document-totals-section" aria-labelledby="document-totals-title">
+        <div className="document-totals-heading">
+          <div>
+            <h4 id="document-totals-title">Tổng cộng trong kỳ đã chọn</h4>
+            <p>Tính lại từ các dòng chi tiết hợp lệ trong kỳ; không cộng dòng “Tổng cộng” sẵn có trong workbook và không thay đổi khi lọc bảng.</p>
+          </div>
+        </div>
+        <div className="document-totals-wrap">
+          <table className="document-totals-table">
+            <thead>
+              <tr>
+                <th>Chỉ tiêu</th>
+                <th>Hóa đơn Thuế</th>
+                <th>Bảng kê bán hàng</th>
+                <th>Chênh lệch Thuế − BK</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(result.totals || []).map((total) => (
+                <tr key={total.field}>
+                  <th scope="row">{documentTotalLabel[total.field as "PRETAX" | "VAT" | "TOTAL"]}</th>
+                  <td>{formatVND(total.invoiceTotal)}</td>
+                  <td>{formatVND(total.salesRegisterTotal)}</td>
+                  <td>{formatVND(total.variance)}</td>
+                  <td>
+                    <span className={`document-total-status is-${total.status.toLowerCase()}`}>
+                      {totalStatusLabel[total.status]}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="document-ledger-total" aria-label="Tổng đối chiếu Sổ cái TK511">
+          <strong>Doanh thu Thuế ↔ Sổ cái TK511:</strong>
+          <span>Chưa thuế Thuế {formatVND(result.ledger511Revenue.invoiceTotal)}</span>
+          <span>Phát sinh Có TK511 {formatVND(result.ledger511Revenue.ledgerTotal)}</span>
+          <span>Chênh lệch {formatVND(result.ledger511Revenue.variance)}</span>
+          <span className={`document-total-status is-${result.ledger511Revenue.status.toLowerCase()}`}>
+            {ledger511Checked ? totalStatusLabel[result.ledger511Revenue.status] : "Chưa tải Sổ cái TK511"}
+          </span>
+        </div>
+        <p className="document-totals-warning">
+          Tổng bằng nhau chỉ là kiểm tra cộng dọc; kết luận chứng từ vẫn phụ thuộc đối chiếu từng dòng và bằng chứng TK511.
+        </p>
+      </section>
       <div className="document-source-scope-note">
         <strong>Phạm vi đang đối chiếu:</strong> Tiền chưa thuế trên hóa đơn Thuế ↔ cột Tiền của BK
         (doanh thu); VAT Thuế ↔ cột Thuế BK; Tổng thanh toán ↔ cột Phải thu BK.

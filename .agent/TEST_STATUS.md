@@ -179,3 +179,12 @@
 - `npx tauri build --no-bundle`: SUCCESS. The known non-fatal GNU WebView2 `.drectve` warning remains.
 - Direct portable EXE acceptance via Windows computer control: SUCCESS. The app rendered without a blank frame or bootstrap crash, recognized the two ignored workbooks, executed the selected period, showed explicit Invoice/Register versus TK511 provenance, applied exact/missing filters, and restored all rows.
 - Portable SHA256: `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. Installers intentionally remain out of scope.
+
+### 22. V18 Period Totals Presentation Gate (2026-08-27)
+- Existing five-case `DocumentIntegrityPanel` suite: SUCCESS (5/5); the core evidence case now asserts all three period-total rows, source columns, and the no-double-count explanation.
+- `npm run test`: SUCCESS (34/34 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo test --workspace`: SUCCESS; all default targets passed and confidential harnesses remained ignored by the default command.
+- `cargo fmt --all -- --check`: SUCCESS. Strict workspace Clippy: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS; known GNU WebView2 `.drectve` warning remains non-fatal.
+- Direct rendered EXE test: SUCCESS; three Thuế/BK total rows, variances, statuses, and the independent TK511 total row appeared after the local two-source run. No workbook or artifact was tracked.
+- Portable SHA256: `5A9E9162A2055955F085DCBD385E3D8586603C2DFB3438BF5076D88D10077A1B`.

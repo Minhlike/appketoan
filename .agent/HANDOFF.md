@@ -165,3 +165,10 @@
 - Exactly five focused component acceptance cases pass, including synthetic reproduction of the reported exact/missing card counts. Full Rust/frontend/type/format/Clippy gates and both ignored local harnesses pass.
 - The fresh portable EXE was controlled directly against the ignored local workbooks and selected period. It rendered, recognized both sources, reconciled available Invoice/Register evidence, filtered exact and missing groups, restored all rows, and never promoted absent TK511 evidence to PASS.
 - Portable path: `target/release/appketoan.exe`; SHA256 `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. No installer was rebuilt. PR #4 must remain unmerged for review.
+
+## V18 Period Totals UI — 2026-08-27
+- The backend already emitted three authoritative period-total checks; the defect was that the document panel discarded their numeric values and exposed only a generic sentence.
+- The panel now shows a totals table with Invoice, Sales Register, variance, and status columns for revenue, VAT, and receivable semantics. It also shows the independent Invoice-to-TK511 revenue total without treating BK as ledger evidence.
+- The table states that totals come from normalized in-period detail rows, do not include workbook subtotal rows, and do not change with document filters.
+- Direct portable EXE verification with the ignored local workbooks confirmed all columns render. The real input remains fail-closed `NOT_VERIFIED` because incomplete required date evidence exists, even though the visible source sums agree.
+- All source/UI gates passed. Portable SHA256: `5A9E9162A2055955F085DCBD385E3D8586603C2DFB3438BF5076D88D10077A1B`. PR #4 remains unmerged.
