@@ -1,14 +1,76 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>AppKetoan — Đang khởi động</title>
+    <style>
+      #boot-status {
+        box-sizing: border-box;
+        max-width: 680px;
+        margin: 15vh auto 0;
+        padding: 24px;
+        color: #24324a;
+        font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      #boot-status strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 20px;
+      }
+      #boot-status pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-status" role="status">
+        <strong>Đang khởi động AppKetoan…</strong>
+        <span>Ứng dụng đang nạp giao diện cục bộ.</span>
+      </div>
+    </div>
+    <script>
+      (() => {
+        const reportBootFailure = (reason) => {
+          const message = String(reason || "Lỗi không xác định");
+          document.title = "AppKetoan — Lỗi khởi động";
+          const root = document.getElementById("root");
+          if (!root) return;
+          root.replaceChildren();
+          const status = document.createElement("div");
+          status.id = "boot-status";
+          status.setAttribute("role", "alert");
+          const heading = document.createElement("strong");
+          heading.textContent = "AppKetoan không thể khởi động giao diện";
+          const detail = document.createElement("pre");
+          detail.textContent = message;
+          status.append(heading, detail);
+          root.append(status);
+        };
+
+        window.__APPKETOAN_BOOT__ = { reportBootFailure, mounted: false };
+        window.addEventListener("error", (event) => {
+          if (!window.__APPKETOAN_BOOT__.mounted) {
+            reportBootFailure(event.error?.stack || event.message || "Không tải được JavaScript");
+          }
+        });
+        window.addEventListener("unhandledrejection", (event) => {
+          if (!window.__APPKETOAN_BOOT__.mounted) {
+            reportBootFailure(
+              event.reason?.stack || event.reason || "Promise bị từ chối khi khởi động",
+            );
+          }
+        });
+        window.setTimeout(() => {
+          if (!window.__APPKETOAN_BOOT__.mounted) {
+            reportBootFailure("Giao diện không hoàn tất khởi động trong 8 giây");
+          }
+        }, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

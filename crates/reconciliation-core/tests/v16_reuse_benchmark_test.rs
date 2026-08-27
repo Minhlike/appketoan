@@ -213,9 +213,16 @@ fn benchmark_v15_tri_source_vs_v16_reused_workspace() {
         .control_results
         .iter()
         .find(|result| result.control_id == REVENUE_CONTROL_ID)
-        .and_then(|result| result.reconciliation_result.as_ref())
-        .expect("V16 revenue result");
-    assert_eq!(v16_revenue.summary.exact_matches_count, 100_000);
+        .and_then(|result| result.document_integrity_result.as_ref())
+        .expect("V18 revenue document result");
+    assert_eq!(v16_revenue.summary.fully_matched, 100_000);
+    let cold_revenue_ms = v16
+        .metrics
+        .control_execution
+        .iter()
+        .find(|metric| metric.control_id == REVENUE_CONTROL_ID)
+        .expect("cold revenue timing")
+        .elapsed_ms;
     assert_eq!(
         v16.control_plans
             .iter()
@@ -231,15 +238,24 @@ fn benchmark_v15_tri_source_vs_v16_reused_workspace() {
         .control_results
         .iter()
         .find(|result| result.control_id == REVENUE_CONTROL_ID)
-        .and_then(|result| result.reconciliation_result.as_ref())
-        .expect("V17 warm revenue result");
-    assert_eq!(warm_revenue.summary.exact_matches_count, 100_000);
+        .and_then(|result| result.document_integrity_result.as_ref())
+        .expect("V18 warm revenue document result");
+    assert_eq!(warm_revenue.summary.fully_matched, 100_000);
+    let warm_revenue_ms = v17_warm
+        .metrics
+        .control_execution
+        .iter()
+        .find(|metric| metric.control_id == REVENUE_CONTROL_ID)
+        .expect("warm revenue timing")
+        .elapsed_ms;
     println!(
-        "V17_EQUIVALENT_BENCHMARK records_per_transaction_source=100000 controls=3 iterations=1 build=debug v15_tri_ms={} prepare_ms={} execute_ms={} total_ms={} warm_execute_ms={} exact=100000 reuse=1/1/1",
+        "V18_FINAL_BENCHMARK records_per_transaction_source=100000 controls=3 iterations=1 build=debug v15_tri_ms={} prepare_ms={} execute_ms={} cold_revenue_ms={} total_ms={} warm_execute_ms={} warm_revenue_ms={} exact=100000 reuse=1/1/1 legacy_revenue_materialized=false",
         v15_elapsed.as_millis(),
         prepare_elapsed.as_millis(),
         execution_elapsed.as_millis(),
+        cold_revenue_ms,
         prepare_elapsed.saturating_add(execution_elapsed).as_millis(),
         warm_elapsed.as_millis(),
+        warm_revenue_ms,
     );
 }

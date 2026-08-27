@@ -113,3 +113,62 @@
 - Native drag/drop sends local file paths; file-picker/browser fallback still uses byte arrays. The backend enforces duplicate, lock-file, and source-size policies regardless of UI path.
 - Full local acceptance and mandatory release gates passed. Exact benchmark numbers and limitations are recorded in `docs/04-architecture/04-v17-resilience-ui-foundation.md`.
 - Generated release artifacts and local accounting workbooks remain ignored. Stop after pushing the stacked PR for ChatGPT source/diff review.
+
+## V18 Document Integrity / Field-Level Reconciliation — 2026-08-26
+- Branch: `codex/v18-document-integrity`, based exactly on the reviewed V17 head. Stacked PR #4 (`https://github.com/Minhlike/appketoan/pull/4`) targets `codex/v17-resilience-ui-foundation`; neither PR may be merged by the agent.
+- `document_integrity.rs` is the authoritative pure-Rust evaluator for Invoice/Sales Register/TK511. It validates BK first, marks all duplicate rows, uses exact field checks, allows only unique strong diagnostic links, and separates totals from document PASS.
+- `PreparedSourceIndex.review_records` retains missing/unparseable-date rows outside every auto-match index. ADR 0014 supersedes the initial intersection rule for document completeness: the explicit user period is authoritative, while bank matching retains its distinct fail-closed intersection.
+- `ControlResult.document_integrity_result` is wired through Tauri serialization into the Audit Workspace. The existing Review Queue receives each typed error; selecting a row opens side-by-side provenance and field checks.
+- The unchanged record-count oracle and #233 review condition passed against ignored local workbooks. One BK row has no parseable required date, so period totals are correctly `NOT_VERIFIED`.
+- Initial V18 gates passed, but the final RC task superseded the initial performance/period conclusions. See the final block below.
+
+## V18 Final Correctness Fix and RC — 2026-08-26
+- Continued on PR #4 from reviewed head `a759d8a1a10f0d093b694bcf571546ba780eefd3`; do not merge.
+- Revenue document completeness now covers the full user-selected accounting period. Four synthetic boundary regressions prove late/early source evidence cannot produce false PASS; bank period behavior has an explicit fail-closed regression.
+- The existing typed invoice lifecycle evaluator is reused. Adjusted, affected-by-adjustment, replaced, cancelled, and unknown mapped values emit `INVOICE_LIFECYCLE_NEEDS_REVIEW` and never become fully matched.
+- Audit Workspace revenue no longer materializes a second generic reconciliation result. Prepared datasets are borrowed when possible; advanced legacy scenario execution is unchanged.
+- The 100k debug benchmark improved to 7.80 seconds cold total and 7.44 seconds warm execution. Sampled peak working set fell to about 1.30 GiB; see `REPORT_V18_FINAL_RC.md` for measurement caveats.
+- Both confidential local harnesses and all mandatory source/UI/build gates passed. The authoritative period exposed beginning-of-period BK evidence that the prior intersection had hidden; it remains review evidence, not a hard-coded oracle.
+- Fresh portable, NSIS, and MSI artifacts were rebuilt, hashed, and kept ignored. The fresh portable executable passed a five-second smoke run. Stop for final ChatGPT review.
+
+## V18 Portable EXE Blank-Window Correction — 2026-08-26
+- A user run proved that the previous process-only smoke could false-pass a blank desktop window. Treat every earlier “alive for five seconds” claim as superseded for UI readiness.
+- The desktop window is hidden until the embedded page-load completion event. `index.html` contains a visible startup/failure surface, and React reports uncaught bootstrap errors there instead of leaving an empty root.
+- `scripts/smoke_release_ui.ps1` verifies the actual Windows accessibility tree and fails if the process lives without rendering the expected AppKetoan heading. The existing audit packaging script now delegates to this rendered-UI smoke.
+- The final portable EXE passed the rendered-UI smoke with 72 elements on both normal and fresh WebView2 profiles. Direct window capture showed the complete dashboard. Current portable SHA256 is `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`.
+- This correction is EXE-only. NSIS/MSI were not rebuilt, no accounting behavior changed, and PR #4 must remain unmerged pending review.
+
+## V18 Audit Result IPC Crash Correction — 2026-08-26
+- The startup fallback successfully exposed a real post-run error instead of a white window: `Object.keys` received an omitted `summaryMetrics` collection from a not-run/missing-source control.
+- Root cause was a cross-language contract mismatch: Rust used `skip_serializing_if` for fields that TypeScript marks required. Rust now always emits `{}` and `[]`; React also treats those fields as optional at the wire boundary for compatibility.
+- Regression coverage includes exact Rust JSON shape and rendering a legacy partial payload with both collections omitted. No control is promoted to PASS.
+- Full source gate and both ignored local acceptance harnesses passed. The portable EXE was rebuilt without installers and passed rendered-UI smoke with 72 UI elements.
+- Current local-only portable: `target/release/appketoan.exe`; SHA256 `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`. Await the user's reproduction test; do not merge PR #4.
+
+## V18 Two-Source Document Control Correction — 2026-08-26
+- A user run with only Invoice and Sales Register exposed that the tri-source planner returned `NOT_RUN` solely because TK511 was absent, suppressing valid two-source evidence.
+- ADR 0015 makes Invoice plus Sales Register the minimum executable set while keeping TK511 required for complete assurance. Missing TK511 remains in plan/result capability evidence; every ledger field is `NOT_CHECKED`; `documentsPass` and the control remain fail-closed.
+- The result distinguishes exact Invoice-to-Register pairs from fully matched three-source documents. A missing ledger source is not misreported as every individual document being absent from TK511.
+- The Review Queue now omits unrelated controls with no loaded source while the full Control Plan still shows them.
+- Synthetic regression, ignored local two-source acceptance, full source gates, portable build, and rendered smoke passed. Current portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`. PR #4 remains unmerged.
+
+## V18 Independent Two-Workbook Audit — 2026-08-27
+- The ignored BK and tax workbooks were reconciled directly with a separate local spreadsheet workflow; no AppKetoan source, engine, planner, IPC, or UI path was used.
+- The independent audit found complete agreement for every in-period pair across date, document identity, pretax, VAT, and total. End-boundary inclusive/exclusive interpretation did not change the conclusion for these files.
+- A detailed local workbook was generated beneath ignored `.local-testdata/`; it contains real accounting evidence and must not be committed or copied into agent memory.
+- Treat this as the external oracle for the next EXE reproduction. If the EXE does not show the available two-source evidence, continue root-cause debugging in the application path; do not blame the source files.
+
+## V18 Document Evidence Navigation — 2026-08-27
+- Root cause of the inert summary was presentational: totals were rendered as passive cards and were not connected to the typed document cases. They are now actionable filters whose counts are derived from `DocumentIntegrityResult.documents`, with visible filtered/total conservation and reset.
+- Root cause of the misleading TK511 wording was conflated value semantics and source provenance. Invoice pretax is compared with Sales Register `Tiền` as revenue, while a separate General Ledger TK511 source is still required before ledger posting is checked or overall assurance can pass.
+- The table, status, side-by-side evidence, and `NOT_CHECKED` reasons now use source-specific accounting labels. Missing TK511 remains fail-closed; VAT and receivable remain outside TK511 scope.
+- Exactly five focused component acceptance cases pass, including synthetic reproduction of the reported exact/missing card counts. Full Rust/frontend/type/format/Clippy gates and both ignored local harnesses pass.
+- The fresh portable EXE was controlled directly against the ignored local workbooks and selected period. It rendered, recognized both sources, reconciled available Invoice/Register evidence, filtered exact and missing groups, restored all rows, and never promoted absent TK511 evidence to PASS.
+- Portable path: `target/release/appketoan.exe`; SHA256 `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. No installer was rebuilt. PR #4 must remain unmerged for review.
+
+## V18 Period Totals UI — 2026-08-27
+- The backend already emitted three authoritative period-total checks; the defect was that the document panel discarded their numeric values and exposed only a generic sentence.
+- The panel now shows a totals table with Invoice, Sales Register, variance, and status columns for revenue, VAT, and receivable semantics. It also shows the independent Invoice-to-TK511 revenue total without treating BK as ledger evidence.
+- The table states that totals come from normalized in-period detail rows, do not include workbook subtotal rows, and do not change with document filters.
+- Direct portable EXE verification with the ignored local workbooks confirmed all columns render. The real input remains fail-closed `NOT_VERIFIED` because incomplete required date evidence exists, even though the visible source sums agree.
+- All source/UI gates passed. Portable SHA256: `5A9E9162A2055955F085DCBD385E3D8586603C2DFB3438BF5076D88D10077A1B`. PR #4 remains unmerged.

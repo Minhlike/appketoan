@@ -313,7 +313,8 @@ pub fn normalize_data_source_rows(
 
         let series = get_val(idx_series).map(|s| s.trim().to_uppercase());
         let template_code = get_val(idx_template_code);
-        let date = get_val(idx_date).and_then(|d| parse_excel_date(&d));
+        let raw_date = get_val(idx_date);
+        let date = raw_date.as_deref().and_then(parse_excel_date);
 
         let buyer_tax_id = get_val(idx_buyer_tax_id).map(|t| CanonicalRecord::normalize_tax_id(&t));
         let seller_tax_id =
@@ -326,8 +327,11 @@ pub fn normalize_data_source_rows(
         let partner_name = get_val(idx_partner_name);
         let partner_code = get_val(idx_partner_code);
 
-        let pretax_amount = get_val(idx_pretax_amount).and_then(|a| parse_amount(&a));
-        let vat_amount = get_val(idx_vat_amount).and_then(|a| parse_amount(&a));
+        let raw_pretax_amount = get_val(idx_pretax_amount);
+        let raw_vat_amount = get_val(idx_vat_amount);
+        let raw_total_amount = get_val(idx_total_amount);
+        let pretax_amount = raw_pretax_amount.as_deref().and_then(parse_amount);
+        let vat_amount = raw_vat_amount.as_deref().and_then(parse_amount);
         let discount_amount = get_val(idx_discount_amount).and_then(|a| parse_amount(&a));
         let fee_amount = get_val(idx_fee_amount).and_then(|a| parse_amount(&a));
         let debit_amount = get_val(idx_debit_amount).and_then(|a| parse_amount(&a));
@@ -335,7 +339,7 @@ pub fn normalize_data_source_rows(
 
         // Read total_amount directly from total_amount_column if mapped
         let (total_amount, total_amount_origin) =
-            if let Some(tot) = get_val(idx_total_amount).and_then(|a| parse_amount(&a)) {
+            if let Some(tot) = raw_total_amount.as_deref().and_then(parse_amount) {
                 (tot, ValueOrigin::Source)
             } else if let (Some(pretax), Some(vat)) = (pretax_amount, vat_amount) {
                 let disc = discount_amount.unwrap_or(Decimal::ZERO);
@@ -412,11 +416,27 @@ pub fn normalize_data_source_rows(
             raw_fields,
         };
 
-        if record.has_no_monetary_value() {
+        // V18 document-integrity validation must retain malformed BK rows so
+        // INVALID_AMOUNT / INVALID_DATE / MISSING_INVOICE_NUMBER can preserve
+        // their original row provenance. Other transactional kinds retain the
+        // historical placeholder-row filter.
+        let preserve_sales_register_validation_row = data_source.kind
+            == crate::models::DataSourceKind::SalesRegister
+            && (raw_doc_no.is_some()
+                || raw_date.is_some()
+                || raw_pretax_amount.is_some()
+                || raw_vat_amount.is_some()
+                || raw_total_amount.is_some());
+
+        if record.has_no_monetary_value() && !preserve_sales_register_validation_row {
             continue;
         }
 
-        if record.doc_no.is_none() && record.voucher_no.is_none() && record.partner_name.is_none() {
+        if record.doc_no.is_none()
+            && record.voucher_no.is_none()
+            && record.partner_name.is_none()
+            && !preserve_sales_register_validation_row
+        {
             continue;
         }
 

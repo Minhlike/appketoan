@@ -33,10 +33,10 @@ Reconciliation Core (crates/reconciliation-core/)
 - **Application Status**: Fully functional, tested with rigorous regression test suite against real-world accounting datasets.
 
 ## Production Artifacts
-- **NSIS Setup Installer**: `src-tauri/target/release/bundle/nsis/appketoan_0.1.0_x64-setup.exe` (4.99 MB)
-- **WiX MSI Installer**: `src-tauri/target/release/bundle/msi/appketoan_0.1.0_x64_en-US.msi` (7.78 MB)
-- **Portable Executable**: `src-tauri/target/release/tauri-app.exe` (26.4 MB)
-- **Source Archive**: `D:\appketoan-source.zip` (404.67 KB)
+- **NSIS Setup Installer**: local ignored `target/release/bundle/nsis/appketoan_0.1.0_x64-setup.exe`
+- **WiX MSI Installer**: local ignored `target/release/bundle/msi/appketoan_0.1.0_x64_en-US.msi`
+- **Portable Executable**: local ignored `target/release/appketoan.exe`
+- **Integrity Evidence**: SHA256 values are recorded in `.agent/REPORT_V18_FINAL_RC.md`; artifacts are never committed.
 
 ## Blockers
 - No correctness or build blocker. Multi-control execution time and unmeasured peak memory remain performance follow-up items.
@@ -106,3 +106,50 @@ Reconciliation Core (crates/reconciliation-core/)
 - The default React workflow is decomposed into source intake, period, planner/results, and unified review components. The legacy scenario workflow remains available under advanced settings.
 - Office lock files and exact duplicates are reported; native Tauri drag/drop is path-first while browser/file-picker bytes remain a compatibility fallback.
 - Local acceptance, full Rust/frontend/type/format/Clippy gates, Tauri production build, and release executable smoke passed. Peak RAM, pure IPC serialization time, inner-loop cancellation, and automated browser visual inspection remain explicitly unverified.
+
+## V18 Document Integrity / Field-Level Reconciliation (2026-08-26)
+- Status: final correctness fixes and RC gate complete on `codex/v18-document-integrity`; stacked PR #4 targets the unmerged V17 branch and is not merged.
+- The revenue tri-source control now has an authoritative typed document result. BK validation, exact five-field Thuế/BK comparison, strict three-field TK511 comparison, diagnostic-only links, independent totals, and provenance-preserving multi-error cases are implemented in the pure Rust core.
+- Invalid-date records stay outside auto-match indexes but remain available to the Review Queue. The user-selected accounting period is authoritative for document completeness; source date coverage is warning evidence and cannot hide first/last-period discrepancies. Bank control keeps its separate fail-closed intersection.
+- Non-regular or unknown mapped invoice lifecycle is a typed high-priority review and can never be fully matched.
+- The Audit Workspace shows document summaries, a field-level table, side-by-side evidence, and every error code without changing the advanced scenario workflow.
+- Audit Workspace no longer runs a duplicate generic revenue reconciliation; its optional legacy result is absent while the advanced scenario path remains unchanged. The same-machine 100k cold total is 7.80 seconds versus 13.43 seconds reproduced immediately before the fix and 78.20 seconds in the reviewed gate record.
+- Synthetic adversarial coverage, both ignored local acceptance harnesses, all Rust/frontend/type/format/Clippy gates, fresh Tauri release packaging, and executable smoke passed. The three local-only RC hashes are recorded in `REPORT_V18_FINAL_RC.md`; automated browser visual inspection remains unverified.
+
+## V18 Portable EXE Startup Correction (2026-08-26)
+- The prior five-second process-only smoke was invalidated after a user-visible blank WebView window was reported. A living process is no longer accepted as executable smoke evidence.
+- The Tauri window now stays hidden until its local page finishes loading. The embedded HTML provides a visible startup state and fail-closed error surface; React marks the shell ready only after its first committed mount.
+- `scripts/smoke_release_ui.ps1` launches the portable EXE and asserts the rendered Windows UI Automation tree contains the AppKetoan heading and does not contain the bootstrap failure screen.
+- The fresh portable EXE passed rendered-UI smoke against both the normal and a fresh WebView2 user-data folder. A direct `PrintWindow` capture also showed the complete accounting dashboard.
+- Portable SHA256: `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`. Installer artifacts were intentionally not rebuilt for this EXE-only correction.
+
+## V18 Audit Result IPC Crash Correction (2026-08-26)
+- A live two-register-plus-invoice run exposed a post-execution React crash: Rust omitted empty `summaryMetrics` and `limitations` collections while the required TypeScript contract dereferenced them.
+- `ControlResult` now always serializes those required collections. The dashboard also defaults absent collections for backward/partial-payload compatibility, so a missing-source or not-run control cannot take down the workspace or imply PASS.
+- Rust serialization and React legacy-payload regressions cover the exact failure. Both ignored local acceptance harnesses and all source gates passed.
+- The portable-only release was rebuilt and passed rendered-UI smoke using an explicit ASCII readiness marker. Current portable SHA256: `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`. PR #4 remains unmerged.
+
+## V18 Two-Source Document Control Correction (2026-08-26)
+- Invoice and Sales Register now form the minimum executable evidence for the revenue document control. Missing TK511 remains explicit and prevents control/document PASS.
+- The pure Rust evaluator checks all five Invoice-to-Register fields, marks all ledger fields `NOT_CHECKED` when TK511 is absent, and does not fabricate per-document missing-ledger findings without a ledger dataset.
+- The Review Queue contains partially loaded actionable controls but excludes unrelated controls with no loaded source; every control remains visible in the Control Plan.
+- Synthetic and ignored local two-source regressions passed for the selected user period. Full Rust/frontend/type/format/Clippy gates, portable build, and rendered-UI smoke passed. Portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`. PR #4 remains unmerged.
+
+## V18 Independent Two-Workbook Audit (2026-08-27)
+- A local spreadsheet-only audit read the ignored BK and tax workbooks directly, without invoking AppKetoan code, IPC, planner, or UI.
+- Every in-period invoice/register pair agreed on date, normalized document identity, pretax, VAT, and total; both inclusive and exclusive interpretations of the selected end boundary produced the same conclusion for these inputs.
+- The detailed workbook report remains under the ignored `.local-testdata/` tree and must never be committed. This independent oracle establishes that any empty/no-result application state is an application-path defect rather than source incompatibility.
+
+## V18 Document Evidence Navigation Correction (2026-08-27)
+- Document summary totals are now derived from the same typed cases used by the table and act as keyboard-accessible filters; filtered row conservation is visible and can be reset without rerunning reconciliation.
+- Labels distinguish Invoice pretax from Sales Register revenue and from independent General Ledger TK511 posting evidence. Sales Register evidence can establish the five-field Invoice-to-Register comparison but can never masquerade as a loaded TK511 source or complete assurance.
+- Five focused frontend acceptance tests cover source-specific evidence, fail-closed partial results, multiple simultaneous errors, exact-pair filtering, and complete missing-register filtering/restoration.
+- All source gates and both ignored local harnesses passed. A fresh portable-only EXE was built and controlled directly with the ignored local workbooks: startup, source recognition, period execution, scope disclosure, exact filtering, missing filtering, and restoration all rendered correctly.
+- Current portable SHA256: `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. PR #4 remains unmerged.
+
+## V18 Period Totals Presentation (2026-08-27)
+- The frontend now renders the existing typed Rust totals for pretax/revenue, VAT/tax, and total/receivable with separate Invoice, Sales Register, variance, and status columns.
+- Totals are recomputed from normalized detail rows within the authoritative accounting period. Workbook subtotal/total rows remain excluded, preventing double counting and cross-period leakage.
+- A separate row reports Invoice pretax versus General Ledger TK511 credit evidence. Missing TK511 stays explicit and cannot be inferred from Sales Register totals.
+- Equal displayed sums remain `NOT_VERIFIED` when any required date/value evidence is incomplete and never override document-level findings.
+- Frontend tests, typecheck, Rust workspace tests, format, strict Clippy, portable build, and direct rendered EXE verification passed. Portable SHA256: `5A9E9162A2055955F085DCBD385E3D8586603C2DFB3438BF5076D88D10077A1B`.

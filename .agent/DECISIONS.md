@@ -67,3 +67,15 @@
 ## Decision 015: Accounting-First Default UI
 - **Decision**: Use a four-step Vietnamese audit workspace and unified actionable review queue as the default; keep role/scenario controls in the preserved advanced workflow.
 - **Rationale**: Accounting users should understand what is present, missing, reviewed, and actionable without learning engine terminology. See ADR 0012.
+
+## Decision 016: Dedicated Fail-Closed Document Integrity Control
+- **Decision**: Keep the generic matcher unchanged for other controls and add a deterministic document-integrity evaluator for Invoice/Sales Register/TK511. Validate BK before matching, use exact five-field Thuế/BK checks, require non-amount evidence for diagnostic links, retain invalid-date rows outside auto-match indexes, and keep total equality independent from document PASS.
+- **Rationale**: Configurable transactional tolerance and amount-oriented matching cannot prove document identity. A separate typed result preserves V17 cache/provenance/error boundaries while preventing duplicates, compensating totals, and diagnostic links from becoming accepted evidence. See ADR 0013.
+
+## Decision 017: User Period Is Authoritative for Document Completeness
+- **Decision**: For `REVENUE_INVOICE_REGISTER_LEDGER`, reconcile the full user-selected `AccountingPeriod`; use source earliest/latest only as evidence. Run only the typed document evaluator in Audit Workspace and leave the optional legacy result absent. Preserve the generic matcher in advanced scenarios and preserve bank intersection fail-closed behavior.
+- **Rationale**: Intersecting source coverage can hide missing first/last-period documents. Materializing two full revenue result graphs duplicates work and memory without adding authority. See ADR 0014.
+
+## Decision 018: Execute Available Document Evidence Without Partial PASS
+- **Decision**: Invoice plus Sales Register is the minimum executable set for the revenue document control. A missing TK511 remains an explicit missing capability; all ledger fields are `NOT_CHECKED`, document and control status remain `NEEDS_REVIEW`, and tri-source PASS is impossible. Controls with no loaded source remain in the plan but are excluded from the actionable Review Queue.
+- **Rationale**: Refusing to run suppresses valid Thuế-to-BK evidence, while treating TK511 as optional could falsely certify an incomplete control. See ADR 0015.

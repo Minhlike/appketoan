@@ -115,3 +115,76 @@
 - Equivalent debug benchmark evidence is recorded in the V17 architecture note; it is one iteration and is not labeled median/p95. Peak memory remains unmeasured.
 - `npx tauri build`: SUCCESS; fresh ignored MSI/NSIS and release executable generated. Five-second release executable smoke: SUCCESS.
 - Automated local browser visual inspection: NOT VERIFIED because the Codex browser runtime could not initialize its local kernel assets. Component behavior tests, production frontend build, Tauri build, and executable smoke passed; no substitute automation was misreported as visual evidence.
+
+### 15. V18 Document Integrity / Field-Level Gate (2026-08-26)
+- `cargo test --workspace`: SUCCESS; 129 executed tests passed, including 13 V18 adversarial/integration tests. Two confidential local harnesses remained ignored by the default command. The known GNU WebView2 linker warning remained non-fatal.
+- Explicit ignored local acceptance: SUCCESS. The immutable record-count and #233 oracles passed. V18 asserted 45 fully matched documents, no valid-period missing/extra BK document, one missing TK511 document, and one review-only BK invalid-date row. Period totals are fail-closed `NOT_VERIFIED`.
+- `npm run test`: SUCCESS (27/27 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build`: SUCCESS; production frontend, release executable, MSI, and NSIS completed. Fresh release executable five-second smoke: SUCCESS.
+- The final debug 100k reuse benchmark completed in 78.20 seconds while materializing both V18 and legacy compatibility results. Automated browser visual inspection was not rerun and remains NOT VERIFIED.
+
+### 16. V18 Final Correctness and Windows RC Gate (2026-08-26)
+- `cargo test --workspace`: SUCCESS; 134 executed Rust tests passed and two confidential local harnesses were ignored by default. The existing GNU WebView2 linker warning remained non-fatal.
+- Explicit `local_real_acceptance_test`: SUCCESS; immutable baseline and bank classification conservation remained unchanged.
+- Explicit `local_v16_acceptance_test`: SUCCESS; #233 remained high-priority review, partner/sales controls passed, and authoritative period handling exposed beginning-of-period BK evidence previously hidden by intersection.
+- Boundary/lifecycle suite: SUCCESS; four period adversarial cases, one multi-lifecycle regression, and an independent bank-period fail-closed regression passed.
+- 100k debug benchmark: SUCCESS; cold total 7.80s, warm execution 7.44s, exact typed document count preserved. Same-machine reproduced pre-fix cold total was 13.43s; reviewed historical gate was 78.20s.
+- Sampled benchmark working set: 1,365,471,232 bytes after versus 2,355,978,240 bytes reproduced before. This is a single debug test-process sample, not production median/p95.
+- `npm run test`: SUCCESS (29/29 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build`: SUCCESS; fresh portable, MSI, and NSIS artifacts all had post-build timestamps. Fresh portable executable five-second smoke: SUCCESS.
+- RC SHA256 values are recorded in `REPORT_V18_FINAL_RC.md`. Generated artifacts and confidential workbooks remain ignored. Automated browser visual inspection remains NOT VERIFIED.
+
+### 17. V18 Portable EXE Render Gate (2026-08-26)
+- Previous five-second process-only smoke: INVALIDATED because it did not prove frontend rendering.
+- `cargo test --workspace`: SUCCESS; all default Rust targets passed, with the two confidential local harnesses intentionally ignored by the default command.
+- `npm run test -- --run`: SUCCESS (29/29 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS; portable EXE rebuilt after the startup correction. The known GNU linker `.drectve` warning remains non-fatal.
+- `scripts/smoke_release_ui.ps1`: SUCCESS on the normal WebView2 profile and a fresh isolated profile; 72 UI elements and the expected accounting heading were found.
+- Direct Windows `PrintWindow` capture: SUCCESS; the dashboard rendered with header, workflow, source intake, and period sections. Installer builds were intentionally out of scope.
+- Portable SHA256: `CB38798F06A2F367B5D6B950B18B33886A25E4DACCBF8365A74747F5AA8D7F2B`.
+
+### 18. V18 Post-Execution IPC Crash Gate (2026-08-26)
+- Rust serialization regression: PASS; empty required collections remain present in camelCase IPC JSON.
+- React legacy/partial-payload regression: PASS; omitted `summaryMetrics` and `limitations` render safely and never imply PASS.
+- `cargo test --workspace`: SUCCESS; 136 executed tests passed and two confidential harnesses were ignored by default.
+- Both ignored local acceptance harnesses: SUCCESS; all established assertions and conservation checks remained unchanged. No workbook was committed.
+- `npm run test`: SUCCESS (30/30 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS. The known GNU `.drectve` linker warning remained non-fatal.
+- Rendered portable smoke: SUCCESS; 72 UI elements and `APPKETOAN_UI_READY` were observed, with no bootstrap failure screen.
+- Portable SHA256: `BC9202025EB73EDB91097F2CBC99716A681DD61862C0F4A0FD824FF189B7E261`.
+
+### 19. V18 Two-Source Document Control Gate (2026-08-26)
+- Synthetic two-source planner/execution regression: PASS; Invoice-to-Register executes without TK511, missing capability is preserved, all ledger fields are `NOT_CHECKED`, and overall PASS is impossible.
+- Ignored local two-source acceptance for the user-selected period: PASS; both recognized sources produced exact document evidence and TK511 remained unverified. No workbook data was committed.
+- Full `cargo test --workspace`: SUCCESS; 137 executed tests passed, with two confidential harnesses ignored by default.
+- `npm run test`: SUCCESS (32/32 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo fmt --all -- --check` and strict workspace Clippy: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS; rendered portable smoke passed with 72 UI elements.
+- Portable SHA256: `045FA248A562679BBEF779E3CE5163A2054BC6534F0F3732BA9F14206A409668`.
+
+### 20. Independent Direct BK/Tax Workbook Audit (2026-08-27)
+- Spreadsheet-only comparison: PASS; source workbooks were read locally without AppKetoan code or IPC.
+- Every in-period pair matched date, normalized document identity, pretax, VAT, and total. No duplicate, missing, extra, field-mismatch, or lifecycle-review classification was observed in scope.
+- The local detailed report passed formula-error scanning and visual verification for its summary, detail, and method sheets. It remains ignored with the confidential inputs and was not committed.
+
+### 21. V18 Document Evidence Navigation Gate (2026-08-27)
+- Focused `DocumentIntegrityPanel` acceptance suite: SUCCESS (5/5). It covers source-specific field semantics, fail-closed missing TK511, multiple simultaneous errors, exact-pair filtering, and missing-register filtering/restoration.
+- `npm run test`: SUCCESS (34/34 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo test --workspace`: SUCCESS; all default Rust targets passed, with two confidential harnesses ignored by default. Both ignored local acceptance harnesses passed explicitly.
+- `cargo fmt --all -- --check`: SUCCESS. `cargo clippy --workspace --all-targets -- -D warnings`: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS. The known non-fatal GNU WebView2 `.drectve` warning remains.
+- Direct portable EXE acceptance via Windows computer control: SUCCESS. The app rendered without a blank frame or bootstrap crash, recognized the two ignored workbooks, executed the selected period, showed explicit Invoice/Register versus TK511 provenance, applied exact/missing filters, and restored all rows.
+- Portable SHA256: `B75062CE8CD791E30FED541B56F4A88A380B283AFF0EDF77A7BAF8B183716CCC`. Installers intentionally remain out of scope.
+
+### 22. V18 Period Totals Presentation Gate (2026-08-27)
+- Existing five-case `DocumentIntegrityPanel` suite: SUCCESS (5/5); the core evidence case now asserts all three period-total rows, source columns, and the no-double-count explanation.
+- `npm run test`: SUCCESS (34/34 across eight files). `npm run typecheck`: SUCCESS.
+- `cargo test --workspace`: SUCCESS; all default targets passed and confidential harnesses remained ignored by the default command.
+- `cargo fmt --all -- --check`: SUCCESS. Strict workspace Clippy: SUCCESS.
+- `npx tauri build --no-bundle`: SUCCESS; known GNU WebView2 `.drectve` warning remains non-fatal.
+- Direct rendered EXE test: SUCCESS; three Thuế/BK total rows, variances, statuses, and the independent TK511 total row appeared after the local two-source run. No workbook or artifact was tracked.
+- Portable SHA256: `5A9E9162A2055955F085DCBD385E3D8586603C2DFB3438BF5076D88D10077A1B`.

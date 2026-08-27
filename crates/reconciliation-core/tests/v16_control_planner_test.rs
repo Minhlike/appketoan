@@ -183,7 +183,7 @@ fn planner_discovers_four_ready_controls_and_future_missing_sources() {
 }
 
 #[test]
-fn period_scope_excludes_cross_period_rows_before_matching() {
+fn period_scope_excludes_cross_period_rows_and_reports_missing_required_source() {
     let sources = vec![
         source("invoice", DataSourceKind::EInvoice),
         source("register", DataSourceKind::SalesRegister),
@@ -221,7 +221,62 @@ fn period_scope_excludes_cross_period_rows_before_matching() {
     );
     assert_eq!(
         plan(&audit.control_plans, REVENUE_CONTROL_ID).status,
-        ControlPlanStatus::NeedsReview
+        ControlPlanStatus::Ready
+    );
+    let report = execute_audit_session(audit, dec!(0), 0).expect("execute document control");
+    let revenue = report
+        .control_results
+        .iter()
+        .find(|result| result.control_id == REVENUE_CONTROL_ID)
+        .expect("revenue result");
+    assert_eq!(revenue.status, ControlExecutionStatus::NeedsReview);
+    assert_eq!(
+        revenue
+            .document_integrity_result
+            .as_ref()
+            .expect("document result")
+            .summary
+            .missing_in_bk,
+        1
+    );
+}
+
+#[test]
+fn bank_period_policy_remains_fail_closed_when_required_source_has_no_rows_in_period() {
+    let audit = prepare_audit_session(
+        "bank-period".to_string(),
+        period(),
+        vec![
+            source("ledger112", DataSourceKind::Ledger112),
+            source("bank", DataSourceKind::BankStatement),
+        ],
+        HashMap::from([
+            (
+                "ledger112".to_string(),
+                vec![record("ledger", "ledger112", Some("2026-07-10"))],
+            ),
+            (
+                "bank".to_string(),
+                vec![record("bank", "bank", Some("2026-01-10"))],
+            ),
+        ]),
+        HashMap::new(),
+        HashMap::new(),
+        HashMap::new(),
+    )
+    .expect("prepare bank period audit");
+    let bank_plan = plan(&audit.control_plans, BANK_CONTROL_ID);
+    assert_eq!(bank_plan.status, ControlPlanStatus::NeedsReview);
+    assert!(bank_plan.effective_period.is_none());
+    let report = execute_audit_session(audit, dec!(0), 0).expect("execute audit");
+    assert_eq!(
+        report
+            .control_results
+            .iter()
+            .find(|result| result.control_id == BANK_CONTROL_ID)
+            .expect("bank result")
+            .status,
+        ControlExecutionStatus::NotRun
     );
 }
 

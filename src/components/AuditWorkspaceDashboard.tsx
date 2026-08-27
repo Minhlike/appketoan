@@ -5,6 +5,7 @@ import type {
   SourceCapability,
 } from "../types/dataContract";
 import type { IngestedSourceItem } from "../types/auditWorkspace";
+import { DocumentIntegrityPanel } from "./DocumentIntegrityPanel";
 
 interface Props {
   sources: IngestedSourceItem[];
@@ -41,7 +42,26 @@ const resultLabel = (status: ControlExecutionStatus) =>
     CANCELLED: "Đã dừng",
   })[status];
 
+const runStatusLabel = (status: AuditWorkspaceReport["runStatus"]) =>
+  ({
+    COMPLETED: "Đã hoàn tất",
+    PARTIAL: "Hoàn tất một phần",
+    FAILED: "Không thể hoàn tất",
+    CANCELLED: "Đã dừng",
+  })[status];
+
 const resultSummary = (controlId: string, metrics: Record<string, number>) => {
+  if (controlId === "REVENUE_INVOICE_REGISTER_LEDGER") {
+    return [
+      `Thuế ↔ BK khớp chính xác: ${metrics.invoiceSalesRegisterExact || 0}`,
+      `Khớp đủ 3 nguồn: ${metrics.fullyMatched || 0}`,
+      `Sai ngày: ${metrics.dateMismatch || 0}`,
+      `Sai số HĐ: ${metrics.invoiceNumberMismatch || 0}`,
+      `Sai tiền/VAT/Phải thu: ${(metrics.pretaxMismatch || 0)}/${(metrics.vatMismatch || 0)}/${(metrics.totalMismatch || 0)}`,
+      `Thiếu/Thừa BK: ${(metrics.missingInBk || 0)}/${(metrics.extraInBk || 0)}`,
+      `Trùng/Mơ hồ: ${(metrics.duplicateInvoiceNumber || 0)}/${(metrics.ambiguousMatch || 0)}`,
+    ];
+  }
   if (controlId === "BANK_LEDGER_RECONCILIATION") {
     return [
       `Khớp chắc chắn: ${metrics.strongAccepted || 0}`,
@@ -153,13 +173,18 @@ export function AuditWorkspaceDashboard({ sources, accountingPeriod, report }: P
           <div className="section-title-row">
             <h2 className="section-title">Kế hoạch kiểm tra</h2>
             <span className={`control-status status-${report.runStatus.toLowerCase()}`}>
-              {report.runStatus === "PARTIAL" ? "Hoàn tất một phần" : "Đã lập kế hoạch"}
+              {runStatusLabel(report.runStatus)}
             </span>
           </div>
           {report.controlPlans.map((control) => {
             const result = report.controlResults.find(
               (candidate) => candidate.controlId === control.controlId
             );
+            // Older/partial IPC payloads may omit empty collections. Keep the
+            // workspace usable even if a backend payload predates the required
+            // ControlResult contract.
+            const summaryMetrics = result?.summaryMetrics ?? {};
+            const limitations = result?.limitations ?? [];
             const sourceNames = control.sourceIds
               .map((id) => catalog.find((source) => source.sourceId === id)?.sourceName)
               .filter(Boolean)
@@ -183,17 +208,20 @@ export function AuditWorkspaceDashboard({ sources, accountingPeriod, report }: P
                       {result.findings.length} phát hiện cần kiểm tra
                     </small>
                   )}
-                  {result && Object.keys(result.summaryMetrics).length > 0 && (
+                  {result && Object.keys(summaryMetrics).length > 0 && (
                     <ul className="control-result-summary" aria-label="Tóm tắt kết quả">
-                      {resultSummary(result.controlId, result.summaryMetrics).map((item) => (
+                      {resultSummary(result.controlId, summaryMetrics).map((item) => (
                         <li key={item}>{item}</li>
                       ))}
                     </ul>
                   )}
-                  {result?.limitations.includes("TK112_RUNNING_BALANCE_NOT_VERIFIED") && (
+                  {limitations.includes("TK112_RUNNING_BALANCE_NOT_VERIFIED") && (
                     <small className="audit-warning">
                       Số dư chạy TK112: chưa đủ dữ liệu để xác minh.
                     </small>
+                  )}
+                  {result?.documentIntegrityResult && (
+                    <DocumentIntegrityPanel result={result.documentIntegrityResult} />
                   )}
                 </div>
                 <span

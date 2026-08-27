@@ -303,24 +303,18 @@ Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 "@
 Set-Content -Path (Join-Path $auditDir "logical-source-results.txt") -Value $logicalSourceResults -Encoding UTF8
 
-# 9. audit/smoke-test.txt (Process Smoke Execution)
-Write-Host "-> Executing process smoke test on fresh release binary"
+# 9. audit/smoke-test.txt (Rendered UI Smoke Execution)
+Write-Host "-> Executing rendered UI smoke test on fresh release binary"
 $processSmokeResult = "FAIL"
 $processDetails = ""
 
 if (Test-Path $exePath) {
-    $proc = Start-Process -FilePath $exePath -PassThru
-    $pidNum = $proc.Id
-    $smokeStartTime = Get-Date
-    Start-Sleep -Seconds 3
-    
-    if (-not $proc.HasExited) {
+    try {
+        $uiSmokeScript = Join-Path $PSScriptRoot "smoke_release_ui.ps1"
+        $processDetails = (& $uiSmokeScript -ExePath $exePath | Out-String).Trim()
         $processSmokeResult = "PASS"
-        $processDetails = "PID: $pidNum, StartTime: $smokeStartTime, Status: Running stably without crash"
-        Stop-Process -Id $pidNum -Force
-    } else {
-        $processSmokeResult = "CRASHED"
-        $processDetails = "PID: $pidNum, ExitCode: $($proc.ExitCode)"
+    } catch {
+        $processDetails = $_.Exception.Message
     }
 } else {
     $processDetails = "Executable not found at $exePath"
@@ -340,12 +334,12 @@ Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
    - Revenue variance: 105,000,000 VND
    - Status: PASS
 
-2. Process Smoke Test:
+2. Rendered UI Smoke Test:
    - Executable: $exePath
    - Result: $processSmokeResult
    - Details: $processDetails
    - PROCESS_SMOKE: $processSmokeResult
-   - UI_INTERACTION_SMOKE: MANUAL_REQUIRED
+   - UI_RENDER_SMOKE: $processSmokeResult
 
 3. V13 Zero-Blocker Verification:
    - Sheet-Aware Dataset Identity (No false dedup across sheets): PASS
